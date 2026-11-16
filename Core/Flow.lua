@@ -35,6 +35,7 @@ function Advance()
             DB.main = nil
             if back and Guides[back] then
                 say(T("dDone", Title(G)))
+                if ChronDungeon then pcall(ChronDungeon, DB.guide) end
                 SetGuide(back, true)
             end
             return
@@ -161,6 +162,8 @@ function StartDungeon(key)
     if not Guides[key] then return end
     if not IS_DUNGEON[DB.guide] then DB.main = DB.guide end
     DB.dAnswer[key] = "yes"
+    DB.dgOut = DB.dgOut or {}; DB.dgOut[key] = nil
+    DB.dgIn = DB.dgIn or {}; DB.dgIn[key] = nil
     SetGuide(key)
     say(T("dStart"))
 end
@@ -384,11 +387,42 @@ end
 ------------------------------------------------------------------
 -- Actions
 ------------------------------------------------------------------
+-- etape passee (ou validee a la main) qu'on peut remettre a faire
+function Restorable(i)
+    local s = steps and steps[i]
+    if not s then return false end
+    if s.t == "go" and IS_DUNGEON[DB.guide] then return false end
+    if DB.seen[SeenKey(i)] and s.t ~= "level" then return true end
+    for _, id in ipairs(Ids(s)) do if DB.ignored[id] then return true end end
+    return false
+end
+function Restore(i)
+    local s = steps[i]
+    DB.seen[SeenKey(i)] = nil
+    for _, id in ipairs(Ids(s)) do DB.ignored[id] = nil end
+    say(T("restored", QName(s) or StepText(s):sub(1, 40)))
+    if optCache then optCache.key = nil end
+    peek = nil; focus = nil
+    Advance(); Refresh(true)
+end
+
 function Ignore()
     if not steps then return end
+    -- mode donjon : le bouton sert a sortir du donjon (on passe aux remises de quetes)
+    if not peek and not focus and DungeonLogActive and DungeonLogActive() then
+        DB.dgOut = DB.dgOut or {}; DB.dgOut[DB.guide] = true
+        Advance(); Refresh(true)
+        return
+    end
     local i = peek or focus or current
     local s = steps[i]
     if not s then return end
+    if Restorable(i) then Restore(i); return end
+    if s.t == "go" and IS_DUNGEON[DB.guide] then
+        DB.dgIn = DB.dgIn or {}; DB.dgIn[DB.guide] = true
+        peek = nil; focus = nil; Advance(); Refresh(true)
+        return
+    end
     focus = nil
     if s.id then
         local names = {}

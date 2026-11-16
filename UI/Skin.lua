@@ -96,6 +96,7 @@ function WarpathName()
 end
 
 W, PAD = 300, 18
+DL = { rows = {}, n = 0 }   -- mode donjon : lignes du journal, detail ouvert
 INNER = W - 2 * PAD
 distTarget = nil -- { m, x, y } : prochaine position a atteindre (pour la distance affichee)
 
@@ -123,6 +124,16 @@ function Layout()
     if f.kind:IsShown() then put(f.kindRow, 12, 4) end
     if f.qtitle:IsShown() then put(f.qtitle, sh(f.qtitle, 20), 5) end
     if f.text:IsShown() then put(f.text, sh(f.text), 12) end
+    if (DL.n or 0) > 0 then
+        for k = 1, DL.n do
+            local r = DL.rows[k]
+            if r and r:IsShown() then
+                put(r, 17, 1)
+                if DL.tip and DL.tip:IsShown() and DL.after == k then put(DL.tip, sh(DL.tip), 6, PAD + 14) end
+            end
+        end
+        y = y - 8
+    end
     local any = false
     for k = 1, 3 do if f.route[k]:IsShown() then put(f.route[k], 16, 2); any = true end end
     if any then y = y - 2 end
@@ -195,6 +206,21 @@ function UpdateDistance()
     else
         f.dist:SetText("")
     end
+    -- etape "va a" : validee toute seule quand tu arrives (moins de 20 m), comme si tu cliquais OK
+    if not peek and steps and me and not autoGoBusy then
+        local i = focus or current
+        local s = steps[i]
+        if s and s.t == "go" and s.m and s.x and not doneCache[i] and not IS_DUNGEON[DB.guide] then
+            local g = WP(s.m, s.x, s.y)
+            if g and g[3] == me[3] and Dist(me[1], me[2], g[1], g[2]) < 20 then
+                autoGoBusy = true
+                DB.seen[SeenKey(i)] = true
+                focus = nil; lastWP = nil
+                pcall(Advance); Refresh(true)
+                autoGoBusy = false
+            end
+        end
+    end
 end
 
 function RefreshInner(forceWP)
@@ -208,6 +234,12 @@ function RefreshInner(forceWP)
         return
     end
     local n = #steps
+    if not peek and not focus and DungeonLogActive() then
+        DungeonLogRender()
+        if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
+        return
+    end
+    DungeonLogHide()
     local i = peek or focus or current
     local s = steps[i]
     if not s then
@@ -251,8 +283,10 @@ function RefreshInner(forceWP)
         local kc = PCOL[s.t] or "cdbb8e"
         f.kind:SetText("|cff" .. kc .. Caps(T(s.t)) .. "|r"
             .. (s.optional and ("   |cff8c7f62" .. T("optional") .. "|r") or "")
-            .. (st == "done" and ("  " .. CHECK) or st == "skip" and ("   |cff8c7f62" .. T("skipped") .. "|r") or "")
-            .. (peek and ("   |cffd69a66" .. T("preview") .. "|r") or (focus and ("   |cffcdbb8e" .. T("chosen") .. "|r")) or ""))
+            .. (st == "done" and ("  " .. CHECK .. " |cff9cc7a8" .. T("stepDone") .. "|r")
+                or st == "skip" and ("   |cff8c7f62" .. T("skipped") .. "|r")
+                or peek and ("   |cffd69a66" .. T("stepTodo") .. "|r") or "")
+            .. ((not peek and focus) and ("   |cffcdbb8e" .. T("chosen") .. "|r") or ""))
         -- rendement estime (quete + monstres) compare au simple farm de monstres de ton niveau
         if (s.t == "do" or (s.optional and s.t == "accept")) and type(s.id) == "number" and EST[s.id] then
             local e = Estimate({ s.id }, false)
@@ -298,7 +332,16 @@ function RefreshInner(forceWP)
             end
             if #lines > 0 then body = body .. "\n\n|cffd6b866" .. T("dropLbl") .. "|r\n" .. table.concat(lines, "\n") end
         end
+        -- donjon : un objectif a faire apres l'entree se fait avec le groupe (les monstres pres de l'entree sont
+        -- souvent elites, meme hors du portail)
+        if s.t == "do" and IS_DUNGEON[DB.guide] and s.m then
+            local ent
+            for j = 1, n do if steps[j].t == "go" then ent = j; break end end
+            if ent and i > ent then body = "|cffd69a66" .. T("dgGroup") .. "|r\n\n" .. body end
+        end
         if det then body = "|cffd69a66" .. T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
+        -- donjon : toutes les quetes en main, on marche sur l'entree
+        if s.t == "go" and IS_DUNGEON[DB.guide] and not peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
         f.text:SetText(body); f.text:SetShown(body ~= "")
         -- itineraire : au plus 3 etapes (vol, zeppelin/bateau, puis l'objectif)
         local legs = {}
@@ -381,7 +424,12 @@ function RefreshInner(forceWP)
         end
         f.chainBtn.target = (firstTodo and firstTodo ~= i) and firstTodo or nil
         SetChain(ch)
-        f.skip:SetLabel(Caps((s.t == "note" or s.t == "go" or s.t == "level") and T("ok") or T("ignore")))
+        if Restorable(i) then
+            f.skip:SetLabel(Caps(T("restore")))
+            f.kind:SetText(f.kind:GetText() .. "   |cffd69a66" .. T("restoreHint") .. "|r")
+        else
+            f.skip:SetLabel(Caps((s.t == "note" or s.t == "go" or s.t == "level") and T("ok") or T("ignore")))
+        end
         -- quete sautee faute de prerequis : on la montre, cliquable
         local locks = (not peek) and LockCandidates() or {}
         f.lockBtn.list = locks
@@ -572,4 +620,139 @@ do
         dlg:Show()
         if PlaySound and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPEN then pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPEN) end
     end
+end
+
+------------------------------------------------------------------
+-- Mode donjon : une fois a l'entree, la fenetre montre le journal des quetes du donjon (progression,
+-- crochet quand c'est complete, details au clic) au lieu d'une liste d'etapes "fais ceci".
+-- "Sortie du donjon" (ou toutes les quetes completes) : le guide reprend pour aller les rendre.
+------------------------------------------------------------------
+local function DgEntrance()
+    if not steps then return nil end
+    for j = 1, #steps do if steps[j].t == "go" then return j end end
+end
+-- texte d'ambiance de l'entree du donjon (Lore.lua), sinon le message general
+function DungeonLore(zone)
+    local name = (UnitName and UnitName("player")) or "?"
+    local l = ns.Lore and ns.Lore[DB.guide]
+    if l then return string.format((Lang() == "en") and l.en or l.fr, name) end
+    return T("dgAssemble", name, zone)
+end
+function DungeonLogActive()
+    if not (DB and steps and IS_DUNGEON[DB.guide]) then return false end
+    if DB.dgOut and DB.dgOut[DB.guide] then return false end
+    local ent = DgEntrance()
+    if not ent or not doneCache[ent] or current <= ent then return false end
+    local s = steps[current]
+    return s ~= nil and s.t ~= "turnin"
+end
+local function QProg(q)
+    if logById[q] == true then return CHECK end
+    local have, need = 0, 0
+    if C_QuestLog and C_QuestLog.GetQuestObjectives then
+        local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
+        if ok and type(objs) == "table" then
+            for _, o in ipairs(objs) do have = have + (o.numFulfilled or 0); need = need + (o.numRequired or 0) end
+        end
+    end
+    if need > 0 then return "|cffd6b866" .. have .. "/" .. need .. "|r" end
+    return "|cffd6b866…|r"
+end
+function DungeonLogList()
+    local out, seen = {}, {}
+    local ent = DgEntrance(); if not ent then return out end
+    for j = ent + 1, #steps do
+        local s = steps[j]
+        if Applies(s) and (s.t == "do" or s.t == "accept" or s.t == "turnin") then
+            for _, q in ipairs(Ids(s)) do
+                if not seen[q] and not Rendue(q) and not (DB.ignored and DB.ignored[q]) then
+                    if logById[q] ~= nil then
+                        seen[q] = true
+                        out[#out + 1] = { q = q, name = QuestTitle(q) or (EST[q] and EST[q].n) or s.quest or ("#" .. q), prog = QProg(q), done = logById[q] == true }
+                    elseif s.t == "accept" then
+                        seen[q] = true
+                        out[#out + 1] = { q = q, name = QuestTitle(q) or (EST[q] and EST[q].n) or s.quest or ("#" .. q), prog = "", later = true, acc = s }
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+local function HasQ(s, q) for _, id in ipairs(Ids(s)) do if id == q then return true end end return false end
+local function QDetails(row)
+    local q = row.q
+    local ent = DgEntrance() or 0
+    local lines = {}
+    if row.later then lines[#lines + 1] = "|cff8c7f62" .. T("dgStartsIn") .. "|r  " .. StepText(row.acc) end
+    for j = ent + 1, #steps do
+        local s = steps[j]
+        if s.t == "do" and Applies(s) and HasQ(s, q) then lines[#lines + 1] = StepText(s); break end
+    end
+    if EST[q] and logById[q] == false then
+        for _, dr in ipairs(Estimate({ q }, false).drops) do
+            lines[#lines + 1] = "|cff8c7f62" .. T("dropLbl") .. " :|r " .. (dr.name or "?") .. " |cffffd100" .. math.floor(dr.rate * 100 + 0.5) .. " %|r"
+        end
+    end
+    local tip = ns.Tips and ns.Tips[q]
+    if DB.tips ~= false and tip then lines[#lines + 1] = "|cffd6b866" .. T("tipLbl") .. "|r  " .. ((Lang() == "en") and tip[2] or tip[1]) end
+    for j = ent + 1, #steps do
+        local s = steps[j]
+        if s.t == "turnin" and Applies(s) and HasQ(s, q) then lines[#lines + 1] = "|cff8c7f62" .. T("dgTurnin") .. "|r  " .. StepText(s); break end
+    end
+    return table.concat(lines, "\n\n")
+end
+local function DlogRow(k)
+        local r = DL.rows[k]
+    if r then return r end
+    r = CreateFrame("Button", nil, f); r:SetSize(INNER, 17)
+    local hl = Tex(r, COL.accent, 0.08, "HIGHLIGHT"); hl:SetAllPoints()
+    r.arrow = FS(r, 10, COL.gold, FONT, "LEFT"); r.arrow:SetPoint("LEFT", 0, 0)
+    r.name = FS(r, 12, COL.white, FONT, "LEFT"); r.name:SetPoint("LEFT", 14, 0); r.name:SetWidth(INNER - 70)
+    if r.name.SetWordWrap then r.name:SetWordWrap(false) end
+    r.prog = FS(r, 11, COL.accent, FONT, "RIGHT"); r.prog:SetPoint("RIGHT", 0, 0)
+    r:SetScript("OnClick", function(self)
+        if DL.open == self.q then DL.open = nil else DL.open = self.q end
+        Refresh(true)
+    end)
+    DL.rows[k] = r
+    return r
+end
+function DungeonLogHide()
+    if f and DL.rows then for _, r in ipairs(DL.rows) do r:Hide() end end
+    if f and DL.tip then DL.tip:Hide() end
+    if f then DL.n = 0 end
+end
+function DungeonLogRender()
+    local list = DungeonLogList()
+    local zone = Title(G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", ""):gsub("^[^:]+:%s*", "")
+    local done = 0
+    for _, r in ipairs(list) do if r.done then done = done + 1 end end
+    local nq = 0; for _, r in ipairs(list) do if not r.later then nq = nq + 1 end end
+    f.title:SetText(Caps(zone) .. "   |cff8c7f62·|r   " .. T("dgCount", done, nq))
+    f.kind:SetText("|cffcdbb8e" .. Caps(T("dgLog")) .. "|r"); f.kind:Show(); f.dist:SetText("")
+    f.qtitle:Hide(); f.text:SetText("|cffd69a66" .. T("dgGroup") .. "|r"); f.text:Show(); SetRoute({}); f.coord:Hide(); f.chainBtn:Hide(); f.lockBtn:Hide()
+    if f.advice then f.advice:Hide() end
+    SetUpcoming({}); SetChain(nil); distTarget = nil
+    if not DL.tip then
+        DL.tip = FS(f, 11, COL.soft, FONT, "LEFT"); DL.tip:SetWidth(INNER - 14)
+        if DL.tip.SetSpacing then DL.tip:SetSpacing(2) end
+    end
+    DungeonLogHide()
+    for k, row in ipairs(list) do
+        if k > 12 then break end
+        local r = DlogRow(k)
+        r.q = row.q
+        local open = DL.open == row.q
+        r.arrow:SetText(open and "v" or ">")
+        r.name:SetText(row.later and ("|cff8c7f62" .. row.name .. "|r") or row.name)
+        r.prog:SetText(row.later and ("|cff8c7f62" .. T("dgLater") .. "|r") or row.prog)
+        r:Show()
+        if open then DL.tip:SetText(QDetails(row)); DL.tip:Show(); DL.after = k end
+    end
+    DL.n = math.min(#list, 12)
+    if #list == 0 then f.text:SetText(T("dgEmpty")); f.text:Show() end
+    f.skip:SetLabel(Caps(T("dgExit")))
+    if ns.Targets then ns.Targets.Update(steps[current]) end
+    Layout()
 end

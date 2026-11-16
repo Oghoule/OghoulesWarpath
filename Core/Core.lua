@@ -18,7 +18,7 @@ local ADDON, ns = ...
 -- Environnement prive partage par tous les fichiers du moteur (Core, Route, Estimate, Skin, Flow, Window,
 -- Comfort, Commands, Events) : leurs variables communes y vivent, les vraies globales du jeu restent dans _G.
 local DECL = {}
-for n in ("CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText ShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
+for n in ("DungeonLore DL DungeonLogActive DungeonLogList DungeonLogHide DungeonLogRender Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow autoGoBusy CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText ShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
 local assigned = {}
 local env = setmetatable({}, {
     __index = function(_, k) if DECL[k] and assigned[k] then return nil end return _G[k] end,
@@ -102,7 +102,7 @@ CHAIN, MAXLVL, DUNGEONS, IS_DUNGEON = D.CHAIN, D.MAXLVL, D.DUNGEONS, D.IS_DUNGEO
 IS_DUNGEON_SET = IS_DUNGEON
 
 ICON = "Interface\\AddOns\\OghoulesWarpath\\Media\\Warpath64"
-VERSION = "0.87"
+VERSION = "0.98"
 MINLVL, MAIN_ORDER = D.MINLVL, D.MAIN_ORDER
 CHECK = "|TInterface\\RaidFrame\\ReadyCheck-Ready:12|t"
 DOT = "|cff888888-|r"
@@ -353,6 +353,11 @@ function StepDone(i, anchor)
         end
         return skip and "skip" or false
     end
+    -- entree d'un donjon : faite seulement quand tu entres vraiment dans l'instance (ou OK a la main)
+    if s.t == "go" and IS_DUNGEON[DB.guide] then
+        if DB.dgIn and DB.dgIn[DB.guide] then return "done" end
+        return (i < anchor) and "skip" or false
+    end
     if DB.seen[SeenKey(i)] then return "done" end
     if s.t == "level" and UnitLevel("player") >= (s.level or 0) then return "done" end
     if i < anchor then return "skip" end
@@ -495,10 +500,25 @@ function Compute()
     for i = 1, n do
         if Applies(steps[i]) then doneCache[i] = StepDone(i, anchor) else doneCache[i] = "skip" end
     end
+    -- sortie du donjon choisie : les objectifs restants du donjon sont laisses de cote (pas ignores), on va rendre
+    if IS_DUNGEON[DB.guide] and DB.dgOut and DB.dgOut[DB.guide] then
+        local after = false
+        for i = 1, n do
+            if steps[i].t == "go" then after = true
+            elseif after and steps[i].t == "do" and not doneCache[i] then doneCache[i] = "skip"
+            elseif after and steps[i].t == "turnin" and not doneCache[i] then
+                -- quete pas finie : impossible a rendre, on ne t'envoie pas au PNJ pour rien
+                local ready = false
+                for _, id in ipairs(Ids(steps[i])) do if logById[id] == true then ready = true end end
+                if not ready then doneCache[i] = "skip" end
+            end
+        end
+    end
     -- regle 5 : une note / optionnelle / niveau saute si l'etape suivante est deja faite
     for i = n, 1, -1 do
         local s = steps[i]
-        if not doneCache[i] and (s.t == "note" or s.t == "go" or s.t == "level" or s.optional) then
+        if not doneCache[i] and (s.t == "note" or s.t == "go" or s.t == "level" or s.optional)
+            and not (s.t == "go" and IS_DUNGEON[DB.guide]) then
             local j = NextApplicable(i)
             if j <= n and doneCache[j] then doneCache[i] = "skip" end
         end

@@ -77,6 +77,7 @@ do
         local e = { m = m, x = x, y = y, z = zoneName(m), when = stamp(), me = UnitLevel("player"),
                     lvl = en.lvl, cl = en.cl, ct = en.ct, rc = en.rc, nm = en.nm }
         table.insert(p.k, e); trim(p.k)
+        if ChronAdd then pcall(ChronAdd, "pk") end
         pending[#pending + 1] = e
         if not (UnitAffectingCombat and UnitAffectingCombat("player")) then finish() end
         if DB.pvpShot and Screenshot and C_Timer then C_Timer.After(0.3, function() pcall(Screenshot) end) end
@@ -94,6 +95,7 @@ do
         table.insert(p.d, { m = m, x = x, y = y, z = zoneName(m), when = stamp(), me = UnitLevel("player"),
                             lvl = en.lvl, cl = en.cl, ct = en.ct, rc = en.rc, nm = en.nm })
         trim(p.d)
+        if ChronAdd then pcall(ChronAdd, "pd") end
         if WarpathPvPRefresh then WarpathPvPRefresh() end
     end
 

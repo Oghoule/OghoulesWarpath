@@ -41,6 +41,7 @@ do
         local j, g, s = slot(); if not j then return end
         j.a = j.a + TICK; g.a = g.a + TICK; s.a = s.a + TICK; sessA = sessA + TICK
         g.l1 = UnitLevel("player")
+        if ChronTick then ChronTick(TICK) end
     end
 
     -- petite ligne discrete au bas de la fenetre du guide : XP/h actif de la session
@@ -68,6 +69,7 @@ do
             if d > 0 then
                 local j, g, s = slot()
                 if j then j.xp = j.xp + d; g.xp = g.xp + d; s.xp = s.xp + d; sessXP = sessXP + d end
+                if ChronAdd then ChronAdd("xp", d) end
                 act()
             end
         end

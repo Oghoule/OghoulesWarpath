@@ -139,6 +139,8 @@ SlashCmdList["WARPATH"] = function(msg)
         end
     elseif cmd == "news" or cmd == "nouveautes" or cmd == "quoi" then
         if not ShowNews(true) then say(T("newsNone")) end
+    elseif cmd == "chronique" or cmd == "chronicle" or cmd == "chron" then
+        ChronShow(arg == "now" and 0 or nil)
     elseif cmd == "pvp" then
         PvPReport(arg)
     elseif cmd == "temps" or cmd == "time" or cmd == "xp" then
@@ -180,6 +182,26 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "0.98", fr = "Chaque donjon a maintenant son propre texte d'ambiance à l'entrée : son histoire, pourquoi la Horde t'y envoie, et ton nom de héros.",
+      en = "Each dungeon now has its own flavor text at the entrance: its story, why the Horde sends you there, and your hero's name." },
+    { v = "0.96", fr = "Donjons : l'entrée ne se coche plus toute seule quand une quête du donjon a été passée. Après « Sortie du donjon », le guide t'envoie seulement rendre les quêtes complétées ; revenir dans l'instance rouvre le journal.",
+      en = "Dungeons: the entrance no longer checks itself when a dungeon quest was skipped. After \"Leave the dungeon\", the guide only sends you to turn in completed quests; going back into the instance reopens the log." },
+    { v = "0.95", fr = "Donjons : l'étape d'entrée reste affichée (avec le message de rassemblement) jusqu'à ce que tu entres vraiment dans l'instance. Le journal du donjon apparaît seulement une fois à l'intérieur.",
+      en = "Dungeons: the entrance step stays on screen (with the rally message) until you actually enter the instance. The dungeon quest log only shows up once inside." },
+    { v = "0.94", fr = "En regardant les étapes avec < >, l'en-tête indique maintenant (faite), (passée) ou (à faire) au lieu de (aperçu).",
+      en = "When browsing steps with < >, the header now shows (done), (skipped) or (to do) instead of (preview)." },
+    { v = "0.93", fr = "Mode donjon : une fois tes quêtes en main, le guide te dit de rassembler ton groupe. À l'entrée, la fenêtre devient le journal du donjon (progression de chaque quête, détails au clic) ; « Sortie du donjon » te ramène aux remises. Une étape passée par erreur se rétablit d'un clic (bouton RÉTABLIR ou clic sur l'en-tête). « Cibles de l'étape » devient « Cibles de l'objectif ».",
+      en = "Dungeon mode: once your quests are in hand, the guide tells you to gather your group. At the entrance, the window becomes the dungeon quest log (progress for each quest, details on click); \"Leave the dungeon\" takes you back to turn-ins. A step skipped by mistake is restored in one click (RESTORE button or click on the header). \"Step targets\" becomes \"Objective targets\"." },
+    { v = "0.92", fr = "Donjons : les objectifs à faire dans la zone du donjon (même avant le portail) rappellent maintenant de les faire avec ton groupe, car les monstres y sont souvent élites.",
+      en = "Dungeons: objectives in the dungeon area (even before the portal) now remind you to do them with your group, since the mobs there are often elite." },
+    { v = "0.91", fr = "La Chronique de guerre s'affiche maintenant par-dessus les options au lieu de se mélanger avec elles.",
+      en = "The War Chronicle now shows on top of the options instead of blending into them." },
+    { v = "0.90", fr = "Taux de drop corrigé : les objets obtenus n'étaient jamais comptés sur Forever (seulement les monstres fouillés), ce qui faisait baisser le pourcentage. Ils sont maintenant comptés par la progression de la quête. Les anciennes mesures faussées ont été effacées.",
+      en = "Drop rates fixed: items obtained were never counted on Forever (only looted mobs), which kept lowering the percentage. They are now counted through quest progress. The old skewed measurements were cleared." },
+    { v = "0.89", fr = "Nouveau : la Chronique de guerre. À la connexion, une bannière résume ta dernière séance (temps actif, XP, quêtes, donjons, trophées) avec une note de S à D et des mentions. Elle ne revient pas au /reload. Bouton dans les options (onglet Automatisation) ou /warpath chronique.",
+      en = "New: the War Chronicle. At login, a banner sums up your last session (active time, XP, quests, dungeons, trophies) with a grade from S to D and honors. It does not come back on /reload. Button in the options (Automation tab) or /warpath chronicle." },
+    { v = "0.88", fr = "Les étapes « Va à » (entrée d'un donjon, point de passage) se valident toutes seules quand tu arrives sur place : plus besoin de cliquer OK.",
+      en = "\"Go to\" steps (dungeon entrance, waypoint) now complete on their own when you arrive: no need to click OK anymore." },
     { v = "0.87", fr = "Ramassage des quêtes de donjon : Blackrock Depths, Razorfen Downs et The Excavation ont maintenant un vrai trajet le plus court (une quête prise dans le donjon bloquait le calcul). Les très longues listes de quêtes ont aussi un ordre optimisé.",
       en = "Dungeon quest pickup: Blackrock Depths, Razorfen Downs and The Excavation now get a real shortest route (a quest picked up inside the dungeon blocked the calculation). Very long quest lists also get an optimized order." },
     { v = "0.86", fr = "Ramassage des quêtes de donjon : une quête bloquée par un prérequis encore dans ton journal (ex. Altered Beings avant Hamuul Runetotem) est maintenant intégrée au trajet le plus court, au lieu d'être repoussée à la fin.",

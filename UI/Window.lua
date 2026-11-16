@@ -45,6 +45,12 @@ function CreateUI()
     f.kindRow = CreateFrame("Frame", nil, f); f.kindRow:SetSize(INNER, 12)
     f.kind = FS(f.kindRow, 9, COL.green, FONT, "LEFT"); f.kind:SetPoint("LEFT")
     f.dist = FS(f.kindRow, 9, COL.gold, FONT, "RIGHT"); f.dist:SetPoint("RIGHT")
+    -- clic sur l'en-tete (le crochet) d'une etape passee ou validee a la main : on l'annule
+    if f.kindRow.EnableMouse then f.kindRow:EnableMouse(true) end
+    f.kindRow:SetScript("OnMouseUp", function()
+        local i = peek or focus or current
+        if steps and i and Restorable(i) then Restore(i) end
+    end)
 
     f.qtitle = FS(f, 20, COL.white, DISPLAY, "LEFT"); f.qtitle:SetWidth(INNER)
     if f.qtitle.SetWordWrap then f.qtitle:SetWordWrap(true) end
@@ -171,7 +177,7 @@ ns.E = {
     StartDungeon = StartDungeon, StopDungeon = StopDungeon, ClearWaypoint = ClearWaypoint,
     AutoPick = AutoPick, AllDone = AllDone,
     ClassQuestList = function() return ClassQuestList() end, PlaceWaypointAgain = function() if steps and current and steps[current] then pcall(SetWaypoint, steps[current]) end end, StyleGet = function() return StyleGet() end,
-    ApplyPreset = function(n) local ok, err = pcall(ApplyPreset, n); if not ok then say(T("errInternal", tostring(err))) end end, StyleChanged = function() styleCache = nil; local ok, err = pcall(Advance); if not ok then say(T("errInternal", tostring(err))) end; Refresh(true) end, AskClass = function(q) AskChain(q, true) end,
+    ApplyPreset = function(n) local ok, err = pcall(ApplyPreset, n); if not ok then say(T("errInternal", tostring(err))) end end, StyleChanged = function() styleCache = nil; local ok, err = pcall(Advance); if not ok then say(T("errInternal", tostring(err))) end; Refresh(true) end, AskClass = function(q) AskChain(q, true) end, ChronShow = function(k) ChronShow(k) end,
     Guides = Guides, ICON = ICON, VERSION = VERSION, CHECK = CHECK,
     MAIN_ORDER = MAIN_ORDER, IS_DUNGEON = IS_DUNGEON, DUNGEONS = DUNGEONS, MINLVL = MINLVL, MAXLVL = MAXLVL,
     DB = function() return DB end,

@@ -628,6 +628,11 @@ local function CreateOptions()
         ps:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
         local xl = CheckRow(pg, CW, "xphLine", function() return DB.xphLine ~= false end, function(v) DB.xphLine = v end)
         xl:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
+        local cb = CheckRow(pg, CW, "chronBanner", function() return DB.chronBanner ~= false end, function(v) DB.chronBanner = v end)
+        cb:SetPoint("TOPLEFT", 0, y); y = y - ROW_H - 6
+        local cv = FlatButton(pg, 200, 24, function() E.ChronShow() end)
+        cv:SetPoint("TOPLEFT", 0, y); y = y - 30
+        Loc(function() cv:SetLabel(K.Upper(T("chOpen"))) end)
     end
 
     opt:SetScript("OnShow", function()

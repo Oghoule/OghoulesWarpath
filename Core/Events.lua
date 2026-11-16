@@ -152,6 +152,15 @@ function OnEvent(self, event, ...)
         lastWP = nil
         Refresh(true)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+        -- entree dans l'instance du donjon suivi : le journal du donjon prend le relais
+        if DB and IS_DUNGEON[DB.guide] and IsInInstance then
+            local inI, kind = IsInInstance()
+            if inI and kind == "party" then
+                DB.dgIn = DB.dgIn or {}; DB.dgIn[DB.guide] = true
+                if DB.dgOut then DB.dgOut[DB.guide] = nil end   -- de retour dans le donjon : le journal revient
+                focus = nil
+            end
+        end
         -- nouveau continent / nouvelle zone : on recalcule (et la fleche passe du zeppelin a la vraie cible)
         ScheduleAdvance()
         Refresh(true)

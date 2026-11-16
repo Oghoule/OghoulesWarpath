@@ -8,8 +8,37 @@ ns.Drops = Drops
 
 -- Mesure des drops : on compte les monstres tues qui peuvent donner un objet de quete que tu cherches,
 -- et les objets qui arrivent dans tes sacs. Partage entre tous tes personnages (WarpathDropDB).
-local dropTrack, dropCount = {}, {}   -- objet -> { [pnj] = true } ; objet -> nombre dans les sacs
+local dropTrack, dropCount, dropQuest, dropName = {}, {}, {}, {}   -- objet -> pnj ; nombre ; quete ; nom
+-- nombre d'objets obtenus : sacs (C_Item, l'ancienne fonction n'existe plus sur Forever) ou, mieux, la
+-- progression de l'objectif de quete (compte aussi les objets de quete qui ne vont pas dans les sacs)
+local function Count(item)
+    local n = 0
+    if C_Item and C_Item.GetItemCount then n = C_Item.GetItemCount(item) or 0
+    elseif GetItemCount then n = GetItemCount(item) or 0 end
+    local q, name = dropQuest[item], dropName[item]
+    if q and C_QuestLog and C_QuestLog.GetQuestObjectives then
+        local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
+        if ok and type(objs) == "table" then
+            for _, o in ipairs(objs) do
+                if o.type == "item" and type(o.text) == "string" and (#objs == 1 or (name and o.text:find(name, 1, true))) then
+                    n = math.max(n, o.numFulfilled or 0)
+                end
+            end
+        end
+    end
+    return n
+end
+Drops.Count = Count
 function Drops.Refresh(logById, EST)
+    pcall(Drops.OnBagUpdate)            -- compte d'abord ce qui vient d'arriver (avant qu'une quete complete sorte du suivi)
+    -- une fois : on oublie les anciennes mesures faussees (objets jamais comptes avant la v0.90)
+    if WarpathDropDB and not WarpathDropDB._v90 then
+        for item, st in pairs(WarpathDropDB) do
+            if type(item) == "number" and type(st) == "table" and (st.n or 0) == 0 then WarpathDropDB[item] = nil end
+        end
+        WarpathDropDB._from = nil
+        WarpathDropDB._v90 = true
+    end
     wipe(dropTrack)
     for q, complete in pairs(logById) do
         local e = EST[q]
@@ -19,7 +48,8 @@ function Drops.Refresh(logById, EST)
                     local set = {}
                     for j = 7, #d do set[d[j]] = true end
                     dropTrack[d[1]] = set
-                    if dropCount[d[1]] == nil and GetItemCount then dropCount[d[1]] = GetItemCount(d[1]) or 0 end
+                    dropQuest[d[1]], dropName[d[1]] = q, d[6]
+                    if dropCount[d[1]] == nil then dropCount[d[1]] = Count(d[1]) end
                 end
             end
         end
@@ -57,9 +87,8 @@ function Drops.OnLootOpened()
 end
 
 function Drops.OnBagUpdate()
-    if not GetItemCount then return end
     for item in pairs(dropTrack) do
-        local now = GetItemCount(item) or 0
+        local now = Count(item)
         local before = dropCount[item] or now
         if now > before and WarpathDropDB[item] then
             local st = WarpathDropDB[item]
@@ -77,6 +106,7 @@ function Drops.Tracking() return next(dropTrack) ~= nil end
 -- en double), avec des plafonds et un rejet des valeurs absurdes.
 ------------------------------------------------------------------
 local COMM = "OWDROP1"
+-- v0.90 : les mesures partent avec "E|" ; les "D|" des anciennes versions (objets jamais comptes) sont ignores
 local MAX_K, MAX_PEERS = 2000, 150
 local peerSum
 local function RebuildPeerSum()
@@ -100,7 +130,7 @@ function ns.PeerDrops(item)
 end
 local function ShareOn() return WarpathDropDB and WarpathDropDB._share ~= false end
 local function OnDropMessage(msg, sender)
-    if not ShareOn() or type(msg) ~= "string" or msg:sub(1, 2) ~= "D|" then return end
+    if not ShareOn() or type(msg) ~= "string" or msg:sub(1, 2) ~= "E|" then return end
     local me = UnitName and UnitName("player")
     local short = sender and sender:match("^([^%-]+)") or sender
     if not short or short == me then return end
@@ -137,12 +167,12 @@ local function ShareDrops(channel)
         end
     end
     -- messages de 240 caracteres au plus, espaces d'une seconde
-    local msgs, cur = {}, "D|"
+    local msgs, cur = {}, "E|"
     for _, p in ipairs(parts) do
-        if #cur + #p + 1 > 240 then msgs[#msgs + 1] = cur; cur = "D|" end
+        if #cur + #p + 1 > 240 then msgs[#msgs + 1] = cur; cur = "E|" end
         cur = cur .. p .. "|"
     end
-    if cur ~= "D|" then msgs[#msgs + 1] = cur end
+    if cur ~= "E|" then msgs[#msgs + 1] = cur end
     for i, m in ipairs(msgs) do
         if i > 20 then break end
         local function send() pcall(C_ChatInfo.SendAddonMessage, COMM, m, channel) end

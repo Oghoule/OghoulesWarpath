@@ -123,7 +123,9 @@ local function StepItem()
     local id = type(s.id) == "number" and s.id or (type(s.id) == "table" and s.id[1])
     local e = id and EST[id]
     for _, it in ipairs(e and e.u or {}) do
-        if (GetItemCount and GetItemCount(it) or 0) > 0 and GetItemSpell and GetItemSpell(it) then return it end
+        local cnt = (C_Item and C_Item.GetItemCount and C_Item.GetItemCount(it)) or (GetItemCount and GetItemCount(it)) or 0
+        local spell = (C_Item and C_Item.GetItemSpell and C_Item.GetItemSpell(it)) or (GetItemSpell and GetItemSpell(it))
+        if cnt > 0 and spell then return it end
     end
 end
 local function UpdateItemButton()
