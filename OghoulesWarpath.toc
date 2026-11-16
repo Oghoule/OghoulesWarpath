@@ -1,0 +1,39 @@
+## Interface: 16001
+## Title: Oghoule's Warpath
+## Notes: Horde leveling guide for WoW Forever: quests, routes, flights, dungeons. English / French.
+## Notes-frFR: Guide de leveling Horde pour WoW Forever : quetes, itineraires, vols, donjons. Francais / anglais.
+## Author: Oghoule
+## Version: 0.87
+## IconTexture: Interface\AddOns\OghoulesWarpath\Media\Warpath64
+## Category: Quests
+## X-License: GPL-3.0
+## SavedVariables: WarpathDropDB
+## SavedVariablesPerCharacter: WarpathCharDB
+
+Data\Guides.lua
+Locale\Locale.lua
+Data\Data.lua
+Data\Est.lua
+Data\NpcNames.lua
+Data\DropsData.lua
+Core\Drops.lua
+Data\Tips.lua
+Data\ClassQuests.lua
+Data\ProfQuests.lua
+Data\Trainers.lua
+Core\Core.lua
+Core\Route.lua
+Core\Estimate.lua
+UI\Skin.lua
+Core\Flow.lua
+UI\Window.lua
+Features\Comfort.lua
+UI\Arrow.lua
+UI\Targets.lua
+Features\Hearth.lua
+Features\Journal.lua
+Features\PvP.lua
+Features\Profs.lua
+Core\Commands.lua
+Core\Events.lua
+UI\Options.lua

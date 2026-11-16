@@ -1,0 +1,9 @@
+<Bindings>
+    <Binding name="WARPATH_OK" header="WARPATH" category="ADDONS">WarpathBinding("ok")</Binding>
+    <Binding name="WARPATH_PREV" category="ADDONS">WarpathBinding("prev")</Binding>
+    <Binding name="WARPATH_NEXT" category="ADDONS">WarpathBinding("next")</Binding>
+    <Binding name="WARPATH_TOGGLE" category="ADDONS">WarpathBinding("toggle")</Binding>
+    <Binding name="WARPATH_OPTIONS" category="ADDONS">WarpathBinding("options")</Binding>
+    <Binding name="CLICK WarpathTarget1:LeftButton" category="ADDONS"/>
+    <Binding name="CLICK WarpathTarget2:LeftButton" category="ADDONS"/>
+</Bindings>
