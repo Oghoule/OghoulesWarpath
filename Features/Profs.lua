@@ -118,7 +118,7 @@ do
         local here = PlayerPos and select(1, PlayerPos())
         if not here then return end
         for _, c in ipairs(ProfQuestList()) do
-            if not c.done and not c.spec and not c.dungeon and c.rank and lvl >= c.r and lvl <= c.l + 6
+            if not c.done and not c.spec and not c.dungeon and c.rank and ProfDetect()[c.s] ~= nil and lvl >= c.r and lvl <= c.l + 6
                 and not DB.pqAsked[c.q] and logById[c.q] == nil then
                 local order = ChainFor(c.q, true)
                 if order and #order > 0 then
@@ -143,10 +143,11 @@ do
         if PopupVisible() or (StaticPopup_Visible and (StaticPopup_Visible("WARPATH_CHAIN") or StaticPopup_Visible("WARPATH_DUNGEON"))) then return end
         if UnitAffectingCombat and UnitAffectingCombat("player") then return end
         local lvl = UnitLevel("player") or 1
-        if lvl < 5 then return end
         local known = ProfDetect(true)
         if DB.profIntro == nil and next(known) and lvl > 6 then DB.profIntro = "done"; return end -- personnage qui a deja ses metiers
-        if not (IsResting and IsResting()) then return end
+        -- nouveau personnage : on demande tout de suite (les premiers entraineurs sont dans la zone de depart) ;
+        -- sinon au premier endroit ou tu te reposes
+        if not (DB.profIntro == nil and lvl <= 5) and not (IsResting and IsResting()) then return end
         if DB.profIntro == "later" then
             local here = PlayerPos and select(1, PlayerPos())
             if not (CAPITAL[here] or lvl >= (DB.profIntroLvl or 0) + 5) then return end
@@ -168,6 +169,55 @@ do
         }
         DB.profIntro = DB.profIntro or "asked"
         Popup("WARPATH_PROFS", T("profIntro") .. (#names > 0 and ("\n\n" .. T("profIntroKnown", table.concat(names, ", "))) or ""))
+    end
+
+    -- entraineur le plus proche d'une liste { {m, x, y, nom}, ... } (meme continent)
+    function NearestTrainer(list)
+        local me = PlayerWP and PlayerWP()
+        if not me then return nil end
+        local best, bd
+        for _, e in ipairs(list or {}) do
+            local g = WP(e[1], e[2], e[3])
+            if g and g[3] == me[3] then
+                local d = Dist(me[1], me[2], g[1], g[2])
+                if not bd or d < bd then best, bd = e, d end
+            end
+        end
+        return best, bd
+    end
+    local function mname(m)
+        if MAPNAME[m] then return MAPNAME[m] end
+        local ok, i = pcall(function() return C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(m) end)
+        return (ok and i and i.name) or ""
+    end
+    local function setWP(e)
+        if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates then
+            pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(e[1], e[2] / 100, e[3] / 100))
+            if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
+        end
+    end
+    -- nouveaux sorts : on dit ou est l'entraineur de classe le plus proche (repere sur la carte du monde)
+    function TrainReminder()
+        if not (DB and DB.trainDue and myClass and DB.trainer ~= false) then return end
+        local e, d = NearestTrainer((ns.ClassTrainers or {})[myClass])
+        if e then say(T("trainNear", e[4], mname(e[1]), math.floor(d + 0.5))) end
+    end
+    -- premiere visite d'une capitale : competences d'armes
+    local CAPS = { [1454] = true, [1456] = true, [1458] = true }
+    function CheckWeaponMaster()
+        if not DB or DB.wmSeen or asking or PopupVisible() then return end
+        local here = PlayerPos and select(1, PlayerPos())
+        if not (here and CAPS[here]) then return end
+        local list = {}
+        for _, e in ipairs((ns.ClassTrainers or {}).WEAPON or {}) do if e[1] == here then list[#list + 1] = e end end
+        local e = NearestTrainer(#list > 0 and list or (ns.ClassTrainers or {}).WEAPON)
+        if not e then return end
+        DB.wmSeen = true
+        StaticPopupDialogs["WARPATH_WEAPON"] = {
+            text = "%s", button1 = T("weaponGo"), button2 = T("ok"), timeout = 0, whileDead = true, hideOnEscape = true,
+            OnAccept = function() setWP(e); say(T("trainerWP", e[4], T("weaponMaster"))) end,
+        }
+        Popup("WARPATH_WEAPON", T("weaponHint", e[4], mname(e[1])))
     end
 
     ------------------------------------------------------------------ entraineurs sur la carte du monde
@@ -197,7 +247,7 @@ do
         b:SetScript("OnEnter", function(self)
             local t = Tip(); t:SetOwner(self, "ANCHOR_RIGHT")
             t:AddLine(self.t.n)
-            t:AddLine(ProfName(self.t.s) .. (RANKKEY[self.t.r] and (" - " .. T(RANKKEY[self.t.r])) or ""), COL.gold[1], COL.gold[2], COL.gold[3])
+            t:AddLine(self.t.label or (ProfName(self.t.s) .. (RANKKEY[self.t.r] and (" - " .. T(RANKKEY[self.t.r])) or "")), COL.gold[1], COL.gold[2], COL.gold[3])
             t:AddLine(T("trainerClick"), COL.soft[1], COL.soft[2], COL.soft[3], true)
             t:Show()
         end)
@@ -207,7 +257,7 @@ do
             if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates and d.m > 0 then
                 pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(d.m, d.x / 100, d.y / 100))
                 if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
-                say(T("trainerWP", d.n, ProfName(d.s)))
+                say(T("trainerWP", d.n, d.label or ProfName(d.s)))
             end
         end)
         tpins[i] = b
@@ -220,7 +270,7 @@ do
         local cs = child:GetScale() or 1
         local on = {}
         for _, id in ipairs(PROF_ORDER) do if ProfOn(id) then on[#on + 1] = id end end
-        local key = tostring(m) .. ":" .. string.format("%.3f", cs) .. ":" .. tostring(trainersShown()) .. ":" .. table.concat(on, ",")
+        local key = tostring(m) .. ":" .. string.format("%.3f", cs) .. ":" .. tostring(trainersShown()) .. ":" .. table.concat(on, ",") .. ":" .. tostring(DB.trainDue) .. ":" .. tostring(DB.trainerAll)
         if not force and key == tkey then return end
         tkey = key
         for i = 1, tused do tpins[i]:Hide() end
@@ -230,46 +280,70 @@ do
         for _, id in ipairs(on) do want[id] = true end
         local w, h = child:GetWidth(), child:GetHeight()
         local mapId = m
+        local function place(t, icon, alpha)
+            tused = tused + 1
+            local b = tpin(tused)
+            b.t = t
+            b.icon:SetTexture(icon)
+            b:SetAlpha(alpha or 1)
+            b:SetScale(1 / cs)
+            b:ClearAllPoints()
+            b:SetPoint("CENTER", child, "TOPLEFT", t.x / 100 * w * cs, -t.y / 100 * h * cs)
+            b:Show()
+        end
+        -- tous les entraineurs de metier (tes metiers coches en plein, les autres en plus pale)
         for _, t in ipairs(ns.Trainers or {}) do
-            if want[t.s] and t.m and t.x and t.m == mapId then
-                tused = tused + 1
-                local b = tpin(tused)
-                b.t = t
-                b.icon:SetTexture("Interface\\Icons\\" .. (ICONS[t.s] or "INV_Misc_QuestionMark"))
-                b:SetScale(1 / cs)
-                b:ClearAllPoints()
-                b:SetPoint("CENTER", child, "TOPLEFT", t.x / 100 * w * cs, -t.y / 100 * h * cs)
-                b:Show()
+            local mine = #on == 0 or want[t.s]
+            if t.m and t.x and t.m == mapId and (mine or DB.trainerAll) then
+                place(t, "Interface\\Icons\\" .. (ICONS[t.s] or "INV_Misc_QuestionMark"), mine and 1 or 0.55)
             end
+        end
+        -- entraineurs de ta classe quand de nouveaux sorts t'attendent, et maitres d'armes
+        local CT = ns.ClassTrainers or {}
+        if DB.trainDue and myClass then
+            for _, e in ipairs(CT[myClass] or {}) do
+                if e[1] == mapId then place({ m = e[1], x = e[2], y = e[3], n = e[4], label = T("classTrainer") }, "Interface\\Icons\\ClassIcon_" .. myClass:sub(1, 1) .. myClass:sub(2):lower()) end
+            end
+        end
+        for _, e in ipairs(CT.WEAPON or {}) do
+            if e[1] == mapId then place({ m = e[1], x = e[2], y = e[3], n = e[4], label = T("weaponMaster") }, "Interface\\Icons\\INV_Sword_04") end
         end
     end
     local function setupMap()
         if not (WorldMapFrame and WorldMapFrame.ScrollContainer) or WorldMapFrame._warpathTrainers then return end
         WorldMapFrame._warpathTrainers = true
-        local cb = CreateFrame("Button", nil, WorldMapFrame.ScrollContainer)
-        cb:SetSize(150, 22); cb:SetPoint("BOTTOMLEFT", 8, 34); cb:SetFrameStrata("HIGH")
-        local bg = Tex(cb, COL.bg, 0.88, "BACKGROUND"); bg:SetAllPoints()
-        for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-            local t = Tex(cb, COL.line)
-            if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
-            else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
+        local function toggle(lblKey, tipKey, get, set)
+            local cb = CreateFrame("Button", nil, WorldMapFrame.ScrollContainer)
+            cb:SetSize(150, 22); cb:SetFrameStrata("HIGH")
+            local bg = Tex(cb, COL.bg, 0.88, "BACKGROUND"); bg:SetAllPoints()
+            for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+                local t = Tex(cb, COL.line)
+                if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
+                else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
+            end
+            local hl = Tex(cb, COL.accent, 0.10, "HIGHLIGHT"); hl:SetAllPoints()
+            local gem = Diamond(cb, 8, COL.accent); gem:SetPoint("LEFT", 6, 0)
+            local lbl = FS(cb, 9, COL.gold, FONT, "LEFT"); lbl:SetPoint("LEFT", gem, "RIGHT", 4, 0)
+            function cb.sync()
+                lbl:SetText(Caps(T(lblKey)))
+                cb:SetWidth(math.max(120, (lbl:GetStringWidth() or 130) + 28))
+                local on = get()
+                gem:SetStyle(on and COL.accent or COL.line, not on)
+                local c = on and COL.gold or COL.faint
+                lbl:SetTextColor(c[1], c[2], c[3])
+            end
+            cb:SetScript("OnClick", function() set(not get()); cb.sync(); TrainerPinsRefresh(true) end)
+            cb:SetScript("OnEnter", function(self)
+                local t = Tip(); t:SetOwner(self, "ANCHOR_RIGHT"); t:AddLine(T(tipKey), COL.white[1], COL.white[2], COL.white[3], true); t:Show()
+            end)
+            cb:SetScript("OnLeave", function() Tip():Hide() end)
+            return cb
         end
-        local hl = Tex(cb, COL.accent, 0.10, "HIGHLIGHT"); hl:SetAllPoints()
-        local gem = Diamond(cb, 8, COL.accent); gem:SetPoint("LEFT", 6, 0)
-        local lbl = FS(cb, 9, COL.gold, FONT, "LEFT"); lbl:SetPoint("LEFT", gem, "RIGHT", 4, 0)
-        local function sync()
-            lbl:SetText(Caps(T("trainerMapBtn")))
-            cb:SetWidth(math.max(120, (lbl:GetStringWidth() or 130) + 28))
-            local on = trainersShown()
-            gem:SetStyle(on and COL.accent or COL.line, not on)
-            local c = on and COL.gold or COL.faint
-            lbl:SetTextColor(c[1], c[2], c[3])
-        end
-        cb:SetScript("OnClick", function() DB.trainerPins = not trainersShown(); sync(); TrainerPinsRefresh(true) end)
-        cb:SetScript("OnEnter", function(self)
-            local t = Tip(); t:SetOwner(self, "ANCHOR_RIGHT"); t:AddLine(T("trainerMapTip"), COL.white[1], COL.white[2], COL.white[3], true); t:Show()
-        end)
-        cb:SetScript("OnLeave", function() Tip():Hide() end)
+        local cb = toggle("trainerMapBtn", "trainerMapTip", trainersShown, function(v) DB.trainerPins = v end)
+        cb:SetPoint("BOTTOMLEFT", 8, 34)
+        local cb2 = toggle("trainerAllBtn", "trainerAllTip", function() return DB.trainerAll and true or false end, function(v) DB.trainerAll = v end)
+        cb2:SetPoint("LEFT", cb, "RIGHT", 6, 0)
+        local function sync() cb.sync(); cb2.sync() end
         sync()
         WorldMapFrame:HookScript("OnShow", function() sync(); TrainerPinsRefresh(true) end)
         local acc = 0
@@ -287,7 +361,7 @@ do
     fr:SetScript("OnEvent", function(_, e)
         if not DB then return end
         if e == "SKILL_LINES_CHANGED" or e == "TRADE_SKILL_SHOW" then ProfDetect(true); return end
-        local function go() pcall(CheckProfIntro); pcall(CheckProfQuests) end
+        local function go() pcall(CheckProfIntro); pcall(CheckProfQuests); pcall(CheckWeaponMaster) end
         if C_Timer and C_Timer.After then C_Timer.After(4, go) else go() end
     end)
 end

@@ -63,17 +63,33 @@ BASE_KILL = { HUNTER = 24, WARLOCK = 26, MAGE = 28, ROGUE = 30, DRUID = 30, SHAM
 SPEC = { PRIEST = { 1, 1.05, 0.85 }, PALADIN = { 1.1, 1.05, 0.95 }, DRUID = { 1.05, 0.9, 1.1 },
                SHAMAN = { 0.95, 0.9, 1.05 }, WARRIOR = { 0.95, 0.95, 1.15 }, ROGUE = { 1, 0.95, 1 },
                HUNTER = { 0.95, 1, 1 }, MAGE = { 1, 0.95, 1 }, WARLOCK = { 0.95, 1, 1 } }
-function KillTime()
-    if DB.ktN and DB.ktN >= 8 and DB.kt then return DB.kt, true end
-    local t = BASE_KILL[myClass] or 30
-    if GetTalentTabInfo and SPEC[myClass] then
+-- specialisation : 1, 2 ou 3 (ordre des arbres de talents : sacre/sacre/ombre pour un pretre...), nil si inconnue
+function MySpec()
+    if GetSpecialization then
+        local ok, i = pcall(GetSpecialization)
+        if ok and type(i) == "number" and i >= 1 and i <= 4 then return i end
+    end
+    if GetTalentTabInfo then
         local bestTab, bestPts = nil, 0
         for tab = 1, 3 do
-            local ok, _, _, pts = pcall(GetTalentTabInfo, tab)
-            if ok and type(pts) == "number" and pts > bestPts then bestTab, bestPts = tab, pts end
+            local ok, a, b, c = pcall(GetTalentTabInfo, tab)
+            local pts = type(c) == "number" and c or (type(b) == "number" and b) or nil
+            if ok and pts and pts > bestPts then bestTab, bestPts = tab, pts end
         end
-        if bestTab and bestPts >= 5 then t = t * SPEC[myClass][bestTab] end
+        if bestTab and bestPts >= 5 then return bestTab end
     end
+    return nil
+end
+function KillTime()
+    local sp = MySpec()
+    if sp then DB._spec = sp end
+    -- mesure dans ta specialisation actuelle (un pretre sacre et un pretre ombre ne tuent pas au meme rythme)
+    local m = sp and DB.ktS and DB.ktS[sp]
+    if m and (m[2] or 0) >= 8 then return m[1], true end
+    -- ancienne mesure sans specialisation connue : valable seulement si on ne connait pas la specialisation
+    if not sp and DB.ktN and DB.ktN >= 8 and DB.kt then return DB.kt, true end
+    local t = BASE_KILL[myClass] or 30
+    if sp and SPEC[myClass] and SPEC[myClass][sp] then t = t * SPEC[myClass][sp] end
     local lvl = UnitLevel("player") or 1
     return t * (1 + math.max(0, lvl - 20) * 0.004), false
 end
@@ -224,6 +240,13 @@ function OnXPGain(msg)
         local sample = math.max(8, math.min(120, now - lastKill))
         DB.kt = DB.kt and (DB.kt * 0.9 + sample * 0.1) or sample
         DB.ktN = (DB.ktN or 0) + 1
+        local sp = MySpec()
+        if sp then
+            DB.ktS = DB.ktS or {}
+            local m = DB.ktS[sp]
+            DB.ktS[sp] = m and { m[1] * 0.9 + sample * 0.1, m[2] + 1 } or { sample, 1 }
+            DB._spec = sp
+        end
     end
     lastKill = now
 end

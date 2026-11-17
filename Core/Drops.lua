@@ -16,6 +16,9 @@ local function Count(item)
     if C_Item and C_Item.GetItemCount then n = C_Item.GetItemCount(item) or 0
     elseif GetItemCount then n = GetItemCount(item) or 0 end
     local q, name = dropQuest[item], dropName[item]
+    -- nom de l'objet dans la langue du jeu (les donnees sont en anglais : un client francais ne le trouverait pas)
+    local loc = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(item)
+    if type(loc) == "string" and loc ~= "" then name = loc end
     if q and C_QuestLog and C_QuestLog.GetQuestObjectives then
         local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
         if ok and type(objs) == "table" then

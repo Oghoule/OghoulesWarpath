@@ -18,7 +18,7 @@ local ADDON, ns = ...
 -- Environnement prive partage par tous les fichiers du moteur (Core, Route, Estimate, Skin, Flow, Window,
 -- Comfort, Commands, Events) : leurs variables communes y vivent, les vraies globales du jeu restent dans _G.
 local DECL = {}
-for n in ("DungeonLore DL DungeonLogActive DungeonLogList DungeonLogHide DungeonLogRender Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow autoGoBusy CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText ShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
+for n in ("BackToNow MySpec ForgetCave DeathTip IsCaveStep CaveTrack StepPoint StepPointKey BugWindow NearestTrainer TrainReminder CheckWeaponMaster TurninGroup baseCurrent nearKind Actionable NearPick NearTick LevelWaitLines HubNotes ThenLine InDgInstance DungeonKeyForInstance OnInstanceChange DungeonInstanceMatches DungeonLore DL DungeonLogActive DungeonLogList DungeonLogHide DungeonLogRender Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow autoGoBusy CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText ShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
 local assigned = {}
 local env = setmetatable({}, {
     __index = function(_, k) if DECL[k] and assigned[k] then return nil end return _G[k] end,
@@ -102,7 +102,7 @@ CHAIN, MAXLVL, DUNGEONS, IS_DUNGEON = D.CHAIN, D.MAXLVL, D.DUNGEONS, D.IS_DUNGEO
 IS_DUNGEON_SET = IS_DUNGEON
 
 ICON = "Interface\\AddOns\\OghoulesWarpath\\Media\\Warpath64"
-VERSION = "0.98"
+VERSION = "1.04"
 MINLVL, MAIN_ORDER = D.MINLVL, D.MAIN_ORDER
 CHECK = "|TInterface\\RaidFrame\\ReadyCheck-Ready:12|t"
 DOT = "|cff888888-|r"
@@ -115,7 +115,8 @@ LANG = ns.LANG
 
 function Lang()
     if DB and DB.lang then return DB.lang end
-    return "fr"   -- francais par defaut ; anglais dans les options ou avec /hg lang en
+    -- anglais par defaut (nouvelles installations) ; une installation existante garde le francais
+    return (WarpathDropDB and WarpathDropDB._lang) or "en"
 end
 
 function T(key, ...)
@@ -520,6 +521,11 @@ function Compute()
         if not doneCache[i] and (s.t == "note" or s.t == "go" or s.t == "level" or s.optional)
             and not (s.t == "go" and IS_DUNGEON[DB.guide]) then
             local j = NextApplicable(i)
+            -- prise/remise facultative : les prises voisines peuvent etre faites dans un autre ordre (PNJ le plus
+            -- proche d'abord), donc on regarde la prochaine etape qui n'est ni une prise ni une remise
+            if s.optional and (s.t == "accept" or s.t == "turnin") then
+                while j <= n and (steps[j].t == "accept" or steps[j].t == "turnin") do j = NextApplicable(j) end
+            end
             if j <= n and doneCache[j] then doneCache[i] = "skip" end
         end
     end
@@ -535,6 +541,11 @@ function Compute()
             -- la note d'introduction du donjon reste affichee tant que tu ne l'as pas lue
             if not (steps[current] and steps[current].t == "note") then current = order[1] end
         end
+    end
+    baseCurrent = current
+    if not dynOrder and not computingOther and NearPick then
+        local ok, j = pcall(NearPick, current)
+        if ok and j then current = j end
     end
     if computingOther then return end
     if focus and (doneCache[focus] or not steps[focus]) then focus = nil end

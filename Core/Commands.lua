@@ -113,6 +113,8 @@ SlashCmdList["WARPATH"] = function(msg)
         else
             say(T("noPos", zone))
         end
+    elseif cmd == "bug" and arg == "" and BugWindow then
+        BugWindow()
     elseif cmd == "bug" then
         -- signalement : enregistre ou tu en es (envoie ensuite le fichier WTF\Account\...\SavedVariables\OghoulesWarpath.lua)
         local g = DB.guide
@@ -129,6 +131,29 @@ SlashCmdList["WARPATH"] = function(msg)
             id = s and s.id, text = s and StepText(s), map = mapID, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10,
             lvl = UnitLevel("player"), race = myRace, class = myClass, note = arg ~= "" and arg or nil }
         say(T("bugSaved", #b))
+    elseif cmd == "diag" then
+        -- ce que le jeu fournit a l'addon (pour verifier ce qui marche sur Forever)
+        local function yn(v) return v and "|cff9cc7a8OK|r" or "|cffc24a3eNON|r" end
+        local okS, sp = pcall(function() return GetSpecialization and GetSpecialization() end)
+        local okT, tab = pcall(function() return GetTalentTabInfo and select(3, GetTalentTabInfo(1)) end)
+        local spec = MySpec and MySpec()
+        say(T("diagHead", VERSION))
+        say(T("diagSpec", tostring(okS and sp), tostring(okT and tab), tostring(spec), math.floor((KillTime()) + 0.5)))
+        local indoors = IsIndoors and IsIndoors()
+        local pm, px, py = PlayerPos()
+        say(T("diagPos", tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?", indoors and T("diagIn") or T("diagOut"),
+            yn(PlayerWP() ~= nil)))
+        local s = steps and steps[current]
+        local q = s and Ids(s)[1]
+        local objs = q and C_QuestLog and C_QuestLog.GetQuestObjectives and select(2, pcall(C_QuestLog.GetQuestObjectives, q))
+        local o1 = type(objs) == "table" and objs[1]
+        say(T("diagQuest", tostring(q), o1 and (tostring(o1.text) .. " " .. tostring(o1.numFulfilled) .. "/" .. tostring(o1.numRequired)) or "-",
+            yn(C_Item and C_Item.GetItemCount)))
+        local own = WarpathDropDB and WarpathDropDB._caves or {}
+        local nC = 0; for _, v in pairs(own) do if type(v) == "table" then nC = nC + 1 end end
+        local nB = 0; for _ in pairs(ns.BakedCaves or {}) do nB = nB + 1 end
+        local wm = 0; for _ in pairs((ns.ClassTrainers or {}).WEAPON or {}) do wm = wm + 1 end
+        say(T("diagData", nC, nB, wm, (GetLocale and GetLocale()) or "?", Lang()))
     elseif cmd == "classe" or cmd == "class" then
         local list = ClassQuestList()
         local n = tonumber(arg)
@@ -169,12 +194,14 @@ _G.BINDING_NAME_WARPATH_PREV = "Voir l'étape précédente"
 _G.BINDING_NAME_WARPATH_NEXT = "Voir l'étape suivante"
 _G.BINDING_NAME_WARPATH_TOGGLE = "Afficher / cacher le guide"
 _G.BINDING_NAME_WARPATH_OPTIONS = "Ouvrir les options"
+_G.BINDING_NAME_WARPATH_NOW = "Revenir à l'étape actuelle"
 _G["BINDING_NAME_CLICK WarpathTarget1:LeftButton"] = "Cibler la 1re cible de l'étape"
 _G["BINDING_NAME_CLICK WarpathTarget2:LeftButton"] = "Cibler la 2e cible de l'étape"
 _G.WarpathBinding = function(action)
     if action == "ok" then Ignore()
     elseif action == "prev" then Peek(-1)
     elseif action == "next" then Peek(1)
+    elseif action == "now" then BackToNow()
     elseif action == "toggle" then SlashCmdList.WARPATH("toggle")
     elseif action == "options" then SlashCmdList.WARPATH("options") end
 end
@@ -182,6 +209,18 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.04", fr = "En regardant d'autres étapes, une ligne « Revenir à l'étape actuelle » te ramène à ton étape (aussi : clic droit sur < ou >, ou un raccourci clavier). Le temps par monstre est mesuré selon ta spécialisation. Nouvelle commande /warpath diag pour vérifier ce que le jeu fournit à l'addon.",
+      en = "While looking at other steps, a \"Back to the current step\" line brings you back (also: right-click < or >, or a key binding). Time per mob is measured per specialization. New /warpath diag command to check what the game gives the addon." },
+    { v = "1.03", fr = "Les PNJ des villages sont situés par rapport à l'auberge (« 140 m à l'est de l'auberge »). Les entrées de grottes apprises par les autres joueurs sont intégrées. La Chronique ne note plus un niveau ou un argent faux à la déconnexion.",
+      en = "Village NPCs are located relative to the inn (\"140 m east of the inn\"). Cave entrances learned by other players are included. The Chronicle no longer records a wrong level or gold at logout." },
+    { v = "1.02", fr = "Moins d'allers-retours : le guide va au PNJ le plus proche et te fait prendre ou rendre les quêtes en passant. Cibles de l'objectif avec icônes et taux de drop, cibles finies retirées. Flèche vers les objets au sol et l'entrée des grottes. Entraîneurs de classe et maîtres d'armes sur la carte, métiers demandés dès le début. Fenêtre pour décrire un problème.",
+      en = "Fewer back-and-forth trips: the guide goes to the closest NPC and has you pick up or turn in quests on the way. Objective targets with icons and drop rates, finished targets removed. Arrow to ground objects and cave entrances. Class trainers and weapon masters on the map, professions asked from the start. A window to describe a problem." },
+    { v = "1.01", fr = "Donjons : le journal se ferme tout seul quand tu sors (vivant, quêtes faites ou groupe dissous), « Revenir au journal » si tu l'as quitté par erreur, et proposition de basculer si tu entres dans un autre donjon. La Chronique compte le donjon dès l'entrée et ignore les morts en champ de bataille.",
+      en = "Dungeons: the log closes by itself when you leave (alive, quests done or group disbanded), \"Back to the log\" if you left it by mistake, and an offer to switch if you enter another dungeon. The Chronicle counts the dungeon on entry and ignores battleground deaths." },
+    { v = "1.00", fr = "Version 1.0 ! Le journal du donjon ne s'ouvre que dans le bon donjon, le changement de zone est reproposé une fois 3 niveaux plus tard, et cette fenêtre résume les nouveautés au lieu de toutes les lister.",
+      en = "Version 1.0! The dungeon log only opens in the right dungeon, the zone change is offered again once 3 levels later, and this window sums up the updates instead of listing them all." },
+    { v = "0.99", fr = "Petites corrections : à l'entrée d'un donjon, la liste « Ensuite » montre les remises au lieu des objectifs du donjon ; le comptage des drops reconnaît le nom des objets dans la langue du jeu.",
+      en = "Small fixes: at a dungeon entrance, the \"Next\" list shows the turn-ins instead of the dungeon objectives; drop counting recognizes item names in the game's language." },
     { v = "0.98", fr = "Chaque donjon a maintenant son propre texte d'ambiance à l'entrée : son histoire, pourquoi la Horde t'y envoie, et ton nom de héros.",
       en = "Each dungeon now has its own flavor text at the entrance: its story, why the Horde sends you there, and your hero's name." },
     { v = "0.96", fr = "Donjons : l'entrée ne se coche plus toute seule quand une quête du donjon a été passée. Après « Sortie du donjon », le guide t'envoie seulement rendre les quêtes complétées ; revenir dans l'instance rouvre le journal.",
@@ -253,15 +292,19 @@ local function vnum(v) local a, b = tostring(v or "0"):match("^(%d+)%.(%d+)"); r
 
 function ShowNews(all)
     local seen = vnum(WarpathDropDB and WarpathDropDB._seenVer or "0")
-    local lines, n = {}, 0
+    local lines, n, more = {}, 0, 0
+    local cap = all and 6 or 3
     for _, e in ipairs(NEWS) do
-        if (all or vnum(e.v) > seen) and n < 5 then
-            n = n + 1
-            lines[#lines + 1] = "|cffd6b866" .. e.v .. "|r  " .. ((Lang and Lang() == "en") and e.en or e.fr)
+        if all or vnum(e.v) > seen then
+            if n < cap then
+                n = n + 1
+                lines[#lines + 1] = "|cffd6b866" .. e.v .. "|r  " .. ((Lang and Lang() == "en") and e.en or e.fr)
+            else more = more + 1 end
         end
     end
     if WarpathDropDB then WarpathDropDB._seenVer = VERSION end
     if n == 0 then return false end
+    if more > 0 and not all then lines[#lines + 1] = "|cff8c7f62" .. T("newsMore", more) .. "|r" end
     StaticPopupDialogs["WARPATH_NEWS"] = { text = "%s", button1 = T("newsOk"), timeout = 0, whileDead = true, hideOnEscape = true }
     Popup("WARPATH_NEWS", T("newsHead", VERSION) .. "\n\n" .. table.concat(lines, "\n\n"))
     return true
@@ -281,4 +324,50 @@ function ShowWelcome()
         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     }
     ns.Trace("popup WARPATH_WELCOME"); Popup("WARPATH_WELCOME")
+end
+
+-- Fenetre de signalement : decris ce qui s'est passe, puis Envoyer (= /warpath bug <texte>)
+do
+    local win
+    function BugWindow()
+        if not win then
+            win = CreateFrame("Frame", "WarpathBugWindow", UIParent)
+            win:SetSize(380, 250); win:SetPoint("CENTER", 0, 60)
+            win:SetFrameStrata("FULLSCREEN_DIALOG"); win:EnableMouse(true); win:SetClampedToScreen(true)
+            win:SetMovable(true); win:RegisterForDrag("LeftButton")
+            win:SetScript("OnDragStart", win.StartMoving); win:SetScript("OnDragStop", win.StopMovingOrSizing)
+            local bg = Tex(win, COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
+            for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+                local t = Tex(win, COL.line)
+                if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
+                else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
+            end
+            win.head = FS(win, 10, COL.gold, FONT, "CENTER"); win.head:SetPoint("TOP", 0, -12)
+            win.sub = FS(win, 11, COL.soft, FONT, "LEFT"); win.sub:SetPoint("TOPLEFT", 16, -32); win.sub:SetWidth(348)
+            local box = CreateFrame("EditBox", nil, win)
+            box:SetPoint("TOPLEFT", 16, -70); box:SetPoint("BOTTOMRIGHT", -16, 46)
+            box:SetMultiLine(true); box:SetAutoFocus(true); box:SetMaxLetters(600)
+            if box.SetFontObject then box:SetFontObject(ChatFontNormal) end
+            if box.SetFont then pcall(box.SetFont, box, FONT, 12, "") end
+            if box.SetTextInsets then box:SetTextInsets(6, 6, 6, 6) end
+            local bbg = Tex(box, COL.faint, 0.35, "BACKGROUND"); bbg:SetAllPoints()
+            box:SetScript("OnEscapePressed", function() win:Hide() end)
+            win.box = box
+            win.send = FlatButton(win, 110, 22, function()
+                local t = (win.box:GetText() or ""):gsub("[\r\n]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+                SlashCmdList.WARPATH("bug " .. (t ~= "" and t or "-"))
+                win:Hide()
+            end)
+            win.send:SetPoint("BOTTOMRIGHT", -16, 14)
+            win.cancel = FlatButton(win, 90, 22, function() win:Hide() end)
+            win.cancel:SetPoint("RIGHT", win.send, "LEFT", -8, 0)
+            if UISpecialFrames then table.insert(UISpecialFrames, "WarpathBugWindow") end
+        end
+        win.head:SetText(Caps(T("bugTitle")))
+        win.sub:SetText(T("bugExplain"))
+        win.send:SetLabel(Caps(T("bugSend"))); win.cancel:SetLabel(Caps(T("chClose")))
+        win.box:SetText("")
+        win:Show(); if win.Raise then win:Raise() end
+        if win.box.SetFocus then win.box:SetFocus() end
+    end
 end

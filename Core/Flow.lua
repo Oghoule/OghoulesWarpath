@@ -35,7 +35,6 @@ function Advance()
             DB.main = nil
             if back and Guides[back] then
                 say(T("dDone", Title(G)))
-                if ChronDungeon then pcall(ChronDungeon, DB.guide) end
                 SetGuide(back, true)
             end
             return
@@ -158,6 +157,100 @@ end
 ------------------------------------------------------------------
 -- Donjons : proposition et mini-guide temporaire
 ------------------------------------------------------------------
+-- Est-ce bien le donjon suivi ? (numero d'instance connu, ou nom). En cas de doute on accepte :
+-- le bouton OK de l'etape d'entree permet toujours de passer au journal a la main.
+local INSTANCE_IDS = { rfc = 389, wc = 43, sfk = 33, bfd = 48, rfk = 47, gnomer = 90, sm_gy = 189, sm_lib = 189, sm_arm = 189,
+    sm_cath = 189, rfd = 129, uld = 70, zf = 209, mara_out = 349, mara_in = 349, st = 109, brd = 230, dm_e = 429, dm_w = 429,
+    lbrs = 229, ubrs = 229, scholo = 289, strat_live = 329, strat_ud = 329 }
+function DungeonInstanceMatches(key)
+    if not (GetInstanceInfo and key) then return true end
+    local name, _, _, _, _, _, _, id = GetInstanceInfo()
+    local want = INSTANCE_IDS[key]
+    if want and id == want then return true end
+    local dn
+    for _, d in ipairs(DUNGEONS) do if d.key == key then dn = d.name end end
+    dn = dn and dn:gsub("%s*:.*$", ""):gsub("%s*%b()", "")
+    if type(name) == "string" and dn and (name:lower():find(dn:lower(), 1, true) or dn:lower():find(name:lower(), 1, true)) then return true end
+    -- refus seulement si c'est clairement un AUTRE donjon connu (numero different d'un donjon de la liste)
+    if type(id) == "number" and id ~= want then
+        for k, v in pairs(INSTANCE_IDS) do if v == id and v ~= want then return false end end
+    end
+    return true
+end
+
+-- dans l'instance du donjon suivi ?
+function InDgInstance()
+    if not (DB and IS_DUNGEON[DB.guide] and IsInInstance) then return false end
+    local inI, kind = IsInInstance()
+    return (inI and kind == "party" and DungeonInstanceMatches(DB.guide)) and true or false
+end
+-- donjon connu correspondant a l'instance (le premier avec des quetes a faire, sinon le premier)
+function DungeonKeyForInstance()
+    if not GetInstanceInfo then return nil end
+    local _, _, _, _, _, _, _, id = GetInstanceInfo()
+    local first
+    for _, d in ipairs(DUNGEONS) do
+        if INSTANCE_IDS[d.key] == id and Guides[d.key] then
+            first = first or d.key
+            if (DungeonLeft(d.key)) > 0 then return d.key end
+        end
+    end
+    return first
+end
+-- entree / sortie d'instance (appele par Events.lua)
+local wasIn, askedInst = false, nil
+function OnInstanceChange()
+    if not DB or not IsInInstance then return end
+    local inI, kind = IsInInstance()
+    local party = inI and kind == "party"
+    if party and IS_DUNGEON[DB.guide] and DungeonInstanceMatches(DB.guide) then
+        DB.dgIn = DB.dgIn or {}
+        if not wasIn and DB.dgOut and DB.dgOut[DB.guide] and DB.dgIn[DB.guide] then
+            -- de retour dans le donjon apres l'avoir quitte : le journal revient
+            DB.dgOut[DB.guide] = nil
+        end
+        DB.dgIn[DB.guide] = true
+        if ChronDungeon then pcall(ChronDungeon, DB.guide) end
+        focus = nil; wasIn = true
+        return
+    end
+    if party then
+        -- autre donjon que celui suivi (ou aucun) : on propose d'y basculer, une fois par entree
+        local id = 0
+        if GetInstanceInfo then id = select(8, GetInstanceInfo()) or 0 end
+        local key = DungeonKeyForInstance()
+        if key and key ~= DB.guide and askedInst ~= id and (DungeonLeft(key)) > 0 then
+            askedInst = id
+            StaticPopupDialogs["WARPATH_DGSWITCH"] = {
+                text = "%s", button1 = T("dgSwitchYes"), button2 = T("dgSwitchNo"), timeout = 0, whileDead = true, hideOnEscape = true,
+                OnAccept = function()
+                    StartDungeon(key)
+                    DB.dgIn = DB.dgIn or {}; DB.dgIn[key] = true
+                    if ChronDungeon then pcall(ChronDungeon, key) end
+                    wasIn = true; Advance(); Refresh(true)
+                end,
+            }
+            Popup("WARPATH_DGSWITCH", T("dgSwitch", Title(Guides[key])))
+        end
+        return
+    end
+    askedInst = nil
+    -- sortie de l'instance suivie : le journal se ferme si tu es vivant et que tes quetes sont faites
+    -- (ou que le groupe est dissous). Une mort (course en fantome) ne compte pas.
+    if wasIn and IS_DUNGEON[DB.guide] and DB.dgIn and DB.dgIn[DB.guide] then
+        wasIn = false
+        if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then wasIn = true; return end
+        local allDone = true
+        for _, r in ipairs(DungeonLogList and DungeonLogList() or {}) do if not r.later and not r.done then allDone = false end end
+        local solo = (GetNumGroupMembers and GetNumGroupMembers() or 0) <= 1
+        if allDone or solo then
+            DB.dgOut = DB.dgOut or {}; DB.dgOut[DB.guide] = true
+            say(T("dgAutoOut"))
+        end
+    end
+    wasIn = false
+end
+
 function StartDungeon(key)
     if not Guides[key] then return end
     if not IS_DUNGEON[DB.guide] then DB.main = DB.guide end
@@ -403,7 +496,10 @@ function Restore(i)
     say(T("restored", QName(s) or StepText(s):sub(1, 40)))
     if optCache then optCache.key = nil end
     peek = nil; focus = nil
-    Advance(); Refresh(true)
+    Advance()
+    -- l'etape retablie s'affiche tout de suite (meme si un autre PNJ est un peu plus proche)
+    if not doneCache[i] and i ~= current then focus = i end
+    Refresh(true)
 end
 
 function Ignore()
@@ -411,6 +507,12 @@ function Ignore()
     -- mode donjon : le bouton sert a sortir du donjon (on passe aux remises de quetes)
     if not peek and not focus and DungeonLogActive and DungeonLogActive() then
         DB.dgOut = DB.dgOut or {}; DB.dgOut[DB.guide] = true
+        Advance(); Refresh(true)
+        return
+    end
+    -- journal quitte par erreur, toujours dans l'instance : on le fait revenir
+    if not peek and not focus and DB.dgOut and DB.dgOut[DB.guide] and InDgInstance() then
+        DB.dgOut[DB.guide] = nil
         Advance(); Refresh(true)
         return
     end
@@ -464,12 +566,13 @@ function CheckZoneLevel()
     local lvl = UnitLevel("player") or 1
     if lvl < (MAXLVL[key] or 99) then return end
     DB.zoneAsked = DB.zoneAsked or {}
-    if DB.zoneAsked[key] then return end
+    local asked = DB.zoneAsked[key]
+    if asked and (asked == true or lvl < asked + 3) then return end   -- reposee une fois, 3 niveaux plus tard
     local c, nxt = MyChain(), nil
     if DB.nextGuide and Guides[DB.nextGuide] and DB.nextGuide ~= key then nxt = DB.nextGuide end
     if not nxt and c then for k = 1, #c - 1 do if c[k] == key then nxt = c[k + 1] end end end
     if not (nxt and Guides[nxt]) then return end
-    DB.zoneAsked[key] = true
+    DB.zoneAsked[key] = asked and true or lvl
     -- quetes du guide encore dans le journal
     local inNext = {}
     for _, s in ipairs(Guides[nxt].steps or {}) do
@@ -504,4 +607,11 @@ function CheckZoneLevel()
         OnCancel = function() if DB.guide == key then DB.nextGuide = nxt end; say(T("zoneUpStayMsg", Title(Guides[nxt]))) end,
     }
     Popup("WARPATH_ZONEUP", txt)
+end
+
+-- retour a l'etape actuelle (apres avoir regarde d'autres etapes)
+function BackToNow()
+    peek = nil; focus = nil; lastWP = nil
+    if optCache then optCache.key = nil end
+    Advance(); Refresh(true)
 end

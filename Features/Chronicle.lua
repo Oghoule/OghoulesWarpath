@@ -93,9 +93,15 @@ do
         local c = S(); if not c then return end
         c.a = c.a + secs
     end
-    local function Touch()
+    -- a la deconnexion, le jeu peut renvoyer un niveau ou un argent faux : on garde alors les dernieres valeurs
+    local function Touch(timeOnly)
         local c = S(); if not c then return end
-        c.t1 = now(); c.lv1 = lvlf(); c.m1 = money()
+        c.t1 = now()
+        if timeOnly then return end
+        local l = lvlf()
+        if l >= (c.lv1 or 0) - 0.001 then c.lv1 = l end
+        c.m1 = money()
+        if (c.z or "") == "" and GetZoneText then c.z = GetZoneText() end
     end
 
     ------------------------------------------------------------------
@@ -203,15 +209,17 @@ do
             banner.btn = FlatButton(banner, 70, 22, function() banner:Hide(); ChronShow(1) end)
             banner.btn:SetPoint("RIGHT", -12, 0)
             banner:SetScript("OnMouseUp", function() banner:Hide(); ChronShow(1) end)
+            banner:SetScript("OnLeave", function() if banner.expired and not (banner.IsMouseOver and banner:IsMouseOver()) then banner:Hide() end end)
         end
         banner.l1:SetText(Caps(T("chBanner")))
         local m = c.mt and c.mt[1] and T(c.mt[1]) or ""
         banner.l2:SetText(T("chBannerLine", hm(c.a), lvTxt(c), "|cff" .. (GCOL[c.gr] or "cdbb8e") .. (c.gr or "-") .. "|r", m))
         banner.btn:SetLabel(Caps(T("chView")))
-        banner:SetAlpha(1); banner:Show()
+        banner:SetAlpha(1); banner.expired = false; banner:Show()
         DB.chronNew = nil
         if C_Timer and C_Timer.After then
             C_Timer.After(10, function()
+                banner.expired = true
                 if banner:IsShown() and not (banner.IsMouseOver and banner:IsMouseOver()) then banner:Hide() end
             end)
         end
@@ -243,13 +251,17 @@ do
             local login, reload = a1, a2
             local c = S()
             if login and not reload and now() - (c.t1 or 0) > GAP then Close() end
+            if (c.lv1 or 0) < (c.lv0 or 0) then c.lv1 = c.lv0 end
             Touch()
             if login and not reload and DB.chronNew and DB.chronBanner ~= false and DB.chron and DB.chron[1] then
                 if C_Timer and C_Timer.After then C_Timer.After(6, function() pcall(Banner) end) else pcall(Banner) end
             end
-        elseif e == "PLAYER_LOGOUT" then Touch()
+        elseif e == "PLAYER_LOGOUT" then Touch(true)
         elseif e == "QUEST_TURNED_IN" then ChronAdd("q")
-        elseif e == "PLAYER_DEAD" then ChronAdd("d")
+        elseif e == "PLAYER_DEAD" then
+            local inI, kind = false, nil
+            if IsInInstance then inI, kind = IsInInstance() end
+            if not (inI and (kind == "pvp" or kind == "arena")) then ChronAdd("d") end
         elseif e == "CHAT_MSG_COMBAT_XP_GAIN" then if isKill(a1) then ChronAdd("k") end
         else Touch() end
     end)

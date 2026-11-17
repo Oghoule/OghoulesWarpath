@@ -102,6 +102,17 @@ function CreateUI()
     f.lockBtn.label:SetPoint("RIGHT")
     if f.lockBtn.label.SetWordWrap then f.lockBtn.label:SetWordWrap(false) end
     local lhl = Tex(f.lockBtn, COL.accent, 0.08, "HIGHLIGHT"); lhl:SetAllPoints()
+    -- grotte : effacer une entree mal apprise (porte de maison prise pour l'entree)
+    f.caveBtn = CreateFrame("Button", nil, f); f.caveBtn:SetSize(INNER, 16)
+    f.caveBtn.gem = Diamond(f.caveBtn, 6, COL.gold); f.caveBtn.gem:SetPoint("LEFT", -1, 0)
+    f.caveBtn.label = FS(f.caveBtn, 11, COL.accent, FONT, "LEFT"); f.caveBtn.label:SetPoint("LEFT", 14, 0)
+    local chl = Tex(f.caveBtn, COL.accent, 0.08, "HIGHLIGHT"); chl:SetAllPoints()
+    f.caveBtn:SetScript("OnClick", function() if ForgetCave then ForgetCave() end end)
+    f.caveBtn:SetScript("OnEnter", function(self)
+        Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("caveWrong")); Tip():AddLine(T("caveWrongTip"), 0.66, 0.60, 0.48, true); Tip():Show()
+    end)
+    f.caveBtn:SetScript("OnLeave", function() Tip():Hide() end)
+    f.caveBtn:Hide()
     f.lockBtn:SetScript("OnClick", function(self, button)
         local i = self.idx
         if not i then return end
@@ -126,10 +137,23 @@ function CreateUI()
     f.lockBtn:SetScript("OnLeave", function() Tip():Hide() end)
     f.lockBtn:Hide()
 
+    -- en regardant d'autres etapes (< > ou clic dans la liste) : retour a l'etape actuelle en un clic
+    f.nowBtn = CreateFrame("Button", nil, f); f.nowBtn:SetSize(INNER, 18)
+    local nbg = Tex(f.nowBtn, COL.accent, 0.10, "BACKGROUND"); nbg:SetAllPoints()
+    f.nowBtn.gem = Diamond(f.nowBtn, 6, COL.accent); f.nowBtn.gem:SetPoint("LEFT", 4, 0)
+    f.nowBtn.label = FS(f.nowBtn, 11, COL.accent, FONT, "LEFT"); f.nowBtn.label:SetPoint("LEFT", 16, 0)
+    local nhl = Tex(f.nowBtn, COL.accent, 0.12, "HIGHLIGHT"); nhl:SetAllPoints()
+    f.nowBtn:SetScript("OnClick", function() if BackToNow then BackToNow() end end)
+    f.nowBtn:Hide()
+
     f.btnRow = CreateFrame("Frame", nil, f); f.btnRow:SetSize(INNER, 26)
     local prev = FlatButton(f.btnRow, 40, 26, function() Peek(-1) end); prev:SetPoint("LEFT"); prev:SetLabel("<")
     local nxt = FlatButton(f.btnRow, 40, 26, function() Peek(1) end); nxt:SetPoint("RIGHT"); nxt:SetLabel(">")
     f.skip = FlatButton(f.btnRow, INNER - 96, 26, Ignore); f.skip:SetPoint("CENTER")
+    for _, b in ipairs({ prev, nxt }) do
+        if b.RegisterForClicks then b:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+        b:HookScript("OnMouseUp", function(_, btn) if btn == "RightButton" and BackToNow then BackToNow() end end)
+    end
     -- infobulles des boutons
     for _, bt in ipairs({ { prev, "btnPrevTip" }, { nxt, "btnNextTip" }, { f.skip, "btnOkTip" } }) do
         bt[1]:HookScript("OnEnter", function(self)
@@ -177,7 +201,7 @@ ns.E = {
     StartDungeon = StartDungeon, StopDungeon = StopDungeon, ClearWaypoint = ClearWaypoint,
     AutoPick = AutoPick, AllDone = AllDone,
     ClassQuestList = function() return ClassQuestList() end, PlaceWaypointAgain = function() if steps and current and steps[current] then pcall(SetWaypoint, steps[current]) end end, StyleGet = function() return StyleGet() end,
-    ApplyPreset = function(n) local ok, err = pcall(ApplyPreset, n); if not ok then say(T("errInternal", tostring(err))) end end, StyleChanged = function() styleCache = nil; local ok, err = pcall(Advance); if not ok then say(T("errInternal", tostring(err))) end; Refresh(true) end, AskClass = function(q) AskChain(q, true) end, ChronShow = function(k) ChronShow(k) end,
+    ApplyPreset = function(n) local ok, err = pcall(ApplyPreset, n); if not ok then say(T("errInternal", tostring(err))) end end, StyleChanged = function() styleCache = nil; local ok, err = pcall(Advance); if not ok then say(T("errInternal", tostring(err))) end; Refresh(true) end, AskClass = function(q) AskChain(q, true) end, ChronShow = function(k) ChronShow(k) end, BugWindow = function() BugWindow() end,
     Guides = Guides, ICON = ICON, VERSION = VERSION, CHECK = CHECK,
     MAIN_ORDER = MAIN_ORDER, IS_DUNGEON = IS_DUNGEON, DUNGEONS = DUNGEONS, MINLVL = MINLVL, MAXLVL = MAXLVL,
     DB = function() return DB end,

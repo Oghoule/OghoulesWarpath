@@ -144,6 +144,8 @@ function Layout()
         local lh = math.max(16, (f.lockBtn.label.GetStringHeight and f.lockBtn.label:GetStringHeight() or 12) + 4)
         f.lockBtn:SetHeight(lh); put(f.lockBtn, lh, 10)
     end
+    if f.caveBtn and f.caveBtn:IsShown() then put(f.caveBtn, 16, 10) end
+    if f.nowBtn and f.nowBtn:IsShown() then put(f.nowBtn, 18, 10) end
     if f.advice and f.advice:IsShown() then
         local ah = math.max(16, (f.advice.label.GetStringHeight and f.advice.label:GetStringHeight() or 12) + 4)
         f.advice:SetHeight(ah); put(f.advice, ah, 10)
@@ -199,6 +201,7 @@ end
 
 function UpdateDistance()
     if not f or not f.dist then return end
+    if NearTick then pcall(NearTick) end
     local me = PlayerWP()
     local w = distTarget and WP(distTarget[1], distTarget[2], distTarget[3])
     if me and w and me[3] == w[3] then
@@ -240,7 +243,13 @@ function RefreshInner(forceWP)
         return
     end
     DungeonLogHide()
+    if f.caveBtn then f.caveBtn:Hide() end
     local i = peek or focus or current
+    if f.nowBtn then
+        local away = (peek or focus) and steps[current] and (peek or focus) ~= current
+        if away then f.nowBtn.label:SetText(T("backNow", current, (QName(steps[current]) and QName(steps[current]) ~= "") and QName(steps[current]) or (StepText(steps[current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
+        f.nowBtn:SetShown(away and true or false)
+    end
     local s = steps[i]
     if not s then
         f.title:SetText(Caps(Title(G)) .. "  |cff8c7f62·|r  " .. T("finished"))
@@ -259,6 +268,14 @@ function RefreshInner(forceWP)
         local det = (not peek) and PrereqDetour and PrereqDetour(s) or nil
         local g = det and { t = det.done and "turnin" or "do", id = det.id, m = det.m, x = det.x, y = det.y,
                             zone = MAPNAME[det.m] or s.zone, quest = det.name } or s
+        -- grotte (entree/sortie) ou objet au sol le plus proche : la fleche vise ce point
+        local sp = (not peek and not det and StepPoint) and StepPoint(s) or nil
+        if sp then g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest } end
+        if f.caveBtn then
+            local cave = sp and (sp.kind == "enter" or sp.kind == "exit")
+            if cave then f.caveBtn.label:SetText("|cff8c7f62" .. T("caveWrong") .. "|r") end
+            f.caveBtn:SetShown(cave and true or false)
+        end
         local tr = (not peek) and TransportFor(g) or nil
         -- vol conseille pour la prochaine etape du trajet (vers le transport, ou vers l'objectif)
         local fl
@@ -286,7 +303,8 @@ function RefreshInner(forceWP)
             .. (st == "done" and ("  " .. CHECK .. " |cff9cc7a8" .. T("stepDone") .. "|r")
                 or st == "skip" and ("   |cff8c7f62" .. T("skipped") .. "|r")
                 or peek and ("   |cffd69a66" .. T("stepTodo") .. "|r") or "")
-            .. ((not peek and focus) and ("   |cffcdbb8e" .. T("chosen") .. "|r") or ""))
+            .. ((not peek and focus) and ("   |cffcdbb8e" .. T("chosen") .. "|r") or "")
+            .. ((not peek and not focus and nearKind and i == current) and ("   |cff9cc7a8" .. T(nearKind == "pass" and "nearPass" or "nearNear") .. "|r") or ""))
         -- rendement estime (quete + monstres) compare au simple farm de monstres de ton niveau
         if (s.t == "do" or (s.optional and s.t == "accept")) and type(s.id) == "number" and EST[s.id] then
             local e = Estimate({ s.id }, false)
@@ -340,6 +358,19 @@ function RefreshInner(forceWP)
             if ent and i > ent then body = "|cffd69a66" .. T("dgGroup") .. "|r\n\n" .. body end
         end
         if det then body = "|cffd69a66" .. T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
+        -- quetes pas encore prises faute de niveau, quetes laissees pour plus tard, et la suite
+        if not peek then
+            local lw = LevelWaitLines and LevelWaitLines(s) or {}
+            if #lw > 0 then body = body .. "\n\n|cffd69a66" .. table.concat(lw, "\n") .. "|r" end
+            local hn = HubNotes and HubNotes(i)
+            if hn then body = body .. "\n\n|cff8c7f62" .. hn .. "|r" end
+            local tg = TurninGroup and TurninGroup(i)
+            if tg then body = "|cff9cc7a8" .. tg .. "|r\n\n" .. body end
+            local dt = DeathTip and DeathTip(i)
+            if dt then body = body .. "\n\n|cff8c7f62" .. dt .. "|r" end
+            local th = ThenLine and ThenLine(i)
+            if th then body = body .. "\n\n|cffcdbb8e" .. th .. "|r" end
+        end
         -- donjon : toutes les quetes en main, on marche sur l'entree
         if s.t == "go" and IS_DUNGEON[DB.guide] and not peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
         f.text:SetText(body); f.text:SetShown(body ~= "")
@@ -362,7 +393,7 @@ function RefreshInner(forceWP)
         local first = legs[1] or (g.x and g.y and { name = g.zone, m = g.m, x = g.x, y = g.y }) or nil
         if first and first.x then
             -- zone de chasse/ramassage (etape "faire", ou prerequis a faire) : la fleche se cache une fois sur place
-            local area = (#legs == 0) and ((det and not det.done) or (not det and s.t == "do")) or false
+            local area = (#legs == 0) and not sp and ((det and not det.done) or (not det and s.t == "do")) or false
             distTarget = first.m and { first.m, first.x, first.y, area } or nil
             f.coord:SetText(string.format("%s  %.1f, %.1f", first.name or "", first.x, first.y)); f.coord:Show()
         else
@@ -386,13 +417,17 @@ function RefreshInner(forceWP)
             if not after then seq = {} for _, j in ipairs(dynOrder) do if j ~= i then seq[#seq + 1] = j end end end
             local entrance
             for j = 1, n do if steps[j].t == "go" then entrance = j; break end end
+            -- apres l'entree : seulement les remises (les objectifs du donjon sont dans le journal du donjon)
             for j = (entrance or n + 1), n do
-                if Applies(steps[j]) and j ~= i then seq[#seq + 1] = j end
+                if Applies(steps[j]) and j ~= i and steps[j].t ~= "do" and not doneCache[j] then seq[#seq + 1] = j end
             end
         else
             local j = i
+            -- etape choisie par proximite : l'etape du guide qu'on a devancee reste en tete de la liste
+            if not peek and not focus and baseCurrent and baseCurrent < i then seq[1] = baseCurrent; j = baseCurrent end
             while #seq < 4 do
                 j = NextApplicable(j)
+                if j == i then j = NextApplicable(j) end
                 if j > n then break end
                 seq[#seq + 1] = j
             end
@@ -424,7 +459,9 @@ function RefreshInner(forceWP)
         end
         f.chainBtn.target = (firstTodo and firstTodo ~= i) and firstTodo or nil
         SetChain(ch)
-        if Restorable(i) then
+        if not peek and not focus and DB.dgOut and DB.dgOut[DB.guide] and InDgInstance() then
+            f.skip:SetLabel(Caps(T("dgBack")))
+        elseif Restorable(i) then
             f.skip:SetLabel(Caps(T("restore")))
             f.kind:SetText(f.kind:GetText() .. "   |cffd69a66" .. T("restoreHint") .. "|r")
         else
@@ -451,7 +488,7 @@ function RefreshInner(forceWP)
             f.advice.icon:SetTexture(adv.icon); f.advice.label:SetText(adv.text); f.advice:Show()
         elseif f.advice then f.advice:Hide() end
         if ns.Targets then ns.Targets.Update(det and g or s) end
-        local wpKey = (det and ("pre" .. det.id .. (det.done and "d" or "") .. ">") or "") .. i .. (tr and (":" .. tr.id) or "") .. (fl and (":fl:" .. fl.from.key .. ">" .. fl.to.key) or "")
+        local wpKey = (det and ("pre" .. det.id .. (det.done and "d" or "") .. ">") or "") .. (sp and (sp.kind .. sp.x .. ":" .. sp.y .. ">") or "") .. i .. (tr and (":" .. tr.id) or "") .. (fl and (":fl:" .. fl.from.key .. ">" .. fl.to.key) or "")
         if not peek and (forceWP or lastWP ~= wpKey) then
             lastWP = wpKey
             if fl then
@@ -732,6 +769,8 @@ function DungeonLogRender()
     f.title:SetText(Caps(zone) .. "   |cff8c7f62·|r   " .. T("dgCount", done, nq))
     f.kind:SetText("|cffcdbb8e" .. Caps(T("dgLog")) .. "|r"); f.kind:Show(); f.dist:SetText("")
     f.qtitle:Hide(); f.text:SetText("|cffd69a66" .. T("dgGroup") .. "|r"); f.text:Show(); SetRoute({}); f.coord:Hide(); f.chainBtn:Hide(); f.lockBtn:Hide()
+    if f.caveBtn then f.caveBtn:Hide() end
+    if f.nowBtn then f.nowBtn:Hide() end
     if f.advice then f.advice:Hide() end
     SetUpcoming({}); SetChain(nil); distTarget = nil
     if not DL.tip then
@@ -751,6 +790,7 @@ function DungeonLogRender()
         if open then DL.tip:SetText(QDetails(row)); DL.tip:Show(); DL.after = k end
     end
     DL.n = math.min(#list, 12)
+    if #list > 12 then f.text:SetText("|cffd69a66" .. T("dgGroup") .. "|r\n|cff8c7f62" .. T("dgMore", #list - 12) .. "|r") end
     if #list == 0 then f.text:SetText(T("dgEmpty")); f.text:Show() end
     f.skip:SetLabel(Caps(T("dgExit")))
     if ns.Targets then ns.Targets.Update(steps[current]) end

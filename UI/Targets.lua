@@ -14,6 +14,8 @@ do
         giver  = "Interface\\GossipFrame\\AvailableQuestIcon",
         turnin = "Interface\\GossipFrame\\ActiveQuestIcon",
         mob    = "Interface\\CURSOR\\Attack",
+        use    = "Interface\\CURSOR\\Interact",
+        talk   = "Interface\\CURSOR\\Speak",
         inn    = "Interface\\Minimap\\Tracking\\Innkeeper",
         buy    = "Interface\\GossipFrame\\VendorGossipIcon",
     }
@@ -80,10 +82,24 @@ do
     local function Build(s)
         local L, seen = {}, {}
         local names = ns.NpcNames or {}
-        local function add(id, kind)
+        local function add(id, kind, pct)
             if id and not seen[id] and names[id] and #L < MAX then
-                seen[id] = true; L[#L + 1] = { id = id, name = names[id], kind = kind }
+                seen[id] = true; L[#L + 1] = { id = id, name = names[id], kind = kind, pct = pct }
             end
+        end
+        -- objectif "tuer" deja rempli (texte de l'objectif qui contient le nom du monstre)
+        local function killDone(qid, npc)
+            if not (C_QuestLog and C_QuestLog.GetQuestObjectives and names[npc]) then return false end
+            local ok, objs = pcall(C_QuestLog.GetQuestObjectives, qid)
+            if not ok or type(objs) ~= "table" then return false end
+            for _, o in ipairs(objs) do
+                if type(o.text) == "string" and o.text:find(names[npc], 1, true) then return o.finished and true or false end
+            end
+            return false
+        end
+        local function itemDone(item, need)
+            local n = (C_Item and C_Item.GetItemCount) and C_Item.GetItemCount(item) or 0
+            return (n or 0) >= (need or 1)
         end
         if currentAdvice and currentAdvice.kind == "bind" then add(currentAdvice.npc, "inn") end
         if currentAdvice and currentAdvice.kind == "buy" then add(currentAdvice.npc, "buy") end
@@ -94,9 +110,21 @@ do
                 if e then
                     if s.t == "accept" then for _, g in ipairs(e.g or {}) do add(g, "giver") end
                     elseif s.t == "turnin" then for _, g in ipairs(e.en or {}) do add(g, "turnin") end
-                    elseif s.t == "do" then
-                        for _, k in ipairs(e.k or {}) do add(k[1], "mob") end
-                        for _, d in ipairs(e.d or {}) do for j = 7, #d do add(d[j], "mob") end end
+                    elseif s.t == "do" and logById[qid] ~= true then
+                        -- tuer, utiliser un objet sur, ou parler : l'icone le dit
+                        local tt = type(e.t) == "string" and e.t:lower() or ""
+                        local kk = e.u and "use" or ((tt:find("^speak") or tt:find("^talk")) and "talk") or "mob"
+                        for _, k in ipairs(e.k or {}) do if not killDone(qid, k[1]) then add(k[1], kk) end end
+                        for _, d in ipairs(e.d or {}) do
+                            if #d >= 7 and not itemDone(d[1], d[2]) then
+                                local rate, how = DropRate(d)
+                                local per = ns.QuestieDropNpc and ns.QuestieDropNpc[d[1]]
+                                for j = 7, #d do
+                                    local r = (how ~= "measured" and per and per[d[j]]) or rate
+                                    add(d[j], "mob", math.floor(r * 100 + 0.5))
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -110,7 +138,7 @@ do
         local L = wanted or {}
         local off = DB.targets == false or #L == 0 or DB.shown == false
         local key = off and "off" or ""
-        if not off then for _, t in ipairs(L) do key = key .. t.id .. "," end end
+        if not off then for _, t in ipairs(L) do key = key .. t.id .. ":" .. (t.pct or "") .. t.kind .. "," end end
         if key == shownKey then return end
         shownKey = key
         if off then if panel then panel:Hide() end; return end
@@ -122,10 +150,10 @@ do
                 b.name = t.name
                 b:SetAttribute("macrotext", "/targetexact " .. t.name)
                 b.icon:SetTexture(ICON[t.kind])
-                local KC = { giver = COL.accent, turnin = COL.green, mob = COL.red, fly = COL.gold, inn = COL.soft, buy = COL.gold }
+                local KC = { giver = COL.accent, turnin = COL.green, mob = COL.red, use = COL.gold, talk = COL.accent, fly = COL.gold, inn = COL.soft, buy = COL.gold }
                 local c = KC[t.kind] or COL.line
                 for _, e in ipairs(b.edge) do e:SetColorTexture(c[1], c[2], c[3], 1) end
-                b.fs:SetText(t.name)
+                b.fs:SetText(t.pct and (t.name .. "  |cffffd100" .. t.pct .. " %|r") or t.name)
                 b:Show()
             else
                 b:SetAttribute("macrotext", nil); b:Hide()

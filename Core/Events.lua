@@ -28,7 +28,12 @@ function OnEvent(self, event, ...)
         DB.fp = DB.fp or {}
         DB.fpLinks = DB.fpLinks or {}
         DB.lockHide = DB.lockHide or {}
+        local fresh = WarpathDropDB == nil
         WarpathDropDB = WarpathDropDB or {}
+        -- v1.02 : anglais par defaut ; une installation qui existait deja reste en francais
+        if WarpathDropDB._lang == nil then
+            WarpathDropDB._lang = (fresh and DB._new) and "en" or (DB.lang or "fr")
+        end
         if DB.useFlights == nil then DB.useFlights = true end
         DB.dLater = DB.dLater or {}
         if DB.wp == nil then DB.wp = true end
@@ -44,6 +49,7 @@ function OnEvent(self, event, ...)
         local _, c = UnitClass("player")
         local _, r = UnitRace("player")
         myClass, myRace = c, r
+        DB._class = c   -- pour etalonner le temps par monstre selon la classe (collecte.py)
         pcall(ResolveNewMaps)
         CreateUI()
         ns.Trace("bouton minicarte"); pcall(ns.UI.CreateMinimapButton)
@@ -131,7 +137,7 @@ function OnEvent(self, event, ...)
         ScheduleAdvance()
     elseif event == "PLAYER_LEVEL_UP" then
         local nl = ...
-        if type(nl) == "number" and nl % 2 == 0 then DB.trainDue = nl end
+        if type(nl) == "number" and nl % 2 == 0 then DB.trainDue = nl; if TrainReminder then pcall(TrainReminder) end end
         ScheduleAdvance()
         if C_Timer and C_Timer.After then C_Timer.After(1.5, CheckDungeons); C_Timer.After(4, CheckClassQuests); C_Timer.After(2.5, function() pcall(CheckZoneLevel) end) else CheckDungeons(); pcall(CheckZoneLevel) end
     elseif event == "QUEST_TURNED_IN" then
@@ -153,14 +159,7 @@ function OnEvent(self, event, ...)
         Refresh(true)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         -- entree dans l'instance du donjon suivi : le journal du donjon prend le relais
-        if DB and IS_DUNGEON[DB.guide] and IsInInstance then
-            local inI, kind = IsInInstance()
-            if inI and kind == "party" then
-                DB.dgIn = DB.dgIn or {}; DB.dgIn[DB.guide] = true
-                if DB.dgOut then DB.dgOut[DB.guide] = nil end   -- de retour dans le donjon : le journal revient
-                focus = nil
-            end
-        end
+        pcall(OnInstanceChange)
         -- nouveau continent / nouvelle zone : on recalcule (et la fleche passe du zeppelin a la vraie cible)
         ScheduleAdvance()
         Refresh(true)

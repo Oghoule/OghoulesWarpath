@@ -114,6 +114,7 @@ end
 
 local function SetLang(l)
     DB.lang = l
+    if WarpathDropDB then WarpathDropDB._lang = l end
     say(T("langSet"))
     if E.Frame() then Refresh(true) end
     RefreshOptions()
@@ -189,6 +190,7 @@ local function CreateOptions()
         note:SetScript("OnEnterPressed", send)
         note:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus(); self:Hide(); bug:SetLabel(K.Upper(T("bugBtn"))) end)
         bug = FlatButton(opt, NAVW - 44, 24, function(self)
+            if E.BugWindow then E.BugWindow(); return end
             if note:IsShown() then send() else note:Show(); note:SetFocus(); self:SetLabel(K.Upper(T("bugSend"))) end
         end)
         bug:SetPoint("BOTTOMLEFT", 24, 40)
