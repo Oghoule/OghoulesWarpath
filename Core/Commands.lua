@@ -131,7 +131,34 @@ SlashCmdList["WARPATH"] = function(msg)
             id = s and s.id, text = s and StepText(s), map = mapID, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10,
             lvl = UnitLevel("player"), race = myRace, class = myClass, note = arg ~= "" and arg or nil }
         say(T("bugSaved", #b))
+    elseif cmd == "passage" or cmd == "pass" then
+        PassageCmd(arg)
+    elseif cmd == "diag" and arg ~= "plus" and arg ~= "more" then
+        -- version courte : ce qui sert a comprendre un souci en jeu (grotte, position, specialisation)
+        local function yn(v) return v and ("|cff9cc7a8" .. T("yes") .. "|r") or ("|cffc24a3e" .. T("no") .. "|r") end
+        local zone = G and Title(G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "") or "?"
+        say(T("dgxHead", VERSION, zone, current or 0, steps and #steps or 0))
+        local c = CaveDiag and CaveDiag() or {}
+        say("|cffcdbb8e" .. T("dgxCave") .. "|r")
+        say("   " .. T("dgxWhere", c.indoors and ("|cff9cc7a8" .. T("diagIn") .. "|r") or T("diagOut")))
+        say("   " .. T("dgxCaveStep", yn(c.cave)))
+        if c.cave then
+            if c.entry then
+                say("   " .. T("dgxEntry", yn(true), c.dist and T("dist", c.dist) or "?", T(c.own and "dgxByYou" or "dgxByOthers")))
+            else
+                say("   " .. T("dgxEntry", yn(false), "-", T("dgxLearn")))
+            end
+        end
+        if c.indoors then say("   " .. T("dgxExit", yn(c.exitKnown))) end
+        local AIM = { pass = "dgxAimPass", zone = "dgxAimZone", enter = "dgxAimEnter", exit = "dgxAimExit", obj = "dgxAimObj", corpse = "dgxAimCorpse", step = "dgxAimStep" }
+        say("   " .. T("dgxAim", T(AIM[c.aim] or "dgxAimStep")))
+        local pm, px, py = PlayerPos()
+        say(T("dgxPos", MAPNAME[pm] or tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?"))
+        local spec = MySpec and MySpec()
+        say(T("dgxSpec", tostring(spec or "?"), math.floor((KillTime()) + 0.5)))
+        say("|cff8c7f62" .. T("dgxMore") .. "|r")
     elseif cmd == "diag" then
+        -- version complete (/warpath diag plus) : API du jeu, talents, donnees
         -- ce que le jeu fournit a l'addon (pour verifier ce qui marche sur Forever)
         local function yn(v) return v and "|cff9cc7a8OK|r" or "|cffc24a3eNON|r" end
         local okS, sp = pcall(function() return GetSpecialization and GetSpecialization() end)
@@ -224,6 +251,54 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.37", fr = "Zephras Isle : la fin de l'histoire est maintenant dans le guide (Desperate Times jusqu'à What Comes Next), sans quoi The Earthen Ring restait bloquée. Style de jeu : une quête qui débloque une quête d'un guide suivant n'est plus jamais sautée.",
+      en = "Zephras Isle: the end of the story is now in the guide (Desperate Times through What Comes Next); without it The Earthen Ring stayed locked. Play style: a quest that unlocks a quest in a later guide is never skipped." },
+    { v = "1.36", fr = "Étapes « Monte au niveau » : la flèche et le bloc destination indiquent un coin de farm près de toi, avec des monstres de ton niveau (Manque d'XP : Farmer ou Les deux). « Les deux » propose aussi le donjon de ton niveau.",
+      en = "\"Reach level\" steps: the arrow and destination block show a farm spot near you with mobs of your level (Missing XP: Grind or Both). \"Both\" also suggests the dungeon for your level." },
+    { v = "1.35", fr = "Cibles de l'objectif : le taux de drop est toujours aligné au bord droit de la fenêtre.",
+      en = "Objective targets: the drop rate is always aligned to the right edge of the window." },
+    { v = "1.34", fr = "Cibles de l'objectif : poignée en bas à droite pour changer la largeur de la fenêtre (hors combat). La largeur est gardée.",
+      en = "Objective targets: grip at the bottom right to change the window width (out of combat). The width is kept." },
+    { v = "1.33", fr = "Un seul XP/h : le rythme actif, dans le pied de la fenêtre, avec le temps avant le niveau suivant (détail au survol). La ligne de rythme du haut est retirée. Le badge indique le niveau de la QUÊTE, coloré selon la difficulté.",
+      en = "A single XP/h: the active pace, in the window footer, with the time to the next level (details on hover). The pace line at the top is removed. The badge shows the QUEST level, colored by difficulty." },
+    { v = "1.32", fr = "Données de Questie mises à jour (QuestieDB 1.1.2) : positions de PNJ et de monstres, XP des quêtes, nouvelles quêtes 53-60, itinéraire de Zephras Isle recalculé (toujours réservé aux Skyborne).",
+      en = "Questie data updated (QuestieDB 1.1.2): NPC and mob positions, quest XP, new 53-60 quests, Zephras Isle route recalculated (still Skyborne only)." },
+    { v = "1.31", fr = "Nouvelle commande /warpath passage : place-toi à l'entrée d'un tunnel, d'une rampe ou d'un pont et tape-la ; la flèche passera par là pour l'étape affichée tant que tu es du mauvais côté (efface pour retirer, liste pour voir les tiens). Drygulch Ravine : la flèche repasse aussi par le tunnel pour rendre Securing the Lines.",
+      en = "New /warpath passage command: stand at a tunnel, ramp or bridge entrance and type it; the arrow will go through there for the shown step while you're on the wrong side (clear to remove, list to see yours). Drygulch Ravine: the arrow also goes back through the tunnel to turn in Securing the Lines." },
+    { v = "1.30", fr = "Flèche de camp en camp (10 quêtes, ex. Encroachment) : elle revient vers le camp qui reste à faire. Rendre une quête : si le même PNJ en donne d'autres, la fenêtre affiche « Puis reparle-lui pour prendre ». Conseil de pierre de foyer : clic sur l'icône pour l'utiliser.",
+      en = "Camp-to-camp arrow (10 quests, e.g. Encroachment): it comes back toward the camp still to do. Turning in a quest: if the same NPC gives others, the window shows \"Then talk to them again to pick up\". Hearthstone tip: click the icon to use it." },
+    { v = "1.29", fr = "Securing the Lines : la flèche passe d'abord par l'entrée du tunnel de Drygulch Ravine, puis vise le ravin une fois traversé.",
+      en = "Securing the Lines: the arrow first goes to the Drygulch Ravine tunnel entrance, then to the ravine once you're through." },
+    { v = "1.28", fr = "/warpath diag simplifié : dedans ou dehors, étape de grotte, entrée connue (et par qui), sortie mémorisée, ce que vise la flèche, position et spécialisation. Les détails techniques sont dans /warpath diag plus.",
+      en = "Simpler /warpath diag: indoors or outdoors, cave step, known entrance (and who learned it), remembered exit, what the arrow points to, position and specialization. Technical details are in /warpath diag plus." },
+    { v = "1.27", fr = "Carte du monde : erreur au chargement corrigée (« Tous les métiers » restait vide et « Entraîneurs de métier » changeait de taille au premier clic).",
+      en = "World map: load error fixed (\"All professions\" stayed empty and \"Profession trainers\" changed size on the first click)." },
+    { v = "1.26", fr = "Boutons de la carte regroupés dans une seule barre : même taille pour tous (plus petits sur la carte réduite), cases bien affichées. Opacité d'origine : guide 90 %, options 95 %, ciblage 85 %.",
+      en = "Map buttons grouped in a single bar: same size for all (smaller on the reduced map), boxes shown properly. Original opacity: guide 90%, options 95%, targeting 85%." },
+    { v = "1.25", fr = "Fond des fenêtres (guide, options, ciblage) à 95 % d'opacité.",
+      en = "Window backgrounds (guide, options, targeting) at 95% opacity." },
+    { v = "1.24", fr = "Cases cochées bien visibles (losange rouge plein). Boutons de la carte du monde plus petits quand la carte est réduite.",
+      en = "Checked boxes clearly visible (solid red diamond). World map buttons smaller when the map is not maximized." },
+    { v = "1.23", fr = "Clic droit sur < ou > : revient exactement à l'étape actuelle (il avançait ou reculait aussi d'une étape).",
+      en = "Right-click on < or >: goes back exactly to the current step (it also moved one step forward or back)." },
+    { v = "1.22", fr = "Icônes de l'addon aussi dans la fenêtre de ciblage (donneur, à qui rendre, monstre), dans les listes « Rends ici » / « Prends ici », dans la légende des options et dans le conseil « journal plein ».",
+      en = "Addon icons also in the targeting window (giver, turn in to, mob), in the \"Turn in here\" / \"Pick up here\" lists, in the options legend and in the \"quest log full\" tip." },
+    { v = "1.21", fr = "Icônes de « La suite » et flèche de destination remises à l'endroit.",
+      en = "\"Coming up\" icons and destination arrow shown the right way up." },
+    { v = "1.20", fr = "Icônes de l'addon dans « La suite » (flèche retour pour rendre, point d'exclamation doré pour prendre, épées pour faire) et flèche de destination redessinée, à la place des icônes du jeu.",
+      en = "Addon icons in \"Coming up\" (return arrow to turn in, gold exclamation mark to accept, swords to do) and a redrawn destination arrow, instead of the game's icons." },
+    { v = "1.19", fr = "Fenêtre aux proportions de la maquette : largeur 300, hauteur fixe (elle ne grandit que si le contenu dépasse), boutons et pied ancrés en bas, pied toujours visible. Objectifs en lignes avec le compteur aligné à droite. Boutons transparents à contour doré, niveau en crème.",
+      en = "Window with the mockup's proportions: 300 wide, fixed height (it only grows if the content needs it), buttons and footer pinned to the bottom, footer always visible. Objectives as rows with the counter aligned right. Transparent gold-outlined buttons, cream level number." },
+    { v = "1.18", fr = "Fenêtre : texte un peu plus petit en gardant les espacements, plus d'espace avant les boutons, fond plus opaque (le décor ne teinte plus la fenêtre) et couleurs alignées sur la maquette.",
+      en = "Window: slightly smaller text with the same spacing, more room above the buttons, more opaque background (the scenery no longer tints the window) and colors matched to the mockup." },
+    { v = "1.17", fr = "Fenêtre plus grande et plus aérée (texte plus gros, plus d'espace). Prendre / Rendre : le PNJ est dans le bloc destination. Astuces dans l'infobulle du titre. Cases oui/non en losange à contour doré (le losange plein reste pour les choix uniques), partout : options, carte, objectifs. Quêtes de métier en double retirées de l'onglet Métiers.",
+      en = "Bigger, airier window (larger text, more spacing). Accept / Turn in: the NPC is in the destination block. Tips in the title tooltip. Yes/no boxes are now gold-outlined diamonds (the solid diamond stays for single choices), everywhere: options, map, objectives. Duplicate profession quests removed from the Professions tab." },
+    { v = "1.16", fr = "Nouveau look : en-tête avec la zone et une barre de progression, badge du niveau de la quête, bloc destination (lieu, précision, distance), objectifs en cases à cocher, liste « La suite » avec icônes et distances (les étapes passées sont regroupées). Options et boutons de la carte (Trophées de guerre, entraîneurs) aux mêmes couleurs.",
+      en = "New look: header with the zone and a progress bar, quest level badge, destination block (place, details, distance), objectives as checkboxes, \"Coming up\" list with icons and distances (passed steps are grouped). Options and map buttons (War Trophies, trainers) in the same colors." },
+    { v = "1.15", fr = "Fenêtre du guide plus lisible : les indications sont présentées en listes (Ensuite, Rends ici, Prends ici, En chemin, Plus tard…). Clic sur le titre de la quête : elle s'ouvre dans le journal des quêtes.",
+      en = "Easier-to-read guide window: hints are shown as lists (Next, Turn in here, Pick up here, On the way, Later...). Click the quest title to open it in the quest log." },
+    { v = "1.14", fr = "Étapes « Faire » : la fenêtre affiche les objectifs de la quête en direct, groupés par action (Tue, Ramasse, Utilise…), avec un crochet vert quand c'est fini. Le texte complet de l'étape est dans l'infobulle du titre.",
+      en = "\"Do\" steps: the window shows the quest objectives live, grouped by action (Kill, Collect, Use...), with a green check when done. The full step text is in the title tooltip." },
     { v = "1.13", fr = "Cibles de l'objectif : sur un jeu dans une autre langue que l'anglais, les noms des monstres sont appris en les voyant (clic pour cibler et grisé corrects). Flèche réaffichée au changement d'étape. Le rappel de sorts n'est plus effacé par un entraîneur de métier. Bouton d'objet de quête affiché même si le jeu ne donne pas le sort de l'objet. Deux nouvelles cases : « Aller au PNJ le plus proche » et « Flèche intelligente » (onglet Automatismes).",
       en = "Objective targets: on a non-English game, mob names are learned when you see them (target click and greying work). Arrow shown again when the step changes. The spell reminder is no longer cleared by a profession trainer. Quest item button shown even if the game doesn't give the item's spell. Two new options: \"Go to the closest NPC\" and \"Smart arrow\" (Automation tab)." },
     { v = "1.12", fr = "Flèche : cachée dès que tu es dans la zone de chasse (revient au-delà de 250 m), vers ton corps quand tu es mort, et l'entrée d'une grotte sert à toutes ses étapes. Cibles : chaque objectif a sa place (8 lignes) et les monstres pas en vue sont grisés. Une remise faisable à côté de toi passe en premier, même loin dans le guide. Bouton d'objet de quête jamais hors de l'écran. Onglet Donjons plus compact.",

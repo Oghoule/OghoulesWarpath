@@ -221,40 +221,27 @@ do
     local function setup()
         if not (WorldMapFrame and WorldMapFrame.ScrollContainer) or WorldMapFrame._warpathPvP then return end
         WorldMapFrame._warpathPvP = true
-        local cb = CreateFrame("Button", nil, WorldMapFrame.ScrollContainer)
-        cb:SetSize(170, 22); cb:SetPoint("BOTTOMLEFT", 8, 8); cb:SetFrameStrata("HIGH")
-        local bg = Tex(cb, COL.bg, 0.88, "BACKGROUND"); bg:SetAllPoints()
-        for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-            local t = Tex(cb, COL.line)
-            if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
-            else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
-        end
-        local hl = Tex(cb, COL.accent, 0.10, "HIGHLIGHT"); hl:SetAllPoints()
-        local gem = Diamond(cb, 8, COL.red); gem:SetPoint("LEFT", 6, 0)
-        local lbl = FS(cb, 9, COL.gold, FONT, "LEFT"); lbl:SetPoint("LEFT", gem, "RIGHT", 4, 0)
-        -- le libelle est remis a chaque affichage de la carte : il suit la langue choisie dans les options
-        local function label()
-            lbl:SetText(Caps(L("Trophées de guerre", "War Trophies")))
-            cb:SetWidth(math.max(120, (lbl:GetStringWidth() or 150) + 28))
-        end
-        label()
-        local function sync() label(); local on = shown(); gem:SetStyle(on and COL.red or COL.line, not on); lbl:SetTextColor((on and COL.gold or COL.faint)[1], (on and COL.gold or COL.faint)[2], (on and COL.gold or COL.faint)[3]) end
-        cb.SetChecked = function() sync() end
-        cb:SetScript("OnClick", function()
+        local cb_sync
+        local cb = Chip(WorldMapFrame.ScrollContainer, function()
             if WarpathDropDB then WarpathDropDB._pvpShow = not shown() end
-            sync(); WarpathPvPRefresh(true)
+            cb_sync(); WarpathPvPRefresh(true)
         end)
-        sync()
+        if MapBar() then MapBar():Add(cb, 1) else cb:SetPoint("BOTTOMLEFT", 8, 8); cb:SetFrameStrata("HIGH") end
+        -- le libelle est remis a chaque affichage de la carte : il suit la langue choisie dans les options
+        cb_sync = function() cb:SetState(Caps(L("Trophées de guerre", "War Trophies")), shown()) end
+        cb.SetChecked = function() cb_sync() end
+        cb_sync()
         cb:SetScript("OnEnter", function(self)
             Tip():SetOwner(self, "ANCHOR_RIGHT")
             Tip():AddLine(L("X rouges : tes victoires sur l'Alliance. Têtes grises : là où l'Alliance t'a tué.", "Red X: your victories over the Alliance. Grey skulls: where the Alliance killed you."), COL.white[1], COL.white[2], COL.white[3], true)
             Tip():Show()
         end)
         cb:SetScript("OnLeave", function() Tip():Hide() end)
-        WorldMapFrame:HookScript("OnShow", function() cb:SetChecked(shown()); WarpathPvPRefresh(true) end)
+        WorldMapFrame:HookScript("OnShow", function() ChipScale(cb); cb:SetChecked(shown()); WarpathPvPRefresh(true) end)
         local acc = 0
         WorldMapFrame:HookScript("OnUpdate", function(_, el)
             acc = acc + el; if acc < 0.2 then return end; acc = 0
+            ChipScale(cb)
             WarpathPvPRefresh()
         end)
     end

@@ -621,3 +621,17 @@ function BackToNow()
     if optCache then optCache.key = nil end
     Advance(); Refresh(true)
 end
+
+-- clic sur le titre de la quete : l'ouvre dans le journal des quetes du jeu
+function OpenStepQuest()
+    local s = steps and steps[peek or focus or current]
+    if not s then return end
+    for _, q in ipairs(Ids(s)) do
+        if logById[q] ~= nil then
+            if QuestMapFrame_OpenToQuestDetails then pcall(QuestMapFrame_OpenToQuestDetails, q); return end
+            if C_QuestLog and C_QuestLog.SetSelectedQuest then pcall(C_QuestLog.SetSelectedQuest, q) end
+            if ToggleQuestLog then pcall(ToggleQuestLog) elseif OpenQuestLog then pcall(OpenQuestLog) end
+            return
+        end
+    end
+end

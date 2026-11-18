@@ -10,6 +10,13 @@ do
     local TICK, GRACE = 2, 45
     local lastAct, lastXP, lastMax, lastLvl = 0, nil, nil, nil
     local sessA, sessXP = 0, 0
+    local sessT0
+    -- duree courte et lisible : 12 min, 1 h 05
+    function FmtDur(sec)
+        sec = math.max(0, math.floor(sec + 0.5))
+        if sec < 3600 then return math.max(1, math.floor(sec / 60 + 0.5)) .. " min" end
+        return string.format("%d h %02d", math.floor(sec / 3600), math.floor(sec % 3600 / 60))
+    end
 
     local function J()
         if not DB then return nil end
@@ -50,9 +57,24 @@ do
         nTick = nTick + 1
         if nTick % 5 ~= 0 then return end
         local fr = f and rawget(f, "xph"); if not fr then return end
-        local want = DB and DB.xphLine ~= false and sessA >= 120
-        if want then
-            fr:SetText(Caps(T("jrBar", FormatNum(math.floor(sessXP * 3600 / sessA)), string.format("%dh%02d", math.floor(sessA / 3600), math.floor(sessA % 3600 / 60)))))
+        local want = DB and DB.xphLine ~= false
+        local lv, ss = rawget(f, "footLvl"), rawget(f, "footSess")
+        sessT0 = sessT0 or now()
+        local cur, mx = UnitXP and UnitXP("player") or 0, UnitXPMax and UnitXPMax("player") or 1
+        local lvl = UnitLevel("player") or 1
+        local rate = sessA >= 120 and sessXP * 3600 / sessA or 0
+        local wall = now() - sessT0
+        local dur = function(sec) return string.format("%d h %02d", math.floor(sec / 3600), math.floor(sec % 3600 / 60)) end
+        if want and lv and ss then
+            -- pied : niveau | XP/h actif | temps avant le niveau suivant (au rythme actif)
+            lv:SetText(T("footLvl", lvl, math.floor((cur or 0) * 100 / math.max(1, mx or 1))))
+            fr:SetText(T("footXph", rate > 0 and FormatNum(math.floor(rate)) or "—"))
+            local left = (mx or 0) - (cur or 0)
+            ss:SetText(rate > 0 and T("footNext", lvl + 1, FmtDur and FmtDur(left / rate * 3600) or (math.floor(left / rate * 60 + 0.5) .. " min")) or T("footNext", lvl + 1, "—"))
+            -- detail au survol du pied
+            f.footInfo = { rate = rate, active = dur(sessA), wallRate = wall > 60 and sessXP * 3600 / wall or 0, wall = dur(wall), xp = sessXP }
+        elseif want then
+            fr:SetText(Caps(T("jrBar", FormatNum(math.floor(rate)), dur(sessA))))
         end
         if (fr:IsShown() and true or false) ~= (want and true or false) then
             fr:SetShown(want and true or false)

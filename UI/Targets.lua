@@ -11,20 +11,22 @@ do
     local MAX, W, RH = 8, 190, 18
     local ICON = {
         fly    = "Interface\\Minimap\\Tracking\\FlightMaster",
-        giver  = "Interface\\GossipFrame\\AvailableQuestIcon",
-        turnin = "Interface\\GossipFrame\\ActiveQuestIcon",
-        mob    = "Interface\\CURSOR\\Attack",
+        giver  = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoAccept",
+        turnin = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoTurnin",
+        mob    = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoDo",
         use    = "Interface\\CURSOR\\Interact",
         talk   = "Interface\\CURSOR\\Speak",
         inn    = "Interface\\Minimap\\Tracking\\Innkeeper",
         buy    = "Interface\\GossipFrame\\VendorGossipIcon",
     }
     local panel, title, rows = nil, nil, {}
+    local lastDock
     local wanted, shownKey, waiting
 
     local function Create()
         if panel then return end
         panel = CreateFrame("Frame", "WarpathTargets", UIParent)
+        W = math.max(140, math.min(420, tonumber(DB.tgtW) or W))
         panel:SetSize(W, 16 + RH)
         panel:SetFrameStrata("MEDIUM")
         panel:SetClampedToScreen(true)
@@ -43,10 +45,32 @@ do
             local point, _, _, x, y = self:GetPoint(1)
             DB.tgtPos = { point, math.floor(x + 0.5), math.floor(y + 0.5), self:GetScale() }
         end)
+        -- poignee en bas a droite : glisser pour changer la largeur (hors combat, fenetre non verrouillee)
+        if panel.SetResizable then panel:SetResizable(true) end
+        if panel.SetResizeBounds then panel:SetResizeBounds(140, 20, 420, 600)
+        elseif panel.SetMinResize then panel:SetMinResize(140, 20); panel:SetMaxResize(420, 600) end
+        local grip = CreateFrame("Button", nil, panel)
+        grip:SetSize(12, 12); grip:SetPoint("BOTTOMRIGHT", -1, 1); grip:SetFrameLevel((panel:GetFrameLevel() or 1) + 10)
+        local gt = grip:CreateTexture(nil, "OVERLAY"); gt:SetAllPoints()
+        gt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up"); gt:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3])
+        local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+        grip:SetScript("OnMouseDown", function()
+            if DB.locked or (InCombatLockdown and InCombatLockdown()) then return end
+            panel:StartSizing("RIGHT")
+        end)
+        grip:SetScript("OnMouseUp", function()
+            panel:StopMovingOrSizing()
+            DB.tgtW = math.floor((panel:GetWidth() or W) + 0.5); lastDock = nil
+            local point, _, _, x, y = panel:GetPoint(1)
+            if point and DB.tgtPos then DB.tgtPos = { point, math.floor(x + 0.5), math.floor(y + 0.5), panel:GetScale() } end
+        end)
+        grip:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("tgtResize"), 1, 1, 1, true); Tip():Show() end)
+        grip:SetScript("OnLeave", function() Tip():Hide() end)
         for i = 1, MAX do
             local b = CreateFrame("Button", "WarpathTarget" .. i, panel, "SecureActionButtonTemplate")
-            b:SetSize(W - 8, RH)
-            b:SetPoint("TOPLEFT", 4, -14 - (i - 1) * RH)
+            -- largeur liee a celle de la fenetre (ancres gauche et droite) : rien a recalculer quand on l'elargit
+            b:SetHeight(RH)
+            b:SetPoint("TOPLEFT", 4, -14 - (i - 1) * RH); b:SetPoint("TOPRIGHT", -4, -14 - (i - 1) * RH)
             b:RegisterForClicks("AnyUp", "AnyDown")
             b:SetAttribute("type", "macro")
             local hl = Tex(b, COL.accent, 0.12, "HIGHLIGHT"); hl:SetAllPoints()
@@ -61,7 +85,9 @@ do
                 b.edge[#b.edge + 1] = e
             end
             b.icon = b.box:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(12, 12); b.icon:SetPoint("CENTER")
-            b.fs = FS(b, 11, COL.white, FONT, "LEFT"); b.fs:SetPoint("LEFT", b.box, "RIGHT", 6, 0); b.fs:SetPoint("RIGHT", -2, 0)
+            -- taux de drop toujours colle au bord droit, le nom prend le reste
+            b.pct = FS(b, 11, { 1, 0.82, 0 }, FONT, "RIGHT"); b.pct:SetPoint("RIGHT", -2, 0)
+            b.fs = FS(b, 11, COL.white, FONT, "LEFT"); b.fs:SetPoint("LEFT", b.box, "RIGHT", 6, 0); b.fs:SetPoint("RIGHT", b.pct, "LEFT", -6, 0)
             if i > 1 then local sep = Tex(b, COL.faint, 0.8); sep:SetHeight(1); sep:SetPoint("TOPLEFT", 20, 0); sep:SetPoint("TOPRIGHT", 0, 0) end
             if b.fs.SetWordWrap then b.fs:SetWordWrap(false) end
             b:SetScript("OnEnter", function(self)
@@ -199,7 +225,11 @@ do
                 local KC = { giver = COL.accent, turnin = COL.green, mob = COL.red, use = COL.gold, talk = COL.accent, fly = COL.gold, inn = COL.soft, buy = COL.gold }
                 local c = KC[t.kind] or COL.line
                 for _, e in ipairs(b.edge) do e:SetColorTexture(c[1], c[2], c[3], 1) end
-                b.fs:SetText(t.pct and (t.name .. "  |cffffd100" .. t.pct .. " %|r") or t.name)
+                -- nos icones (blanches) prennent la couleur du cadre ; celles du jeu gardent leurs couleurs
+                local own = t.kind == "giver" or t.kind == "turnin" or t.kind == "mob"
+                local ic = own and (t.kind == "mob" and COL.accent or c) or { 1, 1, 1 }
+                if b.icon.SetVertexColor then b.icon:SetVertexColor(ic[1], ic[2], ic[3]) end
+                b.fs:SetText(t.name); b.pct:SetText(t.pct and (t.pct .. " %") or "")
                 b:Show()
             else
                 b:SetAttribute("macrotext", nil); b:Hide()
@@ -212,7 +242,6 @@ do
 
     -- Par defaut, collee sous la fenetre du guide. Pas d'ancrage direct (un bouton securise ancre a la
     -- fenetre bloquerait ses changements de taille en combat) : on recopie sa position hors combat.
-    local lastDock
     local function Dock()
         if not panel or DB.tgtPos or (InCombatLockdown and InCombatLockdown()) then return end
         local f = _G.WarpathFrame
@@ -224,8 +253,8 @@ do
         panel:SetScale(sc)
         panel:ClearAllPoints()
         panel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, b - 2)
-        panel:SetWidth(w)
-        for _, r in ipairs(rows) do r:SetWidth(w - 8) end
+        -- largeur choisie avec la poignee, sinon celle de la fenetre du guide
+        panel:SetWidth(tonumber(DB.tgtW) or w)
     end
     -- monstres pas en vue (sans plaque de nom a l'ecran) : ligne grisee, pour savoir tout de suite sur qui cliquer.
     -- Si aucune plaque n'est visible (plaques desactivees), on ne grise rien.

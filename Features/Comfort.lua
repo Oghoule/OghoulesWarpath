@@ -174,7 +174,7 @@ local function UpdateInfo()
     local parts = {}
     local fl = FlightInfo(); if fl then parts[#parts + 1] = fl end
     if DB.trainDue and DB.trainer ~= false then parts[#parts + 1] = T("infoTrain") end
-    if DB.lvlInfo ~= false then local li = LevelInfo(); if li then parts[#parts + 1] = li end end
+    -- (le rythme et le temps avant le niveau suivant sont maintenant dans le pied de la fenetre)
     local txt = table.concat(parts, "\n")
     local was = f.infoLine:IsShown()
     f.infoLine:SetText(txt); f.infoLine:SetShown(txt ~= "")
@@ -242,6 +242,22 @@ local function GuideData()
             for _, id in ipairs(ids) do byQ[id] = byQ[id] or {}; table.insert(byQ[id], pos[#pos]) end
         end
     end
+    -- une quete qui debloque une quete d'un AUTRE guide (ex. Barrens -> Stonetalon) est aussi protegee
+    if not ALL_NEEDED then
+        ALL_NEEDED = {}
+        for _, g in pairs(Guides or {}) do
+            for _, st in ipairs(g.steps or {}) do
+                for _, id in ipairs(Ids(st)) do
+                    local e = EST[id]
+                    if e then
+                        for _, p in ipairs(e.p or {}) do ALL_NEEDED[p] = true end
+                        for _, p in ipairs(e.p1 or {}) do ALL_NEEDED[p] = true end
+                    end
+                end
+            end
+        end
+    end
+    for p in pairs(ALL_NEEDED) do needed[p] = true end
     styleCache = { G = G, needed = needed, pos = pos, byQ = byQ, detour = {}, rate = {} }
     return styleCache
 end

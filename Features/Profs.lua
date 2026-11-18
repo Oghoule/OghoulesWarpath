@@ -313,26 +313,9 @@ do
         if not (WorldMapFrame and WorldMapFrame.ScrollContainer) or WorldMapFrame._warpathTrainers then return end
         WorldMapFrame._warpathTrainers = true
         local function toggle(lblKey, tipKey, get, set)
-            local cb = CreateFrame("Button", nil, WorldMapFrame.ScrollContainer)
-            cb:SetSize(150, 22); cb:SetFrameStrata("HIGH")
-            local bg = Tex(cb, COL.bg, 0.88, "BACKGROUND"); bg:SetAllPoints()
-            for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-                local t = Tex(cb, COL.line)
-                if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
-                else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
-            end
-            local hl = Tex(cb, COL.accent, 0.10, "HIGHLIGHT"); hl:SetAllPoints()
-            local gem = Diamond(cb, 8, COL.accent); gem:SetPoint("LEFT", 6, 0)
-            local lbl = FS(cb, 9, COL.gold, FONT, "LEFT"); lbl:SetPoint("LEFT", gem, "RIGHT", 4, 0)
-            function cb.sync()
-                lbl:SetText(Caps(T(lblKey)))
-                cb:SetWidth(math.max(120, (lbl:GetStringWidth() or 130) + 28))
-                local on = get()
-                gem:SetStyle(on and COL.accent or COL.line, not on)
-                local c = on and COL.gold or COL.faint
-                lbl:SetTextColor(c[1], c[2], c[3])
-            end
-            cb:SetScript("OnClick", function() set(not get()); cb.sync(); TrainerPinsRefresh(true) end)
+            local cb
+            cb = Chip(WorldMapFrame.ScrollContainer, function() set(not get()); cb.sync(); TrainerPinsRefresh(true) end)
+            function cb.sync() cb:SetState(Caps(T(lblKey)), get()) end
             cb:SetScript("OnEnter", function(self)
                 local t = Tip(); t:SetOwner(self, "ANCHOR_RIGHT"); t:AddLine(T(tipKey), COL.white[1], COL.white[2], COL.white[3], true); t:Show()
             end)
@@ -340,15 +323,18 @@ do
             return cb
         end
         local cb = toggle("trainerMapBtn", "trainerMapTip", trainersShown, function(v) DB.trainerPins = v end)
-        cb:SetPoint("BOTTOMLEFT", 8, 34)
-        local cb2 = toggle("trainerAllBtn", "trainerAllTip", function() return DB.trainerAll and true or false end, function(v) DB.trainerAll = v end)
-        cb2:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-        local function sync() cb.sync(); cb2.sync() end
+        local bar = MapBar()
+        if bar then bar:Add(cb, 2) else cb:SetPoint("BOTTOMLEFT", 8, 34); cb:SetFrameStrata("HIGH") end
+        local cb2 = toggle("trainerAllBtn", "trainerAllTip", function() return DB and DB.trainerAll and true or false end, function(v) if DB then DB.trainerAll = v end end)
+        if bar then bar:Add(cb2, 2) else cb2:SetPoint("LEFT", cb, "RIGHT", 6, 0); cb2:SetFrameStrata("HIGH") end
+        -- la carte peut etre prete avant tes reglages (DB) : on attend qu'ils soient charges
+        local function sync() if not DB then return end; cb.sync(); cb2.sync() end
         sync()
-        WorldMapFrame:HookScript("OnShow", function() sync(); TrainerPinsRefresh(true) end)
+        WorldMapFrame:HookScript("OnShow", function() ChipScale(cb, cb2); sync(); TrainerPinsRefresh(true) end)
         local acc = 0
         WorldMapFrame:HookScript("OnUpdate", function(_, el)
             acc = acc + el; if acc < 0.25 then return end; acc = 0
+            ChipScale(cb, cb2)
             TrainerPinsRefresh()
         end)
     end

@@ -6,6 +6,19 @@ local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 
+-- titre en couleur + une ligne par element, en retrait avec un losange
+-- icone de l'addon en ligne, teintee (r, g, b de 0 a 255)
+function InlineIcon(name, size, rgb)
+    rgb = rgb or { 205, 187, 142 }
+    return string.format("|TInterface\\AddOns\\%s\\Media\\%s:%d:%d:0:0:32:32:0:32:0:32:%d:%d:%d|t", ADDON, name, size, size, rgb[1], rgb[2], rgb[3])
+end
+function ListBlock(title, items, col, icon)
+    local out = { "|cff" .. (col or "cdbb8e") .. title .. "|r" }
+    for _, it in ipairs(items) do
+        out[#out + 1] = "   " .. (icon or ("|TInterface\\AddOns\\" .. ADDON .. "\\Media\\Gem:8|t")) .. " |cffe9dfc8" .. it .. "|r"
+    end
+    return table.concat(out, "\n")
+end
 baseCurrent = nil   -- etape courante dans l'ordre du guide (avant le choix par proximite)
 nearKind = nil      -- "near" (le plus proche du groupe) ou "pass" (en passant), pour l'affichage
 local PASS_R, LOOK, CLUSTER, HUB_R = 25, 15, 12, 80
@@ -130,7 +143,7 @@ function LevelWaitLines(s)
                 if a.t == "accept" and (a.req or 0) > lvl and Applies(a) then
                     local has = false
                     for _, id in ipairs(Ids(a)) do if id == q then has = true end end
-                    if has then out[#out + 1] = T("lvlWait", QuestTitle(q) or a.quest or ("#" .. q), a.req, a.req); break end
+                    if has then out[#out + 1] = T("lvlWaitItem", QuestTitle(q) or a.quest or ("#" .. q), a.req); break end
                 end
             end
         end
@@ -155,7 +168,7 @@ function HubNotes(i)
                 for _, q in ipairs(Ids(a)) do
                     if not seen[q] and logById[q] == nil and not Rendue(q) then
                         seen[q] = true
-                        if #later < 3 then later[#later + 1] = (QuestTitle(q) or a.quest or ("#" .. q)) .. " (" .. j .. ")" end
+                        if #later < 3 then later[#later + 1] = (QuestTitle(q) or a.quest or ("#" .. q)) .. " (" .. T("stepN", j) .. ")" end
                     end
                 end
             end
@@ -172,8 +185,8 @@ function HubNotes(i)
         end
     end
     local lines = {}
-    if #later > 0 then lines[#lines + 1] = T("hubLater", table.concat(later, ", ")) end
-    if #skip > 0 then lines[#lines + 1] = T("hubSkip", table.concat(skip, ", ")) end
+    if #later > 0 then lines[#lines + 1] = ListBlock(T("hubLater"), later, "8c7f62") end
+    if #skip > 0 then lines[#lines + 1] = ListBlock(T("hubSkip"), skip, "8c7f62") end
     return #lines > 0 and table.concat(lines, "\n") or nil
 end
 
@@ -188,7 +201,7 @@ function ThenLine(i)
     local a, b = WP(s.m, s.x, s.y), WP(nx.m, nx.x, nx.y)
     if not (a and b) or a[3] ~= b[3] or Dist(a[1], a[2], b[1], b[2]) < 100 then return nil end
     local what = (QName(nx) and QName(nx) ~= "") and QName(nx) or StepText(nx):sub(1, 50)
-    return T("thenGo", (PREFIX[nx.t] or "") .. " " .. what .. (nx.zone and (" · " .. nx.zone) or ""))
+    return ListBlock(T("thenHdr", (T(nx.t) or ""):lower()), { what .. (nx.zone and (" · " .. nx.zone) or "") })
 end
 
 -- plusieurs remises faisables au meme endroit : on les annonce ensemble
@@ -211,7 +224,7 @@ function TurninGroup(i)
         end
     end
     if #names < 2 then return nil end
-    return T("turninGroup", #names, table.concat(names, ", "))
+    return ListBlock(T("turninHere"), names, "9cc7a8", InlineIcon("IcoTurnin", 12, { 156, 199, 168 }))
 end
 
 ------------------------------------------------------------------
@@ -319,6 +332,148 @@ local function objPoint(s, me)
     end
     if best and bd < 400 then return best end
 end
+-- points de passage : les tiens (/warpath passage, gardes pour tous tes personnages), sinon ceux du guide
+-- cle : numero de quete pour une etape "faire", "rendre:quete" / "prendre:quete" sinon
+function PassageKey(s, q)
+    if s.t == "do" then return q end
+    return (s.t == "turnin" and "rendre:" or "prendre:") .. q
+end
+function PassageFor(s, q)
+    local k = PassageKey(s, q)
+    local own = WarpathDropDB and WarpathDropDB._pass and WarpathDropDB._pass[k]
+    if own == "x" then return nil end
+    if type(own) == "table" then return own end
+    return ns.Passages and ns.Passages[k]
+end
+-- /warpath passage : ta position devient le point de passage de l'etape affichee ; "efface" le retire
+function PassageCmd(arg)
+    local s = steps and steps[focus or current]
+    local q = s and Ids(s)[1]
+    if not (s and q and s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept")) then say(T("passNoStep")); return end
+    WarpathDropDB._pass = WarpathDropDB._pass or {}
+    local k = PassageKey(s, q)
+    local name = QName(s) or ("#" .. q)
+    arg = (arg or ""):lower()
+    if arg == "efface" or arg == "clear" or arg == "x" then
+        WarpathDropDB._pass[k] = "x"; say(T("passCleared", name))
+    elseif arg == "liste" or arg == "list" then
+        local n = 0
+        for key, v in pairs(WarpathDropDB._pass) do
+            if type(v) == "table" then n = n + 1; say(string.format("  %s : %s %.1f, %.1f", tostring(key), MAPNAME[v[1]] or tostring(v[1]), v[2], v[3])) end
+        end
+        if n == 0 then say(T("passNone")) end
+        return
+    else
+        local pm, px, py = PlayerPos()
+        if not (pm and px) then say(T("passNoPos")); return end
+        local x, y = math.floor(px * 10 + 0.5) / 10, math.floor(py * 10 + 0.5) / 10
+        WarpathDropDB._pass[k] = { pm, x, y }
+        say(T("passSaved", name, MAPNAME[pm] or tostring(pm), x, y))
+    end
+    lastWP = nil; Refresh(true)
+end
+
+-- Camps separes (Data/MobZones.lua) : la fleche va au camp dont les objectifs ne sont pas finis.
+-- On reste sur un camp jusqu'a ce que ses objectifs soient faits, et on ne change pas en combat.
+-- Si l'etat d'un objectif est inconnu, on ne fait rien (point habituel de l'etape).
+local zoneSticky, zoneLast = {}, {}
+local function zoneObjDone(q, ref, objs)
+    if ref[1] == "d" then return itemCount(ref[2]) >= (ref[3] or 1) end
+    local loc = WarpathDropDB and WarpathDropDB._npcLoc and WarpathDropDB._npcLoc[(GetLocale and GetLocale()) or "enUS"] or {}
+    local nm = loc[ref[2]] or (ns.NpcNames or {})[ref[2]]
+    if nm then
+        for _, o in ipairs(objs) do
+            if type(o.text) == "string" and o.text:find(nm, 1, true) then return o.finished and true or false end
+        end
+    end
+    -- repli : les objectifs du jeu suivent l'ordre des donnees (monstres a tuer d'abord)
+    local e = EST[q]
+    if e and e.k and #objs == #e.k + #(e.d or {}) then
+        for i, k in ipairs(e.k) do if k[1] == ref[2] and objs[i] then return objs[i].finished and true or false end end
+    end
+    return nil
+end
+local function zoneLabel(q, z)
+    local loc = WarpathDropDB and WarpathDropDB._npcLoc and WarpathDropDB._npcLoc[(GetLocale and GetLocale()) or "enUS"] or {}
+    local names = {}
+    for r = 4, #z do
+        local ref = z[r]
+        local nm
+        if ref[1] == "k" then nm = loc[ref[2]] or (ns.NpcNames or {})[ref[2]]
+        else for _, d in ipairs((EST[q] or {}).d or {}) do if d[1] == ref[2] then nm = d[6] end end end
+        if nm and #names < 2 then names[#names + 1] = nm end
+    end
+    return table.concat(names, " · ")
+end
+function MobZonePoint(s, me)
+    if not (s and s.t == "do" and ns.MobZones and C_QuestLog and C_QuestLog.GetQuestObjectives) or IS_DUNGEON[DB.guide] then return nil end
+    local list, total = {}, 0
+    for _, q in ipairs(Ids(s)) do
+        local zs = ns.MobZones[q]
+        if zs and logById[q] == false then
+            local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
+            if not ok or type(objs) ~= "table" or #objs == 0 then return nil end
+            for zi, z in ipairs(zs) do
+                total = total + 1
+                local todo = false
+                for r = 4, #z do
+                    local f = zoneObjDone(q, z[r], objs)
+                    if f == nil then return nil end
+                    if not f then todo = true end
+                end
+                if todo then list[#list + 1] = { key = q .. ":" .. zi, q = q, z = z, idx = zi, n = #zs } end
+            end
+        end
+    end
+    if #list == 0 or total < 2 then return nil end
+    local sk = (SeenKey and SeenKey(current)) or tostring(current)
+    local function point(c)
+        zoneSticky[sk] = c.key
+        local p = { m = c.z[1], x = c.z[2], y = c.z[3], name = zoneLabel(c.q, c.z), kind = "zone", idx = c.idx, n = c.n }
+        zoneLast[sk] = p
+        return p
+    end
+    for _, c in ipairs(list) do if c.key == zoneSticky[sk] then return point(c) end end
+    -- le camp en cours vient d'etre fini : pas de changement pendant le combat
+    if zoneSticky[sk] and UnitAffectingCombat and UnitAffectingCombat("player") and zoneLast[sk] then return zoneLast[sk] end
+    -- deja dans un camp : celui-la ; sinon d'abord le camp le plus loin de l'etape suivante (on finit pres d'elle)
+    local nx = steps[NextApplicable(current)]
+    local nw = nx and nx.m and nx.x and WP(nx.m, nx.x, nx.y)
+    local best, bscore
+    for _, c in ipairs(list) do
+        local w = WP(c.z[1], c.z[2], c.z[3])
+        if w and me and w[3] == me[3] and Dist(me[1], me[2], w[1], w[2]) < 120 then return point(c) end
+        local score = (w and nw and w[3] == nw[3]) and Dist(w[1], w[2], nw[1], nw[2]) or 0
+        if not bscore or score > bscore then best, bscore = c, score end
+    end
+    return best and point(best) or nil
+end
+-- Etape "Monte au niveau X" : coin de farm (Data/FarmSpots.lua) sur ta carte, monstres de ton niveau a +2,
+-- le meilleur compromis entre densite, niveau (ideal : le tien +1) et distance. Pas avec "Manque d'XP : Donjon".
+function FarmSpot(s, me)
+    if not (s and s.t == "level" and ns.FarmSpots) then return nil end
+    local st = StyleGet and StyleGet()
+    if st and st.xpMode == "dungeon" then return nil end
+    local pm = PlayerPos(); local list = pm and ns.FarmSpots[pm]
+    if not list then return nil end
+    local L = UnitLevel and UnitLevel("player") or 1
+    local best, bs
+    for _, sp in ipairs(list) do
+        if sp[4] >= L and sp[3] <= L + 2 then
+            local w = WP(pm, sp[1], sp[2])
+            if w and me and w[3] == me[3] then
+                local d = Dist(me[1], me[2], w[1], w[2])
+                local fit = 1 - 0.25 * math.abs((sp[3] + sp[4]) / 2 - (L + 1))
+                local score = sp[5] * math.max(0.1, fit) / (1 + d / 600)
+                if not bs or score > bs then
+                    local loc = WarpathDropDB and WarpathDropDB._npcLoc and WarpathDropDB._npcLoc[(GetLocale and GetLocale()) or "enUS"] or {}
+                    best, bs = { m = pm, x = sp[1], y = sp[2], name = loc[sp[6]] or sp[7], lmin = sp[3], lmax = sp[4], n = sp[5], kind = "farm" }, score
+                end
+            end
+        end
+    end
+    return best
+end
 function StepPoint(s)
     if not (s and DB and DB.smartArrow ~= false) then return nil end
     local me = PlayerWP(); if not me then return nil end
@@ -330,6 +485,22 @@ function StepPoint(s)
             local x, y = p.x, p.y
             if (not x) and p.GetXY then x, y = p:GetXY() end
             if x and y then return { m = pm, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10, name = T("corpse"), kind = "corpse" } end
+        end
+    end
+    if s.t == "level" then return FarmSpot(s, me) end
+    -- point de passage (tunnel, rampe, pont...) : l'entree tant que tu es du mauvais cote, puis l'objectif
+    if s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept") then
+        for _, q in ipairs(Ids(s)) do
+            local v = PassageFor(s, q)
+            if v and (s.t ~= "do" or logById[q] == false) then
+                local g, w = WP(s.m, s.x, s.y), WP(v[1], v[2], v[3])
+                if g and w and g[3] == me[3] and w[3] == me[3] then
+                    local dMe, dV = Dist(me[1], me[2], g[1], g[2]), Dist(w[1], w[2], g[1], g[2])
+                    if dMe > dV + 15 and Dist(me[1], me[2], w[1], w[2]) > 10 then
+                        return { m = v[1], x = v[2], y = v[3], name = T("tunnelIn"), kind = "pass" }
+                    end
+                end
+            end
         end
     end
     local indoors = IsIndoors and IsIndoors() or false
@@ -345,7 +516,7 @@ function StepPoint(s)
             return { m = here.m, x = here.x, y = here.y, name = T("caveIn"), kind = "enter" }
         end
     end
-    return objPoint(s, me)
+    return objPoint(s, me) or MobZonePoint(s, me)
 end
 function StepPointKey(s)
     local p = StepPoint(s)
@@ -361,6 +532,24 @@ function DeathTip(i)
     local g = WP(s.m, s.x, s.y)
     if not g or g[3] ~= me[3] or Dist(me[1], me[2], g[1], g[2]) < 450 then return nil end
     return T("deathTip")
+end
+
+-- etat des grottes pour /warpath diag : dedans ou dehors, etape de grotte, entree connue, cible de la fleche
+function CaveDiag()
+    local s = steps and steps[current]
+    local out = { indoors = IsIndoors and IsIndoors() or false, cave = IsCaveStep(s), exitKnown = caveOut ~= nil }
+    if out.cave then
+        local e = nearestEntrance(s.m, s.x, s.y, 200)
+        if e then
+            out.entry = e
+            out.own = WarpathDropDB and WarpathDropDB._caves and type(WarpathDropDB._caves[e.k]) == "table" or false
+            local me, w = PlayerWP(), WP(e.m, e.x, e.y)
+            if me and w and me[3] == w[3] then out.dist = math.floor(Dist(me[1], me[2], w[1], w[2]) + 0.5) end
+        end
+    end
+    local p = s and StepPoint(s)
+    out.aim = p and p.kind or "step"
+    return out
 end
 
 -- entree de grotte mal apprise : on l'oublie, elle sera reapprise a la prochaine entree
@@ -430,5 +619,118 @@ function OnTheWay(i)
         end
     end
     if #names == 0 then return nil end
-    return T("onTheWay", table.concat(names, ", "))
+    return ListBlock(T("onTheWayHdr"), names, "9cc7a8")
+end
+
+-- Etape "faire" : intro de l'etape (avant les « : ») + objectifs du jeu en direct, groupes par action.
+-- Renvoie nil si le jeu ne donne pas les objectifs (on garde alors le texte habituel).
+local VERB = { monster = "objKill", item = "objLoot", object = "objUse", event = "objDo" }
+local function cleanObj(t)
+    if type(t) ~= "string" then return "?" end
+    t = t:gsub("^%s*%d+%s*/%s*%d+%s*", ""):gsub("%s*:?%s*%d+%s*/%s*%d+%s*$", "")
+    t = t:gsub("%s+slain$", ""):gsub("%s+tu[ée]+s?$", "")
+    return t
+end
+function LiveObjectives(s)
+    if not (s and s.t == "do" and C_QuestLog and C_QuestLog.GetQuestObjectives) or DB.liveObj == false then return nil end
+    local txt = StepText(s) or ""
+    local lead = txt:match("^(.-)%s*:%s") or txt:match("^(.-)%s*:$")
+    local blocks, n = {}, 0
+    local rows = {} -- meme contenu, ligne par ligne, pour la fenetre (compteur aligne a droite)
+    local ids = {}
+    for _, q in ipairs(Ids(s)) do if logById[q] ~= nil then ids[#ids + 1] = q end end
+    if #ids == 0 then return nil end
+    for _, q in ipairs(ids) do
+        local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
+        if ok and type(objs) == "table" and #objs > 0 then
+            local e = EST[q] or {}
+            local lines = {}
+            if #ids > 1 then
+                lines[#lines + 1] = "|cff8c7f62" .. (QuestTitle(q) or e.n or ("#" .. q)) .. "|r"
+                rows[#rows + 1] = { k = "quest", text = QuestTitle(q) or e.n or ("#" .. q) }
+            end
+            local lastVerb
+            for _, o in ipairs(objs) do
+                local key = VERB[o.type or ""] or "objOther"
+                if key == "objKill" and e.u then key = "objUseOn" end
+                local verb
+                if key == "objUseOn" then
+                    local it = e.u[1]
+                    local nm = it and ((C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(it)) or "")
+                    verb = T(key, nm ~= "" and nm or "?")
+                elseif key == "objLoot" then
+                    local src = ""
+                    for _, d in ipairs(e.d or {}) do
+                        if #d >= 7 and type(o.text) == "string" and d[6] and o.text:find(d[6], 1, true) then src = T("objFromMobs") end
+                        if #d < 7 and type(o.text) == "string" and d[6] and o.text:find(d[6], 1, true) then src = T("objFromGround") end
+                    end
+                    verb = T(key) .. src
+                else verb = T(key) end
+                if verb ~= lastVerb then lines[#lines + 1] = "|cffcdbb8e" .. verb .. "|r"; rows[#rows + 1] = { k = "verb", text = verb }; lastVerb = verb end
+                local have, need = o.numFulfilled or 0, o.numRequired or 1
+                local name = cleanObj(o.text)
+                if o.finished then
+                    lines[#lines + 1] = "|TInterface\\AddOns\\" .. ADDON .. "\\Media\\BoxDone:16|t |cff6f6450" .. name .. "  " .. have .. "/" .. need .. "|r"
+                else
+                    lines[#lines + 1] = "|TInterface\\AddOns\\" .. ADDON .. "\\Media\\Box:16|t |cffe9dfc8" .. name .. "|r  |cffa89a7c" .. have .. "/" .. need .. "|r"
+                end
+                rows[#rows + 1] = { k = "obj", text = name, count = have .. "/" .. need, done = o.finished and true or false }
+                n = n + 1
+            end
+            blocks[#blocks + 1] = table.concat(lines, "\n")
+        end
+    end
+    if n == 0 then return nil end
+    -- le lieu (texte avant « : ») va dans le bloc destination de la fenetre
+    return table.concat(blocks, "\n"), lead, rows
+end
+
+-- etape "rendre" suivie de quetes a prendre chez le meme PNJ : on le dit tout de suite,
+-- pour ne pas fermer la fenetre et repartir (le jeu n'enchaine pas toujours la quete suivante)
+function FollowUpAccepts(i)
+    local s = steps and steps[i]
+    if not s or s.t ~= "turnin" then return nil end
+    local npcs = {}
+    for _, q in ipairs(Ids(s)) do for _, n in ipairs((EST[q] or {}).en or {}) do npcs[n] = true end end
+    local a = s.m and s.x and WP(s.m, s.x, s.y)
+    local names, seen = {}, {}
+    local j = NextApplicable(i)
+    while j <= #steps and #names < 4 do
+        local t = steps[j]
+        if t.t ~= "accept" then break end
+        local same = false
+        for _, q in ipairs(Ids(t)) do for _, n in ipairs((EST[q] or {}).g or {}) do if npcs[n] then same = true end end end
+        if not same and a and t.m and t.x then
+            local b = WP(t.m, t.x, t.y)
+            same = b and b[3] == a[3] and Dist(a[1], a[2], b[1], b[2]) < 8 or false
+        end
+        if not same then break end
+        for _, q in ipairs(Ids(t)) do
+            if not seen[q] and logById[q] == nil and not Rendue(q) then seen[q] = true; names[#names + 1] = QuestTitle(q) or t.quest or ("#" .. q) end
+        end
+        j = NextApplicable(j)
+    end
+    if #names == 0 then return nil end
+    return ListBlock(T("thenTalk"), names, "d6b866", InlineIcon("IcoAccept", 12, { 214, 184, 102 }))
+end
+
+-- plusieurs quetes a prendre au meme endroit : on les annonce ensemble
+function AcceptGroup(i)
+    local s = steps and steps[i]
+    if not s or s.t ~= "accept" or not (s.m and s.x) then return nil end
+    local a = WP(s.m, s.x, s.y); if not a then return nil end
+    local names, seen = {}, {}
+    for j = i, math.min(#steps, i + LOOK) do
+        local t = steps[j]
+        if t.t == "accept" and (j == i or Actionable(j)) and t.m and t.x and Applies(t) and not doneCache[j] then
+            local b = WP(t.m, t.x, t.y)
+            if b and b[3] == a[3] and Dist(a[1], a[2], b[1], b[2]) < 30 then
+                for _, q in ipairs(Ids(t)) do
+                    if not seen[q] and logById[q] == nil then seen[q] = true; names[#names + 1] = QuestTitle(q) or t.quest or ("#" .. q) end
+                end
+            end
+        end
+    end
+    if #names < 2 then return nil end
+    return ListBlock(T("acceptHere"), names, "d69a66", InlineIcon("IcoAccept", 12, { 214, 184, 102 }))
 end

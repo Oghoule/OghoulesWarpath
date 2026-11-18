@@ -395,7 +395,6 @@ N[2414]="Kegan Darkmar"
 N[2418]="Deathguard Samsa"
 N[2419]="Deathguard Humbert"
 N[2425]="Varimathras"
-N[2437]="Keeper Bel'varil"
 N[2448]="Clerk Horrace Whitesteed"
 N[2449]="Citizen Wilkes"
 N[2450]="Miner Hackett"
@@ -1930,7 +1929,6 @@ N[223587]="Mijan"
 N[223588]="Gasher"
 N[228973]="[DNT]"
 N[229549]="[DNT]"
-N[230319]="Deliana"
 N[232921]="Spawn of Shadra"
 N[232959]="Servant of Caius"
 N[236028]="Honey Wasp"
@@ -2057,7 +2055,7 @@ N[252382]="Sessaria Skystride"
 N[252383]="Valennia Stormfist"
 N[252389]="Quel'ana Quickgale"
 N[252448]="Alvarion Windfield"
-N[252457]="Mazzogore the Weak"
+N[252457]="Mazzogore"
 N[252475]="Elaadrin Evengale"
 N[252476]="Talaanis Shadowsong"
 N[252664]="Al'Aketh Stormchaser"
@@ -2221,6 +2219,7 @@ N[260993]="Crag'rog"
 N[261208]="Twilight Brute"
 N[261497]="Twilight Firecaller"
 N[261711]="Empowered Brute"
+N[261914]="Tainted Hyjal Owl"
 N[262169]="Twilight Ritualist"
 N[262397]="Brinescale Skirmisher"
 N[262539]="Forlorn Ghost"
@@ -2230,7 +2229,7 @@ N[263307]="Glade Viper"
 N[263316]="Picked Carcass"
 N[263343]="Low Plains Buzzard"
 N[263348]="Roving Tallstrider"
-N[263394]="Bethra'zel"
+N[263394]="Bethra'zel the Feeble"
 N[263399]="Sam Sarsaparilla"
 N[263406]="Elaena Moonwhisper"
 N[263440]="Hamur"
@@ -2274,7 +2273,6 @@ N[268602]="Skypriest Faladiel"
 N[268605]="Kuramaa"
 N[268622]="Encroaching Soldier"
 N[268623]="Outraged Pillager"
-N[268624]="Razormane Raider"
 N[268679]="Brazier of Eternal Flame"
 N[268762]="Brazier of Offering"
 N[268763]="Manifestation of Flames"
@@ -2282,7 +2280,6 @@ N[269004]="Icemaw"
 N[269127]="Image of Archmage Modera"
 N[269166]="Gemmil"
 N[269175]="Carnivorous Weed"
-N[270038]="Calder Gray"
 N[270201]="Al'Aketh Brawler"
 N[270438]="Deathstalker Masoj"
 N[270667]="Farholde Priest"
@@ -2344,7 +2341,7 @@ ns.Inns = {
     { id = 254089, m = -16593, x = 43.0, y = 43.2 },
     { id = 255894, m = -16591, x = 78.8, y = 54.0 },
     { id = 255940, m = -16593, x = 62.2, y = 72.6 },
-    { id = 256675, m = -16591, x = 57.3, y = 44.2 },
+    { id = 256675, m = -16591, x = 58.0, y = 45.1 },
 }
 ns.Vendors = {
     [989] = { 1435, 44.8, 56.6 },
@@ -2418,9 +2415,9 @@ ns.Vendors = {
     [15175] = { 1451, 48.7, 37.0 },
     [15179] = { 1451, 49.9, 36.3 },
     [16015] = { 1452, 58.9, 78.4 },
-    [32631] = { 1416, 15.3, 55.0 },
+    [32631] = { 1416, 15.3, 56.5 },
     [255897] = { -16591, 77.1, 52.9 },
-    [260560] = { -16591, 76.4, 54.0 },
+    [260560] = { -16591, 76.8, 51.1 },
 }
 ns.FlightNodeNpc = {
     ["Sepulcher"] = 2226,
@@ -2454,5 +2451,4 @@ ns.FlightNodeNpc = {
     ["Splintertree"] = 12616,
     ["Moonglade"] = 12740,
     ["Cenarion Hold"] = 15178,
-    ["Rog'mar"] = 255993,
 }

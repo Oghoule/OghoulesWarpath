@@ -17,6 +17,26 @@ function CreateUI()
         f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -240)
     end
     local bg = Tex(f, COL.bg, 0.90, "BACKGROUND"); bg:SetAllPoints()
+    Border(f, COL.line, 0.8, "BORDER")
+    -- en-tete : bande un peu plus claire, losange rouge, zone a gauche, etape a droite
+    HEAD_H = 34
+    local hbg = Tex(f, COL.panel, 1, "BORDER"); hbg:SetHeight(HEAD_H); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
+    local hln = Tex(f, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -HEAD_H); hln:SetPoint("TOPRIGHT", 0, -HEAD_H)
+    f.gem = Diamond(f, 8, COL.red); f.gem:SetPoint("LEFT", f, "TOPLEFT", PAD - 4, -HEAD_H / 2)
+    -- barre de progression de la zone
+    f.progBg = Tex(f, COL.faint, 1, "ARTWORK"); f.progBg:SetSize(INNER, 3)
+    f.progFill = Tex(f, COL.red, 1, "OVERLAY"); f.progFill:SetHeight(3); f.progFill:SetWidth(1); f.progFill:SetPoint("TOPLEFT", f.progBg, "TOPLEFT")
+    -- bloc destination : fond un peu plus clair, liseré rouge, fleche, lieu, precision, distance
+    f.dest = CreateFrame("Frame", nil, f); f.dest:SetSize(INNER, 38)
+    local dbg = Tex(f.dest, COL.panel, 1, "BACKGROUND"); dbg:SetAllPoints()
+    local dbar = Tex(f.dest, COL.red, 1, "ARTWORK"); dbar:SetWidth(2); dbar:SetPoint("TOPLEFT"); dbar:SetPoint("BOTTOMLEFT")
+    f.dest.arrow = f.dest:CreateTexture(nil, "ARTWORK"); f.dest.arrow:SetSize(16, 16); f.dest.arrow:SetPoint("LEFT", 13, 0)
+    f.dest.arrow:SetTexture("Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\IcoNav")
+    if f.dest.arrow.SetVertexColor then f.dest.arrow:SetVertexColor(COL.cream[1], COL.cream[2], COL.cream[3]) end
+    f.dist = FS(f.dest, 16, COL.white, DISPLAY, "RIGHT"); f.dist:SetPoint("RIGHT", -12, 0)
+    f.destName = FS(f.dest, 12, COL.white, FONT, "LEFT"); f.destName:SetPoint("TOPLEFT", 42, -9); f.destName:SetPoint("RIGHT", f.dist, "LEFT", -8, 0)
+    if f.destName.SetWordWrap then f.destName:SetWordWrap(false) end
+    f.dest:Hide()
     f:SetClampedToScreen(true)
     f:SetMovable(true)
     f:EnableMouse(true)
@@ -29,22 +49,54 @@ function CreateUI()
     end)
 
     -- (ordre de creation garde : title, text, list, coord)
-    f.title = FS(f, 9, COL.gold, FONT, "CENTER"); f.title:SetWidth(INNER)
+    f.title = FS(f, 12, COL.white, FONT, "LEFT"); f.title:SetPoint("LEFT", f, "TOPLEFT", PAD + 12, -HEAD_H / 2)
+    f.stepNo = FS(f, 10, COL.soft, FONT, "RIGHT"); f.stepNo:SetPoint("RIGHT", f, "TOPRIGHT", -PAD, -HEAD_H / 2)
     f.text = FS(f, 12, COL.soft, FONT, "LEFT"); f.text:SetWidth(INNER)
     if f.text.SetJustifyV then f.text:SetJustifyV("TOP") end
     if f.text.SetWordWrap then f.text:SetWordWrap(true) end
-    if f.text.SetSpacing then f.text:SetSpacing(2) end
-    f.nextRule = TitledRule(f, INNER)
+    if f.text.SetSpacing then f.text:SetSpacing(4) end
+    f.nextRule = SectionHead(f, INNER)
     f.list = f.nextRule.label
-    f.coord = FS(f, 9, COL.gold, FONT, "CENTER"); f.coord:SetWidth(INNER)
-    f.xph = FS(f, 9, COL.faint, FONT, "CENTER"); f.xph:SetWidth(INNER); f.xph:Hide() -- XP/h actif (Journal.lua)
+    f.coord = FS(f.dest, 10, COL.soft, FONT, "LEFT"); f.coord:SetPoint("TOPLEFT", f.destName, "BOTTOMLEFT", 0, -5); f.coord:SetPoint("RIGHT", f.dist, "LEFT", -8, 0)
+    if f.coord.SetWordWrap then f.coord:SetWordWrap(false) end
+    -- pied : niveau, XP/h actif (Journal.lua), duree de la session
+    f.foot = CreateFrame("Frame", nil, f); f.foot:SetSize(INNER, 12); f.foot:Hide()
+    f.footLvl = FS(f.foot, 10, COL.gold, FONT, "LEFT"); f.footLvl:SetPoint("LEFT")
+    f.xph = FS(f.foot, 10, COL.gold, FONT, "CENTER"); f.xph:SetPoint("CENTER"); f.xph:Hide()
+    f.footSess = FS(f.foot, 10, COL.gold, FONT, "RIGHT"); f.footSess:SetPoint("RIGHT")
+    if f.foot.EnableMouse then f.foot:EnableMouse(true) end
+    f.foot:SetScript("OnEnter", function(self)
+        local i = rawget(f, "footInfo"); if type(i) ~= "table" then return end
+        local t = Tip(); t:SetOwner(self, "ANCHOR_TOP")
+        t:AddLine(T("footTipHead"))
+        t:AddLine(T("footTipActive", i.rate > 0 and FormatNum(math.floor(i.rate)) or "—", i.active), 1, 1, 1, true)
+        t:AddLine(T("footTipWall", i.wallRate > 0 and FormatNum(math.floor(i.wallRate)) or "—", i.wall), 1, 1, 1, true)
+        t:AddLine(T("footTipNote"), 0.66, 0.60, 0.48, true)
+        t:Show()
+    end)
+    f.foot:SetScript("OnLeave", function() Tip():Hide() end)
 
-    f.name = FS(f, 13, COL.white, FONT, "CENTER"); f.name:SetWidth(INNER)
-    f.div = Divider(f, INNER)
+    f.name = FS(f, 13, COL.white, FONT, "CENTER"); f.name:SetWidth(INNER); f.name:Hide() -- (garde pour les tests)
+    f.div = Divider(f, INNER); f.div:Hide()
+    -- badge du niveau de la quete
+    f.badge = CreateFrame("Frame", nil, f); f.badge:SetSize(32, 46)
+    local bb = CreateFrame("Frame", nil, f.badge); bb:SetSize(32, 32); bb:SetPoint("TOP")
+    Border(bb, COL.accent)
+    f.badge.num = FS(bb, 13, COL.cream, FONT, "CENTER"); f.badge.num:SetPoint("CENTER", 0, 0)
+    f.badge.lbl = FS(f.badge, 9, COL.gold, FONT, "CENTER"); f.badge.lbl:SetPoint("TOP", bb, "BOTTOM", 0, -4)
+    if f.badge.EnableMouse then f.badge:EnableMouse(true) end
+    f.badge:SetScript("OnEnter", function(self)
+        Tip():SetOwner(self, "ANCHOR_LEFT")
+        Tip():AddLine(T("badgeTip", tonumber(f.badge.num:GetText()) or 0, UnitLevel("player") or 1))
+        if type(f.rateTip) == "string" then Tip():AddLine(f.rateTip, 0.84, 0.72, 0.40) end
+        Tip():Show()
+    end)
+    f.badge:SetScript("OnLeave", function() Tip():Hide() end)
+    f.badge:Hide()
 
     f.kindRow = CreateFrame("Frame", nil, f); f.kindRow:SetSize(INNER, 12)
-    f.kind = FS(f.kindRow, 9, COL.green, FONT, "LEFT"); f.kind:SetPoint("LEFT")
-    f.dist = FS(f.kindRow, 9, COL.gold, FONT, "RIGHT"); f.dist:SetPoint("RIGHT")
+    f.kind = FS(f.kindRow, 9, COL.accent, FONT, "LEFT"); f.kind:SetPoint("LEFT")
+    if f.kind.SetWordWrap then f.kind:SetWordWrap(false) end
     -- clic sur l'en-tete (le crochet) d'une etape passee ou validee a la main : on l'annule
     if f.kindRow.EnableMouse then f.kindRow:EnableMouse(true) end
     f.kindRow:SetScript("OnMouseUp", function()
@@ -53,6 +105,30 @@ function CreateUI()
     end)
 
     f.qtitle = FS(f, 20, COL.white, DISPLAY, "LEFT"); f.qtitle:SetWidth(INNER)
+    if f.qtitle.SetTextColor then f.qtitle:SetTextColor(0.95, 0.89, 0.72) end
+    f.qsub = FS(f, 11, COL.soft, FONT, "LEFT"); f.qsub:SetWidth(INNER); f.qsub:Hide()
+    -- survol du titre : texte complet de l'etape (quand la fenetre montre les objectifs en direct)
+    f.qhit = CreateFrame("Frame", nil, f); f.qhit:SetAllPoints(f.qtitle); f.qhit:EnableMouse(true)
+    f.qhit:SetScript("OnEnter", function(self)
+        if type(f.qtitleTip) ~= "string" and type(f.rateTip) ~= "string" and type(f.tipText) ~= "string" then return end
+        Tip():SetOwner(self, "ANCHOR_LEFT")
+        if type(f.qtitleTip) == "string" then Tip():AddLine(f.qtitleTip, 1, 1, 1, true) end
+        if type(f.tipText) == "string" then Tip():AddLine(" "); Tip():AddLine(T("tipLbl"), 0.84, 0.72, 0.40); Tip():AddLine(f.tipText, 1, 1, 1, true) end
+        if type(f.rateTip) == "string" then Tip():AddLine(f.rateTip, 0.84, 0.72, 0.40) end
+        Tip():AddLine(T("qtitleClick"), 0.66, 0.60, 0.48, true); Tip():Show()
+    end)
+    f.qhit:SetScript("OnLeave", function() Tip():Hide() end)
+    f.qhit:SetScript("OnMouseDown", function(_, btn)
+        f.qdown = { GetCursorPosition() }
+        if btn == "LeftButton" and not DB.locked and f.StartMoving then f:StartMoving() end
+    end)
+    f.qhit:SetScript("OnMouseUp", function(_, btn)
+        if f.StopMovingOrSizing then f:StopMovingOrSizing() end
+        local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
+        local cx, cy = GetCursorPosition()
+        local d = f.qdown and math.abs(cx - (f.qdown[1] or cx)) + math.abs(cy - (f.qdown[2] or cy)) or 0
+        if btn == "LeftButton" and d < 4 and OpenStepQuest then OpenStepQuest() end
+    end)
     if f.qtitle.SetWordWrap then f.qtitle:SetWordWrap(true) end
 
     f.route = {}
@@ -93,13 +169,36 @@ function CreateUI()
     f.advice.label = FS(f.advice, 11, COL.gold, FONT, "LEFT"); f.advice.label:SetPoint("TOPLEFT", 20, -2)
     f.advice.label:SetWidth(INNER - 20); if f.advice.label.SetWordWrap then f.advice.label:SetWordWrap(true) end
     f.advice:Hide()
+    -- pierre de foyer : l'icone du conseil devient un bouton qui l'utilise (bouton securise, change hors combat seulement)
+    function HearthButton(on)
+        if InCombatLockdown and InCombatLockdown() then return end
+        if not f.hsBtn and on then
+            local ok, b = pcall(CreateFrame, "Button", "WarpathHearthButton", f.advice, "SecureActionButtonTemplate")
+            if not ok or not b then return end
+            b:SetAllPoints(f.advice.icon)
+            if b.RegisterForClicks then b:RegisterForClicks("AnyUp", "AnyDown") end
+            b:SetAttribute("type", "item"); b:SetAttribute("item", "item:6948")
+            local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.25)
+            Border(b, COL.accent)
+            b:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("hsClick")); Tip():Show() end)
+            b:SetScript("OnLeave", function() Tip():Hide() end)
+            f.hsBtn = b
+        end
+        if f.hsBtn then
+            f.hsBtn:SetShown(on and true or false)
+            f.advice.icon:SetSize(on and 18 or 14, on and 18 or 14)
+            f.advice.label:ClearAllPoints(); f.advice.label:SetPoint("TOPLEFT", on and 26 or 20, on and -4 or -2)
+        end
+    end
 
     f.lockBtn = CreateFrame("Button", nil, f); f.lockBtn:SetSize(INNER, 16)
     if f.lockBtn.RegisterForClicks then f.lockBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
-    f.lockBtn.gem = Diamond(f.lockBtn, 6, COL.red); f.lockBtn.gem:SetPoint("LEFT", -1, 0)
-    f.lockBtn.label = FS(f.lockBtn, 11, COL.accent, FONT, "LEFT"); f.lockBtn.label:SetPoint("TOPLEFT", 14, -2)
-    f.lockBtn.label:SetWidth(INNER - 14); if f.lockBtn.label.SetWordWrap then f.lockBtn.label:SetWordWrap(true) end
-    f.lockBtn.label:SetPoint("RIGHT")
+    local lbg = Tex(f.lockBtn, COL.warn, 0.08, "BACKGROUND"); lbg:SetAllPoints()
+    Border(f.lockBtn, COL.warn, 0.35)
+    f.lockBtn.gem = Diamond(f.lockBtn, 7, COL.warn); f.lockBtn.gem:SetPoint("LEFT", 7, 0)
+    f.lockBtn.label = FS(f.lockBtn, 11, COL.accent, FONT, "LEFT"); f.lockBtn.label:SetPoint("LEFT", 22, 0)
+    f.lockBtn.label:SetWidth(INNER - 26); if f.lockBtn.label.SetWordWrap then f.lockBtn.label:SetWordWrap(true) end
+    f.lockBtn.label:SetPoint("RIGHT", -6, 0)
     if f.lockBtn.label.SetWordWrap then f.lockBtn.label:SetWordWrap(false) end
     local lhl = Tex(f.lockBtn, COL.accent, 0.08, "HIGHLIGHT"); lhl:SetAllPoints()
     -- grotte : effacer une entree mal apprise (porte de maison prise pour l'entree)
@@ -146,13 +245,19 @@ function CreateUI()
     f.nowBtn:SetScript("OnClick", function() if BackToNow then BackToNow() end end)
     f.nowBtn:Hide()
 
-    f.btnRow = CreateFrame("Frame", nil, f); f.btnRow:SetSize(INNER, 26)
-    local prev = FlatButton(f.btnRow, 40, 26, function() Peek(-1) end); prev:SetPoint("LEFT"); prev:SetLabel("<")
-    local nxt = FlatButton(f.btnRow, 40, 26, function() Peek(1) end); nxt:SetPoint("RIGHT"); nxt:SetLabel(">")
-    f.skip = FlatButton(f.btnRow, INNER - 96, 26, Ignore); f.skip:SetPoint("CENTER")
+    f.btnRow = CreateFrame("Frame", nil, f); f.btnRow:SetSize(INNER, 34)
+    -- clic gauche : etape precedente / suivante ; clic droit : retour a l'etape actuelle (un seul des deux)
+    local function nav(d) return function(_, btn) if btn == "RightButton" then if BackToNow then BackToNow() end else Peek(d) end end end
+    local prev = FlatButton(f.btnRow, 46, 34, nav(-1)); prev:SetPoint("LEFT"); prev:SetLabel("<")
+    local nxt = FlatButton(f.btnRow, 46, 34, nav(1)); nxt:SetPoint("RIGHT"); nxt:SetLabel(">")
+    f.skip = FlatButton(f.btnRow, INNER - 104, 34, Ignore); f.skip:SetPoint("CENTER")
+    if f.skip.fs.SetFont then f.skip.fs:SetFont(FONT, 10, ""); f.skip.fs:SetTextColor(COL.gold[1], COL.gold[2], COL.gold[3]) end
+    for _, b in ipairs({ prev, nxt }) do
+        if b.fs.SetFont then b.fs:SetFont(FONT, 13, ""); b.fs:SetTextColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
+        b:SetLabel(b == prev and "<" or ">")
+    end
     for _, b in ipairs({ prev, nxt }) do
         if b.RegisterForClicks then b:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
-        b:HookScript("OnMouseUp", function(_, btn) if btn == "RightButton" and BackToNow then BackToNow() end end)
     end
     -- infobulles des boutons
     for _, bt in ipairs({ { prev, "btnPrevTip" }, { nxt, "btnNextTip" }, { f.skip, "btnOkTip" } }) do
@@ -165,9 +270,12 @@ function CreateUI()
     f.up = {}
     for k = 1, 4 do
         local b = CreateFrame("Button", nil, f)
-        b:SetSize(INNER, 16)
+        b:SetSize(INNER, 26)
+        local sep = Tex(b, COL.faint, 1, "ARTWORK"); sep:SetHeight(1); sep:SetPoint("TOPLEFT"); sep:SetPoint("TOPRIGHT")
+        b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(14, 14); b.icon:SetPoint("LEFT", 2, -1)
+        b.right = FS(b, 10, COL.gold, FONT, "RIGHT"); b.right:SetPoint("RIGHT", 0, -1)
         local fs = FS(b, 11, COL.soft, FONT, "LEFT")
-        fs:SetAllPoints()
+        fs:SetPoint("LEFT", 22, -1); fs:SetPoint("RIGHT", b.right, "LEFT", -6, 0)
         if fs.SetWordWrap then fs:SetWordWrap(false) end
         b.fs = fs
         local h = Tex(b, COL.accent, 0.08, "HIGHLIGHT"); h:SetAllPoints()
@@ -189,6 +297,8 @@ function CreateUI()
         f.up[k] = b
     end
 
+    f.passed = FS(f, 10, COL.gold, FONT, "LEFT"); f.passed:SetWidth(INNER - 22); f.passed:Hide()
+    f.badge.lbl:SetText(T("lvlShort"))
     f:SetShown(DB.shown ~= false)
     if f.SetScale then f:SetScale(DB.scale or 1) end
 end
@@ -218,7 +328,8 @@ ns.E = {
     ProfSet = function(id, v) ProfSet(id, v) end, ProfDetect = function() return ProfDetect(true) end,
     AskProf = function(q) AskChain(q, true, "prof") end,
     Kit = { COL = COL, FONT = FONT, DISPLAY = DISPLAY, Caps = Caps, Upper = Upper, Spaced = Spaced, FS = FS, Tex = Tex,
-            Diamond = Diamond, Divider = Divider, TitledRule = TitledRule, FlatButton = FlatButton },
+            Diamond = Diamond, Divider = Divider, TitledRule = TitledRule, FlatButton = FlatButton,
+            Border = Border, SectionHead = SectionHead, Chip = Chip, DiamondCheck = DiamondCheck },
 }
 ns.UI = ns.UI or {}
 

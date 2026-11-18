@@ -119,7 +119,7 @@ do
         table.sort(cand, function(a, b) if a.grey ~= b.grey then return a.grey and true or false end return a.name < b.name end)
         local names = {}
         for k = 1, math.min(3, #cand) do names[#names + 1] = cand[k].name .. (cand[k].grey and (" (" .. T("grey") .. ")") or "") end
-        return { kind = "log", icon = "Interface\\GossipFrame\\AvailableQuestIcon",
+        return { kind = "log", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoAccept", tint = COL.accent,
                  text = T(n >= LOG_MAX and "logFull" or "logNear", n, LOG_MAX)
                      .. (#names > 0 and ("  " .. T("logDrop", table.concat(names, ", "))) or "") }
     end

@@ -65,7 +65,8 @@ local function ChoiceRow(parent, w, onClick)
     if b.label.SetWordWrap then b.label:SetWordWrap(false) end
     function b:SetChecked(v)
         self.checked = v and true or false
-        self.gem:SetStyle(v and COL.white or COL.line, not v)
+        self.gem:SetStyle(v and COL.red or COL.line, not v)
+        if self.label.SetTextColor then local c = v and COL.white or COL.soft; self.label:SetTextColor(c[1], c[2], c[3]) end
     end
     b:SetChecked(false)
     b:SetScript("OnClick", onClick)
@@ -82,16 +83,14 @@ local function CheckRow(parent, w, key, get, set)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(w, ROW_H)
     local hl = Tex(b, COL.accent, 0.07, "HIGHLIGHT"); hl:SetAllPoints()
-    local box = CreateFrame("Frame", nil, b); box:SetSize(12, 12); box:SetPoint("LEFT", 0, 0)
-    for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-        local t = Tex(box, COL.line)
-        if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
-        else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
-    end
-    b.fill = Tex(box, COL.accent, 1, "OVERLAY"); b.fill:SetPoint("TOPLEFT", 3, -3); b.fill:SetPoint("BOTTOMRIGHT", -3, 3)
+    -- case oui/non : losange a contour dore (le losange plein seul = choix unique)
+    b.mark = K.DiamondCheck(b, 11); b.mark:SetPoint("LEFT", -2, 0)
     b.label = FS(b, 12, COL.white, FONT, "LEFT"); b.label:SetPoint("LEFT", 22, 0)
     Loc(function() b.label:SetText(T(key)) end)
-    function b:SetChecked(v) self.checked = v and true or false; self.fill:SetShown(self.checked) end
+    function b:SetChecked(v)
+        self.checked = v and true or false; self.mark:SetOn(self.checked)
+        if self.label.SetTextColor then local c = self.checked and COL.white or COL.soft; self.label:SetTextColor(c[1], c[2], c[3]) end
+    end
     function b:GetChecked() return self.checked end
     b:SetScript("OnClick", function(self) self:SetChecked(not self.checked); set(self.checked) end)
     b:SetScript("OnEnter", function(self)
@@ -142,6 +141,11 @@ local function CreateOptions()
     opt:SetPoint("CENTER")
     opt:SetFrameStrata("DIALOG")
     local bg = Tex(opt, COL.bg, 0.95, "BACKGROUND"); bg:SetAllPoints()
+    K.Border(opt, COL.line, 0.8, "BORDER")
+    -- en-tete comme la fenetre du guide : bande plus claire, losange rouge, nom a gauche
+    local hbg = Tex(opt, COL.panel, 0.95, "BORDER"); hbg:SetHeight(56); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
+    local hln = Tex(opt, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -56); hln:SetPoint("TOPRIGHT", 0, -56)
+    local hgem = Diamond(opt, 9, COL.red); hgem:SetPoint("LEFT", opt, "TOPLEFT", 22, -28)
     opt:SetMovable(true)
     opt:EnableMouse(true)
     opt:RegisterForDrag("LeftButton")
@@ -154,10 +158,9 @@ local function CreateOptions()
     local close = FlatButton(opt, 28, 28, function() opt:Hide() end)
     close:SetPoint("TOPRIGHT", -14, -14); close:SetLabel("x")
 
-    local name = FS(opt, 17, COL.white, FONT, "CENTER")
-    name:SetPoint("TOP", 0, -28); name:SetWidth(CW)
+    local name = FS(opt, 14, COL.white, FONT, "LEFT")
+    name:SetPoint("LEFT", opt, "TOPLEFT", 40, -28)
     optRows[#optRows + 1] = function() name:SetText(Caps(E.WarpathName())) end
-    local div = Divider(opt, math.floor(OW * 0.6)); div:SetPoint("TOP", 0, -56)
     local ver = FS(opt, 9, COL.faint, FONT, "LEFT"); ver:SetPoint("BOTTOMLEFT", 24, 16)
     ver:SetText(Caps("Oghoule's Warpath") .. "   v" .. VERSION)
     if ver.SetTextColor then ver:SetTextColor(COL.line[1], COL.line[2], COL.line[3]) end
@@ -224,11 +227,11 @@ local function CreateOptions()
         local tb = CreateFrame("Button", nil, opt)
         tb:SetSize(NAVW - 20, 32)
         tb:SetPoint("TOPLEFT", 20, -84 - (pos - 1) * 36)
-        tb.sel = Tex(tb, COL.accent, 0.10, "BACKGROUND"); tb.sel:SetAllPoints()
+        tb.sel = Tex(tb, COL.panel, 1, "BACKGROUND"); tb.sel:SetAllPoints()
         local hl = Tex(tb, COL.accent, 0.06, "HIGHLIGHT"); hl:SetAllPoints()
         tb.fs = FS(tb, 10, COL.gold, FONT, "LEFT"); tb.fs:SetPoint("LEFT", 14, 0)
         Loc(function() tb.fs:SetText(Caps(T(key))) end)
-        tb.line = Tex(tb, COL.accent); tb.line:SetWidth(2); tb.line:SetPoint("TOPLEFT"); tb.line:SetPoint("BOTTOMLEFT")
+        tb.line = Tex(tb, COL.red); tb.line:SetWidth(2); tb.line:SetPoint("TOPLEFT"); tb.line:SetPoint("BOTTOMLEFT")
         tb:SetScript("OnClick", function() ShowTab(k) end)
         tb:SetScript("OnEnter", function(self)
             local tip = T(key .. "Tip")
@@ -445,7 +448,12 @@ local function CreateOptions()
         optRows[#optRows + 1] = function()
             local all, me = E.ProfQuestList(), UnitLevel and UnitLevel("player") or 0
             local list = {}
-            for _, c in ipairs(all) do if not c.done and c.l + 6 >= me then list[#list + 1] = c end end
+            -- une meme quete existe en plusieurs exemplaires (une par ville de depart) : on la montre une fois
+            local seen = {}
+            for _, c in ipairs(all) do
+                local key = (c.name or "") .. ":" .. tostring(c.s)
+                if not c.done and c.l + 6 >= me and not seen[key] then seen[key] = true; list[#list + 1] = c end
+            end
             none:SetText(#list == 0 and T("profNone") or ""); none:SetShown(#list == 0)
             for k, b in ipairs(rows) do
                 local c = list[k]
@@ -520,8 +528,9 @@ local function CreateOptions()
         local legend = FS(pg, 10, COL.gold, FONT, "LEFT"); legend:SetWidth(CW - 22)
         legend:SetPoint("TOPLEFT", 22, -18 - 3 * ROW_H)
         Loc(function()
-            legend:SetText(T("tgtLegend", "|TInterface\\GossipFrame\\AvailableQuestIcon:12|t", "|TInterface\\GossipFrame\\ActiveQuestIcon:12|t",
-                "|TInterface\\CURSOR\\Attack:12|t", "|TInterface\\Minimap\\Tracking\\FlightMaster:12|t"))
+            local function ico(n, r, g, b) return string.format("|TInterface\\AddOns\\OghoulesWarpath\\Media\\%s:12:12:0:0:32:32:0:32:0:32:%d:%d:%d|t", n, r, g, b) end
+            legend:SetText(T("tgtLegend", ico("IcoAccept", 214, 184, 102), ico("IcoTurnin", 156, 199, 168),
+                ico("IcoDo", 205, 187, 142), "|TInterface\\Minimap\\Tracking\\FlightMaster:12|t"))
         end)
         local BW2 = math.floor((CW - 12) / 2)
         local rc = FlatButton(pg, BW2, 28, function() SlashCmdList.WARPATH("now") end)
@@ -571,7 +580,7 @@ local function CreateOptions()
         local mb = CheckRow(pg, CW, "mmButton", function() return not DB.mmHide end,
             function(v) DB.mmHide = not v; if mm then mm:SetShown(v) end end)
         mb:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        for _, o in ipairs({ { "compact", "compact", false }, { "lvlInfo", "lvlInfo", true }, { "trainerOpt", "trainer", true }, { "tipsOpt", "tips", true } }) do
+        for _, o in ipairs({ { "compact", "compact", false }, { "trainerOpt", "trainer", true }, { "tipsOpt", "tips", true } }) do
             local field, def = o[2], o[3]
             local r = CheckRow(pg, CW, o[1], function() if def then return DB[field] ~= false end return DB[field] and true or false end,
                 function(v) DB[field] = v; if field == "trainer" and not v then DB.trainDue = nil end; Refresh(true) end)
