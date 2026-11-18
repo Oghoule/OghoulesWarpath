@@ -124,7 +124,14 @@ function OnEvent(self, event, ...)
     elseif event == "PLAYER_XP_UPDATE" then
         ns.Comfort.TrackXP()
     elseif event == "TRAINER_SHOW" then
-        DB.trainDue = nil
+        -- un entraineur de metier connu ne compte pas : seuls les autres (classe) effacent le rappel
+        local who = UnitName and UnitName("npc")
+        local prof = false
+        if type(who) == "string" and not (issecretvalue and issecretvalue(who)) then
+            for _, t in ipairs(ns.Trainers or {}) do if t.n == who then prof = true; break end end
+        end
+        if IsTradeskillTrainer then local ok, v = pcall(IsTradeskillTrainer); if ok and v then prof = true end end
+        if not prof then DB.trainDue = nil end
     elseif event == "PLAYER_REGEN_ENABLED" then
         ns.Comfort.UpdateItemButton()
     elseif event == "GROUP_ROSTER_UPDATE" then

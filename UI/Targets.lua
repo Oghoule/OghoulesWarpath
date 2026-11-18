@@ -8,7 +8,7 @@ if setfenv then setfenv(1, _ENV) end
 -- cible, ce que Forever autorise. Les boutons securises ne peuvent pas changer pendant un combat :
 -- la liste se met a jour des la fin du combat.
 do
-    local MAX, W, RH = 6, 190, 18
+    local MAX, W, RH = 8, 190, 18
     local ICON = {
         fly    = "Interface\\Minimap\\Tracking\\FlightMaster",
         giver  = "Interface\\GossipFrame\\AvailableQuestIcon",
@@ -78,10 +78,43 @@ do
         panel:Hide()
     end
 
+    -- Noms dans la langue du jeu. ns.NpcNames est en anglais : sur un jeu dans une autre langue, on apprend
+    -- le vrai nom de chaque monstre la premiere fois qu'on le voit (plaque de nom, cible ou souris).
+    local function locNames()
+        if not WarpathDropDB then return {} end
+        WarpathDropDB._npcLoc = WarpathDropDB._npcLoc or {}
+        local loc = (GetLocale and GetLocale()) or "enUS"
+        WarpathDropDB._npcLoc[loc] = WarpathDropDB._npcLoc[loc] or {}
+        return WarpathDropDB._npcLoc[loc]
+    end
+    local function learn(unit)
+        if not (GetLocale and GetLocale() ~= "enUS" and UnitGUID and UnitName) then return end
+        local ok, guid = pcall(UnitGUID, unit)
+        if not ok or type(guid) ~= "string" or (issecretvalue and issecretvalue(guid)) then return end
+        local id = tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-") or "")
+        if not id or not (ns.NpcNames or {})[id] then return end
+        local ok2, n = pcall(UnitName, unit)
+        if ok2 and type(n) == "string" and n ~= "" and not (issecretvalue and issecretvalue(n)) and locNames()[id] ~= n then
+            locNames()[id] = n
+            return true
+        end
+    end
+    local lastLearn = 0
+    local learnEv = CreateFrame("Frame")
+    for _, e in ipairs({ "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT" }) do pcall(learnEv.RegisterEvent, learnEv, e) end
+    learnEv:SetScript("OnEvent", function(_, e, unit)
+        local u = (e == "NAME_PLATE_UNIT_ADDED" and unit) or (e == "PLAYER_TARGET_CHANGED" and "target") or "mouseover"
+        local ok, new = pcall(learn, u)
+        -- nouveau nom appris : la liste est refaite (au plus toutes les 2 s)
+        if ok and new and GetTime and GetTime() - lastLearn > 2 and ns.CoreEnv and ns.CoreEnv.Refresh then
+            lastLearn = GetTime(); pcall(ns.CoreEnv.Refresh, true)
+        end
+    end)
+
     -- liste des PNJ de l'etape (sans rien toucher a l'ecran)
     local function Build(s)
         local L, seen = {}, {}
-        local names = ns.NpcNames or {}
+        local names = setmetatable({}, { __index = function(_, id) return locNames()[id] or (ns.NpcNames or {})[id] end })
         local function add(id, kind, pct)
             if id and not seen[id] and names[id] and #L < MAX then
                 seen[id] = true; L[#L + 1] = { id = id, name = names[id], kind = kind, pct = pct }
@@ -104,6 +137,7 @@ do
         if currentAdvice and currentAdvice.kind == "bind" then add(currentAdvice.npc, "inn") end
         if currentAdvice and currentAdvice.kind == "buy" then add(currentAdvice.npc, "buy") end
         if flightPlan and flightPlan.from and ns.FlightNodeNpc then add(ns.FlightNodeNpc[flightPlan.from.key], "fly") end
+        local groups = {}   -- un groupe par objectif : on les prend tour a tour, pour que chaque objectif ait sa place
         if s then
             for _, qid in ipairs(Ids(s)) do
                 local e = EST[qid]
@@ -114,20 +148,32 @@ do
                         -- tuer, utiliser un objet sur, ou parler : l'icone le dit
                         local tt = type(e.t) == "string" and e.t:lower() or ""
                         local kk = e.u and "use" or ((tt:find("^speak") or tt:find("^talk")) and "talk") or "mob"
-                        for _, k in ipairs(e.k or {}) do if not killDone(qid, k[1]) then add(k[1], kk) end end
+                        for _, k in ipairs(e.k or {}) do if not killDone(qid, k[1]) then groups[#groups + 1] = { { k[1], kk } } end end
                         for _, d in ipairs(e.d or {}) do
                             if #d >= 7 and not itemDone(d[1], d[2]) then
                                 local rate, how = DropRate(d)
                                 local per = ns.QuestieDropNpc and ns.QuestieDropNpc[d[1]]
+                                local g = {}
                                 for j = 7, #d do
                                     local r = (how ~= "measured" and per and per[d[j]]) or rate
-                                    add(d[j], "mob", math.floor(r * 100 + 0.5))
+                                    g[#g + 1] = { d[j], "mob", math.floor(r * 100 + 0.5) }
                                 end
+                                groups[#groups + 1] = g
                             end
                         end
                     end
                 end
             end
+        end
+        local k = 1
+        while #L < MAX do
+            local any = false
+            for _, g in ipairs(groups) do
+                local c = g[k]
+                if c then any = true; add(c[1], c[2], c[3]) end
+            end
+            if not any then break end
+            k = k + 1
         end
         return L
     end
@@ -147,7 +193,7 @@ do
         for i, b in ipairs(rows) do
             local t = L[i]
             if t then
-                b.name = t.name
+                b.name = t.name; b.kind = t.kind
                 b:SetAttribute("macrotext", "/targetexact " .. t.name)
                 b.icon:SetTexture(ICON[t.kind])
                 local KC = { giver = COL.accent, turnin = COL.green, mob = COL.red, use = COL.gold, talk = COL.accent, fly = COL.gold, inn = COL.soft, buy = COL.gold }
@@ -181,13 +227,35 @@ do
         panel:SetWidth(w)
         for _, r in ipairs(rows) do r:SetWidth(w - 8) end
     end
+    -- monstres pas en vue (sans plaque de nom a l'ecran) : ligne grisee, pour savoir tout de suite sur qui cliquer.
+    -- Si aucune plaque n'est visible (plaques desactivees), on ne grise rien.
+    local function Dim()
+        if not (C_NamePlate and C_NamePlate.GetNamePlates and UnitName) then return end
+        local seen, any = {}, false
+        for _, p in ipairs(C_NamePlate.GetNamePlates() or {}) do
+            local tok = p.namePlateUnitToken or (p.UnitFrame and p.UnitFrame.unit)
+            if tok then
+                local ok, n = pcall(UnitName, tok)
+                if ok and type(n) == "string" and not (issecretvalue and issecretvalue(n)) then seen[n] = true; any = true end
+            end
+        end
+        -- au moins un monstre de la liste en vue, sinon on ne grise rien (noms qui ne correspondent pas, plaques cachees...)
+        local match = false
+        for _, b in ipairs(rows) do if b:IsShown() and seen[b.name or ""] then match = true end end
+        for _, b in ipairs(rows) do
+            if b:IsShown() then
+                local a = (any and match and b.kind == "mob" and not seen[b.name or ""]) and 0.45 or 1
+                b.fs:SetAlpha(a); b.box:SetAlpha(a)
+            end
+        end
+    end
     local dockTick = CreateFrame("Frame")
     local dacc = 0
     dockTick:SetScript("OnUpdate", function(_, el)
         dacc = dacc + el
         if dacc < 0.25 then return end
         dacc = 0
-        if panel and panel:IsShown() then pcall(Dock) end
+        if panel and panel:IsShown() then pcall(Dock); pcall(Dim) end
     end)
 
     local ev = CreateFrame("Frame")

@@ -77,12 +77,16 @@ function NearPick(cur)
             if dl and bd and dl < bd + 15 then best, bd = lastPick, dl end
         end
     end
-    local j, k = cur + 1, 0
-    while j <= #steps and k < LOOK do
+    local j, k, barrier = cur + 1, 0, false
+    while j <= #steps do
         local s = steps[j]
         if Applies(s) and not doneCache[j] then
             k = k + 1
-            if s.t == "go" or s.t == "level" then break end
+            if s.t == "go" or s.t == "level" then barrier = true end
+            -- au-dela de 15 etapes (ou d'un changement de zone), seules les remises comptent : rendre plus tot ne coute rien
+            if (barrier or k > LOOK) and s.t ~= "turnin" then s = nil end
+        end
+        if s and Applies(s) and not doneCache[j] then
             local esc = s.t == "accept" and ((s.text or "") .. (s.en or "")):lower():find("escort", 1, true)
             if (s.t == "accept" or s.t == "turnin") and not esc and Actionable(j) then
                 local dj = distTo(me, s)
@@ -106,7 +110,7 @@ function NearTick()
     if not steps or peek or focus or not baseCurrent or computingOther then return end
     if DungeonLogActive and DungeonLogActive() then return end
     pcall(CaveTrack)
-    local ok, pk = pcall(StepPointKey, steps[current])
+    local ok, pk = pcall(function() return StepPointKey(steps[current]) .. (TrainDetour(steps[current]) and "T" or "") end)
     if ok and pk ~= lastPointKey then lastPointKey = pk; lastWP = nil; Refresh(true); return end
     local j = NearPick(baseCurrent) or baseCurrent
     if j ~= current and steps[j] then
@@ -228,28 +232,63 @@ function IsCaveStep(s)
     for _, p in ipairs(CAVE_PAT) do if t:find(p, 1, true) then return true end end
     return false
 end
-local function caveKey(s) return s.m .. ":" .. math.floor(s.x) .. ":" .. math.floor(s.y) end
 local function caves() WarpathDropDB._caves = WarpathDropDB._caves or {}; return WarpathDropDB._caves end
-local lastOut, caveOut   -- derniere position dehors ; grotte dont il faut ressortir
+-- toutes les entrees connues (les tiennes + celles des autres joueurs), sauf celles que tu as effacees ("x")
+local function entrances()
+    local own, out = (WarpathDropDB and WarpathDropDB._caves) or {}, {}
+    for k, v in pairs(own) do if type(v) == "table" then out[#out + 1] = { k = k, m = v[1], x = v[2], y = v[3] } end end
+    for k, v in pairs(ns.BakedCaves or {}) do
+        if own[k] == nil and type(v) == "table" then out[#out + 1] = { k = k, m = v[1], x = v[2], y = v[3] } end
+    end
+    return out
+end
+-- entree la plus proche d'un point (objectif de la grotte, ou toi), a moins de r metres
+local function nearestEntrance(m, x, y, r)
+    local g = WP(m, x, y); if not g then return nil end
+    local best, bd
+    for _, e in ipairs(entrances()) do
+        local w = WP(e.m, e.x, e.y)
+        if w and w[3] == g[3] then
+            local d = Dist(g[1], g[2], w[1], w[2])
+            if d < r and (not bd or d < bd) then best, bd = e, d end
+        end
+    end
+    return best
+end
+local lastOut, caveOut   -- derniere position dehors ; entree de la grotte ou tu es
 function CaveTrack()
     if not (DB and steps and WarpathDropDB) then return end
     local indoors = IsIndoors and IsIndoors() or false
     local pm, px, py = PlayerPos()
     if not (pm and px) then return end
-    local s = steps[current]
     if not indoors then
         lastOut = { pm, px, py }
         caveOut = nil
         return
     end
-    -- on vient d'entrer : si l'etape est dans une grotte proche, l'endroit ou tu etais dehors est l'entree
-    if IsCaveStep(s) and lastOut then
-        local k = caveKey(s)
-        local me, g = WP(lastOut[1], lastOut[2], lastOut[3]), WP(s.m, s.x, s.y)
-        if (not caves()[k] or caves()[k] == "x") and me and g and me[3] == g[3] and Dist(me[1], me[2], g[1], g[2]) < 150 then
-            caves()[k] = { lastOut[1], math.floor(lastOut[2] * 10) / 10, math.floor(lastOut[3] * 10) / 10 }
+    -- on vient d'entrer pres d'une grotte du guide (n'importe quelle etape, meme en avance) :
+    -- l'endroit ou tu etais dehors est son entree
+    if lastOut then
+        local me = WP(lastOut[1], lastOut[2], lastOut[3])
+        local near = false
+        if me then
+            for _, t in ipairs(steps) do
+                if IsCaveStep(t) and Applies(t) then
+                    local g = WP(t.m, t.x, t.y)
+                    if g and g[3] == me[3] and Dist(me[1], me[2], g[1], g[2]) < 150 then near = true; break end
+                end
+            end
         end
-        caveOut = k
+        if near then
+            local known = nearestEntrance(lastOut[1], lastOut[2], lastOut[3], 30)
+            if known then caveOut = known
+            else
+                local x, y = math.floor(lastOut[2] * 10) / 10, math.floor(lastOut[3] * 10) / 10
+                local k = "e:" .. lastOut[1] .. ":" .. x .. ":" .. y
+                caves()[k] = { lastOut[1], x, y }
+                caveOut = { k = k, m = lastOut[1], x = x, y = y }
+            end
+        end
     end
     lastOut = nil
 end
@@ -261,7 +300,7 @@ local function objPoint(s, me)
         if e and logById[q] == false then
             for _, d in ipairs(e.d or {}) do
                 local sp = ns.ObjSpawns[d[1]]
-                if sp and #d < 7 and itemCount(d[1]) < (d[2] or 1) then
+                if sp and #sp <= 7 and #d < 7 and itemCount(d[1]) < (d[2] or 1) then
                     local m = sp[1]
                     for k = 2, #sp - 1, 2 do
                         local g = WP(m, sp[k], sp[k + 1])
@@ -283,20 +322,27 @@ end
 function StepPoint(s)
     if not (s and DB and DB.smartArrow ~= false) then return nil end
     local me = PlayerWP(); if not me then return nil end
-    local indoors = IsIndoors and IsIndoors() or false
-    -- entrees apprises par toi, sinon celles envoyees par les autres joueurs (CavesData.lua)
-    local own, baked = WarpathDropDB and WarpathDropDB._caves or {}, ns.BakedCaves or {}
-    local cv = setmetatable({}, { __index = function(_, k) local o = own[k]; if o == "x" then return nil end; return o or baked[k] end })
-    -- sortie d'une grotte alors que l'etape suivante est dehors
-    if indoors and caveOut and not IsCaveStep(s) and cv[caveOut] then
-        local e = cv[caveOut]
-        return { m = e[1], x = e[2], y = e[3], name = T("caveExit"), kind = "exit" }
+    -- mort (fantome) : la fleche va a ton corps
+    if UnitIsGhost and UnitIsGhost("player") and C_DeathInfo and C_DeathInfo.GetCorpseMapPosition then
+        local pm = PlayerPos()
+        local ok, p = pcall(C_DeathInfo.GetCorpseMapPosition, pm)
+        if ok and p then
+            local x, y = p.x, p.y
+            if (not x) and p.GetXY then x, y = p:GetXY() end
+            if x and y then return { m = pm, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10, name = T("corpse"), kind = "corpse" } end
+        end
     end
-    if IsCaveStep(s) and not indoors and cv[caveKey(s)] then
-        local e = cv[caveKey(s)]
-        local g = WP(e[1], e[2], e[3])
+    local indoors = IsIndoors and IsIndoors() or false
+    -- entree de la grotte de l'etape (apprise par toi ou par un autre joueur), a moins de 200 m de l'objectif
+    local here = IsCaveStep(s) and nearestEntrance(s.m, s.x, s.y, 200) or nil
+    -- sortie d'une grotte alors que l'etape en cours est ailleurs
+    if indoors and caveOut and not (here and here.k == caveOut.k) then
+        return { m = caveOut.m, x = caveOut.x, y = caveOut.y, name = T("caveExit"), kind = "exit" }
+    end
+    if here and not indoors then
+        local g = WP(here.m, here.x, here.y)
         if g and g[3] == me[3] and Dist(me[1], me[2], g[1], g[2]) > 12 then
-            return { m = e[1], x = e[2], y = e[3], name = T("caveIn"), kind = "enter" }
+            return { m = here.m, x = here.x, y = here.y, name = T("caveIn"), kind = "enter" }
         end
     end
     return objPoint(s, me)
@@ -323,8 +369,66 @@ function ForgetCave()
     local cv = WarpathDropDB and WarpathDropDB._caves
     if not cv then return end
     -- "x" : ni ton entree, ni celle des autres joueurs ; reapprise a ta prochaine entree
-    if IsCaveStep(s) then cv[caveKey(s)] = "x" end
-    if caveOut then cv[caveOut] = "x"; caveOut = nil end
+    if IsCaveStep(s) then
+        for _, e in ipairs(entrances()) do
+            local g, w = WP(s.m, s.x, s.y), WP(e.m, e.x, e.y)
+            if g and w and g[3] == w[3] and Dist(g[1], g[2], w[1], w[2]) < 200 then cv[e.k] = "x" end
+        end
+    end
+    if caveOut then cv[caveOut.k] = "x"; caveOut = nil end
     say(T("caveForgot"))
     lastWP = nil; Refresh(true)
+end
+
+-- Nouveaux sorts (niveau pair) et entraineur de classe a moins de 250 m : etape temporaire avant l'etape en cours.
+-- Elle s'efface quand tu ouvres la fenetre d'un entraineur (TRAINER_SHOW) ou avec OK (passee pour ce niveau).
+local TRAIN_R = 250
+local trainLatch
+function TrainDetour(s)
+    if not (DB and DB.trainDue and myClass and DB.trainer ~= false) then return nil end
+    if DB.trainSkip == DB.trainDue or IS_DUNGEON[DB.guide] then return nil end
+    if IsInInstance then local inI = IsInInstance(); if inI then return nil end end
+    if s and s.t == "do" and ((s.text or "") .. (s.en or "")):lower():find("escort", 1, true) then return nil end
+    if not NearestTrainer then return nil end
+    local e, d = NearestTrainer((ns.ClassTrainers or {})[myClass])
+    if not (e and d) then return nil end
+    if d > TRAIN_R and trainLatch ~= DB.trainDue then return nil end
+    trainLatch = DB.trainDue   -- une fois proposee, l'etape reste jusqu'a l'entraineur ou OK
+    return { id = 0, done = true, train = true, m = e[1], x = e[2], y = e[3], name = e[4] }
+end
+
+-- En chemin : objets de quete encore a ramasser (semes un peu partout) pres du trajet vers l'etape en cours
+function OnTheWay(i)
+    local s = steps and steps[i]
+    if not s or s.t == "do" or not (s.m and s.x) or not ns.ObjSpawns then return nil end
+    local me = PlayerWP(); if not me then return nil end
+    local b = WP(s.m, s.x, s.y)
+    if not b or b[3] ~= me[3] then return nil end
+    local L2 = (b[1] - me[1]) ^ 2 + (b[2] - me[2]) ^ 2
+    if L2 < 60 * 60 then return nil end
+    local names, seen = {}, {}
+    for q, st in pairs(logById) do
+        local e = EST[q]
+        if st == false and e then
+            for _, d in ipairs(e.d or {}) do
+                local sp = ns.ObjSpawns[d[1]]
+                if sp and #d < 7 and not seen[d[1]] and itemCount(d[1]) < (d[2] or 1) then
+                    for k = 2, #sp - 1, 2 do
+                        local g = WP(sp[1], sp[k], sp[k + 1])
+                        if g and g[3] == me[3] then
+                            local t = math.max(0, math.min(1, ((g[1] - me[1]) * (b[1] - me[1]) + (g[2] - me[2]) * (b[2] - me[2])) / L2))
+                            local cx, cy = me[1] + t * (b[1] - me[1]), me[2] + t * (b[2] - me[2])
+                            if Dist(g[1], g[2], cx, cy) < 40 then
+                                seen[d[1]] = true
+                                names[#names + 1] = (C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(d[1])) or d[6]
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if #names == 0 then return nil end
+    return T("onTheWay", table.concat(names, ", "))
 end

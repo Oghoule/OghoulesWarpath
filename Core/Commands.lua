@@ -135,7 +135,21 @@ SlashCmdList["WARPATH"] = function(msg)
         -- ce que le jeu fournit a l'addon (pour verifier ce qui marche sur Forever)
         local function yn(v) return v and "|cff9cc7a8OK|r" or "|cffc24a3eNON|r" end
         local okS, sp = pcall(function() return GetSpecialization and GetSpecialization() end)
-        local okT, tab = pcall(function() return GetTalentTabInfo and select(3, GetTalentTabInfo(1)) end)
+        local okT, tab = pcall(function()
+            if not GetTalentTabInfo then return "absente" end
+            local r = { GetTalentTabInfo(1) }
+            for k = 1, math.min(#r, 6) do r[k] = tostring(r[k]) end
+            return table.concat(r, "|", 1, math.min(#r, 6))
+        end)
+        local apis = {}
+        for _, n in ipairs({ "GetNumTalentTabs", "GetTalentInfo", "GetSpecializationInfo", "IsPlayerSpell" }) do apis[#apis + 1] = n .. "=" .. (_G[n] and "oui" or "non") end
+        for _, n in ipairs({ "C_ClassTalents", "C_Traits", "C_SpecializationInfo", "C_Talent" }) do apis[#apis + 1] = n .. "=" .. (_G[n] and "oui" or "non") end
+        say("API talents : " .. table.concat(apis, ", "))
+        local okC2, cs = pcall(function() return C_SpecializationInfo and C_SpecializationInfo.GetSpecialization and C_SpecializationInfo.GetSpecialization() end)
+        local trees, why = TraitTrees()
+        local tl = {}
+        for t, tr in ipairs(trees or {}) do tl[#tl + 1] = t .. ":" .. tostring(tr.id) .. " (" .. tr.n .. " noeuds, " .. tr.spent .. " pts)" end
+        say("C_SpecializationInfo=" .. tostring(okC2 and cs) .. " ; traits " .. tostring(why) .. " ; arbres " .. (#tl > 0 and table.concat(tl, ", ") or "aucun"))
         local spec = MySpec and MySpec()
         say(T("diagHead", VERSION))
         say(T("diagSpec", tostring(okS and sp), tostring(okT and tab), tostring(spec), math.floor((KillTime()) + 0.5)))
@@ -153,6 +167,7 @@ SlashCmdList["WARPATH"] = function(msg)
         local nC = 0; for _, v in pairs(own) do if type(v) == "table" then nC = nC + 1 end end
         local nB = 0; for _ in pairs(ns.BakedCaves or {}) do nB = nB + 1 end
         local wm = 0; for _ in pairs((ns.ClassTrainers or {}).WEAPON or {}) do wm = wm + 1 end
+        say("Objet de l'étape : " .. tostring(ns.Comfort and ns.Comfort.ItemDiag and select(2, pcall(ns.Comfort.ItemDiag))))
         say(T("diagData", nC, nB, wm, (GetLocale and GetLocale()) or "?", Lang()))
     elseif cmd == "classe" or cmd == "class" then
         local list = ClassQuestList()
@@ -209,6 +224,24 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.13", fr = "Cibles de l'objectif : sur un jeu dans une autre langue que l'anglais, les noms des monstres sont appris en les voyant (clic pour cibler et grisé corrects). Flèche réaffichée au changement d'étape. Le rappel de sorts n'est plus effacé par un entraîneur de métier. Bouton d'objet de quête affiché même si le jeu ne donne pas le sort de l'objet. Deux nouvelles cases : « Aller au PNJ le plus proche » et « Flèche intelligente » (onglet Automatismes).",
+      en = "Objective targets: on a non-English game, mob names are learned when you see them (target click and greying work). Arrow shown again when the step changes. The spell reminder is no longer cleared by a profession trainer. Quest item button shown even if the game doesn't give the item's spell. Two new options: \"Go to the closest NPC\" and \"Smart arrow\" (Automation tab)." },
+    { v = "1.12", fr = "Flèche : cachée dès que tu es dans la zone de chasse (revient au-delà de 250 m), vers ton corps quand tu es mort, et l'entrée d'une grotte sert à toutes ses étapes. Cibles : chaque objectif a sa place (8 lignes) et les monstres pas en vue sont grisés. Une remise faisable à côté de toi passe en premier, même loin dans le guide. Bouton d'objet de quête jamais hors de l'écran. Onglet Donjons plus compact.",
+      en = "Arrow: hidden as soon as you are in the hunting area (back beyond 250 m), points to your corpse when dead, and a cave entrance serves all its steps. Targets: each objective gets a slot (8 rows) and mobs not in view are greyed out. A turn-in you can do right next to you comes first, even far ahead in the guide. Quest item button never off-screen. More compact Dungeons tab." },
+    { v = "1.11", fr = "Spécialisation : sur Forever, les 3 arbres de talents sont lus séparément (par colonne) pour trouver celui où tu as mis le plus de points.",
+      en = "Specialization: on Forever, the 3 talent trees are read separately (by column) to find the one where you spent the most points." },
+    { v = "1.10", fr = "Spécialisation : essai par les talents modernes (C_SpecializationInfo et arbres de traits). /warpath diag détaille ce qu'ils renvoient.",
+      en = "Specialization: also tried through modern talents (C_SpecializationInfo and trait trees). /warpath diag details what they return." },
+    { v = "1.09", fr = "Spécialisation : lecture des arbres de talents au format récent. /warpath diag liste les fonctions de talents fournies par le jeu.",
+      en = "Specialization: talent trees are also read in the newer format. /warpath diag lists the talent functions the game provides." },
+    { v = "1.08", fr = "En allant vers un PNJ, le guide te rappelle de ramasser en chemin les objets de quête qui traînent le long du trajet (ex. Cactus Apples). La flèche vers les objets au sol est réservée à ceux qui sont toujours au même endroit.",
+      en = "On the way to an NPC, the guide reminds you to pick up quest objects lying along the route (e.g. Cactus Apples). The arrow to ground objects is kept for objects that are always in the same place." },
+    { v = "1.07", fr = "À chaque niveau pair, si ton entraîneur de classe est à moins de 250 m, le guide ajoute une étape pour aller apprendre tes nouveaux sorts (OK pour la passer).",
+      en = "At each even level, if your class trainer is within 250 m, the guide adds a step to go learn your new spells (OK to skip it)." },
+    { v = "1.06", fr = "Le taux de drop n'est plus répété dans la fenêtre du guide : il est affiché à côté des monstres dans « Cibles de l'objectif » (sauf si tu as masqué cette fenêtre).",
+      en = "The drop rate is no longer repeated in the guide window: it is shown next to the mobs in \"Objective targets\" (unless you hid that window)." },
+    { v = "1.05", fr = "Grottes : l'entrée est apprise dès que tu entres dans une grotte du guide, même si tu n'es pas encore à cette étape.",
+      en = "Caves: the entrance is learned as soon as you enter a cave from the guide, even if you are not at that step yet." },
     { v = "1.04", fr = "En regardant d'autres étapes, une ligne « Revenir à l'étape actuelle » te ramène à ton étape (aussi : clic droit sur < ou >, ou un raccourci clavier). Le temps par monstre est mesuré selon ta spécialisation. Nouvelle commande /warpath diag pour vérifier ce que le jeu fournit à l'addon.",
       en = "While looking at other steps, a \"Back to the current step\" line brings you back (also: right-click < or >, or a key binding). Time per mob is measured per specialization. New /warpath diag command to check what the game gives the addon." },
     { v = "1.03", fr = "Les PNJ des villages sont situés par rapport à l'auberge (« 140 m à l'est de l'auberge »). Les entrées de grottes apprises par les autres joueurs sont intégrées. La Chronique ne note plus un niveau ou un argent faux à la déconnexion.",

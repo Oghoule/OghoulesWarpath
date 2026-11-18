@@ -64,7 +64,60 @@ SPEC = { PRIEST = { 1, 1.05, 0.85 }, PALADIN = { 1.1, 1.05, 0.95 }, DRUID = { 1.
                SHAMAN = { 0.95, 0.9, 1.05 }, WARRIOR = { 0.95, 0.95, 1.15 }, ROGUE = { 1, 0.95, 1 },
                HUNTER = { 0.95, 1, 1 }, MAGE = { 1, 0.95, 1 }, WARLOCK = { 0.95, 1, 1 } }
 -- specialisation : 1, 2 ou 3 (ordre des arbres de talents : sacre/sacre/ombre pour un pretre...), nil si inconnue
+-- talents en "traits" (C_ClassTalents / C_Traits) : points depenses par arbre ; renvoie l'arbre le plus rempli
+function TraitTrees()
+    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_Traits and C_Traits.GetConfigInfo) then return nil end
+    local okC, cfg = pcall(C_ClassTalents.GetActiveConfigID)
+    if not okC or not cfg then return nil, "config=nil" end
+    local okI, info = pcall(C_Traits.GetConfigInfo, cfg)
+    if not okI or type(info) ~= "table" or type(info.treeIDs) ~= "table" then return nil, "config=" .. tostring(cfg) .. " arbres=nil" end
+    local out = {}
+    for t, tree in ipairs(info.treeIDs) do
+        local spent, pts = 0, {}
+        local okN, nodes = pcall(C_Traits.GetTreeNodes, tree)
+        if okN and type(nodes) == "table" then
+            for _, node in ipairs(nodes) do
+                local okD, ni = pcall(C_Traits.GetNodeInfo, cfg, node)
+                if okD and type(ni) == "table" then
+                    local r = type(ni.currentRank) == "number" and ni.currentRank or 0
+                    spent = spent + r
+                    if type(ni.posX) == "number" then pts[#pts + 1] = { x = ni.posX, r = r } end
+                end
+            end
+        end
+        out[t] = { id = tree, n = (okN and type(nodes) == "table") and #nodes or 0, spent = spent, pts = pts }
+    end
+    -- Forever : les 3 arbres classiques sont dans un seul arbre de traits, cote a cote.
+    -- On les separe par position horizontale (les 2 plus grands ecarts entre colonnes).
+    if #out == 1 and #out[1].pts >= 9 then
+        local xs, seen = {}, {}
+        for _, p in ipairs(out[1].pts) do if not seen[p.x] then seen[p.x] = true; xs[#xs + 1] = p.x end end
+        table.sort(xs)
+        if #xs >= 3 then
+            local gaps = {}
+            for k = 1, #xs - 1 do gaps[#gaps + 1] = { g = xs[k + 1] - xs[k], at = (xs[k] + xs[k + 1]) / 2 } end
+            table.sort(gaps, function(a, b) return a.g > b.g end)
+            local c1, c2 = math.min(gaps[1].at, gaps[2].at), math.max(gaps[1].at, gaps[2].at)
+            local split = { { id = out[1].id, n = 0, spent = 0, part = 1 }, { id = out[1].id, n = 0, spent = 0, part = 2 }, { id = out[1].id, n = 0, spent = 0, part = 3 } }
+            for _, p in ipairs(out[1].pts) do
+                local k = (p.x < c1) and 1 or (p.x < c2) and 2 or 3
+                split[k].n = split[k].n + 1; split[k].spent = split[k].spent + p.r
+            end
+            return split, "config=" .. tostring(cfg) .. " (1 arbre coupe en 3)"
+        end
+    end
+    return out, "config=" .. tostring(cfg)
+end
 function MySpec()
+    -- (C_SpecializationInfo.GetSpecialization renvoie 1 sur Forever meme pour un paladin rétribution : ignore)
+    do  -- plusieurs arbres de traits : celui ou tu as mis le plus de points (5 au moins)
+        local trees = TraitTrees()
+        if trees and #trees >= 2 then
+            local best, bp = nil, 0
+            for t, tr in ipairs(trees) do if tr.spent > bp then best, bp = t, tr.spent end end
+            if best and bp >= 5 then return best end
+        end
+    end
     if GetSpecialization then
         local ok, i = pcall(GetSpecialization)
         if ok and type(i) == "number" and i >= 1 and i <= 4 then return i end
@@ -72,8 +125,12 @@ function MySpec()
     if GetTalentTabInfo then
         local bestTab, bestPts = nil, 0
         for tab = 1, 3 do
-            local ok, a, b, c = pcall(GetTalentTabInfo, tab)
-            local pts = type(c) == "number" and c or (type(b) == "number" and b) or nil
+            -- classique : nom, icone, points ; Wrath et suivants : id, nom, description, icone, points
+            local ok, a, b, c, d, e = pcall(GetTalentTabInfo, tab)
+            local pts
+            if type(a) == "string" then pts = c
+            elseif type(a) == "number" and type(b) == "string" then pts = e end
+            if type(pts) ~= "number" then pts = nil end
             if ok and pts and pts > bestPts then bestTab, bestPts = tab, pts end
         end
         if bestTab and bestPts >= 5 then return bestTab end
@@ -146,7 +203,7 @@ function Estimate(list, withTravel)
                     r.kills = r.kills + n; r.dropKills = r.dropKills + n
                     r.mxp = r.mxp + n * MobXP(d[3], p, d[4])
                     r.secs = r.secs + n * kt * (d[4] == 1 and 3 or 1)
-                    r.drops[#r.drops + 1] = { name = d[6], rate = rate, how = how, k = k, seen = seen }
+                    r.drops[#r.drops + 1] = { name = d[6], rate = rate, how = how, k = k, seen = seen, mobs = #d >= 7 }
                 else
                     r.secs = r.secs + need * OBJ_SECS
                 end

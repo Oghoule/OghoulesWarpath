@@ -510,6 +510,12 @@ function Ignore()
         Advance(); Refresh(true)
         return
     end
+    -- etape "apprends tes sorts" : OK = on la passe pour ce niveau
+    if not peek and not focus and TrainDetour and TrainDetour(steps[current]) then
+        DB.trainSkip = DB.trainDue
+        lastWP = nil; Refresh(true)
+        return
+    end
     -- journal quitte par erreur, toujours dans l'instance : on le fait revenir
     if not peek and not focus and DB.dgOut and DB.dgOut[DB.guide] and InDgInstance() then
         DB.dgOut[DB.guide] = nil

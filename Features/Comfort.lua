@@ -120,12 +120,13 @@ local itemBtn, itemWanted
 local function StepItem()
     if not steps or not current or not steps[current] then return nil end
     local s = steps[current]
-    local id = type(s.id) == "number" and s.id or (type(s.id) == "table" and s.id[1])
-    local e = id and EST[id]
-    for _, it in ipairs(e and e.u or {}) do
-        local cnt = (C_Item and C_Item.GetItemCount and C_Item.GetItemCount(it)) or (GetItemCount and GetItemCount(it)) or 0
-        local spell = (C_Item and C_Item.GetItemSpell and C_Item.GetItemSpell(it)) or (GetItemSpell and GetItemSpell(it))
-        if cnt > 0 and spell then return it end
+    for _, id in ipairs(Ids(s)) do
+        local e = EST[id]
+        for _, it in ipairs(e and e.u or {}) do
+            local cnt = (C_Item and C_Item.GetItemCount and C_Item.GetItemCount(it)) or (GetItemCount and GetItemCount(it)) or 0
+            -- (Forever ne renvoie pas toujours le sort de l'objet : l'objet a utiliser de la quete suffit)
+            if cnt > 0 then return it end
+        end
     end
 end
 local function UpdateItemButton()
@@ -151,9 +152,13 @@ local function UpdateItemButton()
         itemBtn:ClearAllPoints()
         local l, t = f:GetLeft(), f:GetTop()
         local sc = (f:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
-        if l and t then itemBtn:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", l * sc - 6, t * sc - 16) else itemBtn:SetPoint("CENTER", UIParent, "CENTER", -300, 0) end
+        local r = f:GetRight()
+        if l and t and l * sc >= 50 then itemBtn:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", l * sc - 6, t * sc - 16)
+        elseif r and t then itemBtn:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", r * sc + 6, t * sc - 16)   -- fenetre collee a gauche : a droite
+        else itemBtn:SetPoint("CENTER", UIParent, "CENTER", -300, 0) end
         ns.Trace("bouton d'objet (objet)"); itemBtn:SetAttribute("item", "item:" .. it)
-        itemBtn.icon:SetTexture(GetItemIcon and GetItemIcon(it) or "Interface\\Icons\\INV_Misc_QuestionMark")
+        local icon = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(it)) or (GetItemIcon and GetItemIcon(it))
+        itemBtn.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         itemBtn:Show()
     else
         itemBtn:Hide()
@@ -177,7 +182,18 @@ local function UpdateInfo()
     UpdateItemButton()
 end
 ns.Comfort = { OnQuestFrame = OnQuestFrame, TrackXP = TrackXP, UpdateInfo = UpdateInfo, OnLanded = OnLanded,
-    SetTaxiFrom = function(k) taxiFrom = k end, LevelInfo = LevelInfo, UpdateItemButton = UpdateItemButton }
+    SetTaxiFrom = function(k) taxiFrom = k end, LevelInfo = LevelInfo, UpdateItemButton = UpdateItemButton,
+    -- pour /warpath diag : objet de l'etape, nombre en sac, sort, bouton affiche
+    ItemDiag = function()
+        local s = steps and steps[current]
+        local it
+        for _, id in ipairs(s and Ids(s) or {}) do local e = EST[id]; if e and e.u then it = e.u[1]; break end end
+        if not it then return "-" end
+        local cnt = (C_Item and C_Item.GetItemCount and C_Item.GetItemCount(it)) or 0
+        local sp = C_Item and C_Item.GetItemSpell and C_Item.GetItemSpell(it)
+        return it .. " x" .. tostring(cnt) .. ", sort=" .. tostring(sp) .. ", bouton=" .. tostring(itemBtn and itemBtn:IsShown() or false)
+            .. ", option=" .. tostring(DB.itemBtn ~= false)
+    end }
 end
 
 ------------------------------------------------------------------

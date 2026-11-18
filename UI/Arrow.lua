@@ -9,8 +9,8 @@ do
     local frame, tex, gem, dist, last
     local ON_COURSE = math.rad(12) -- losange rouge si on vise a moins de 12 degres
     local ARRIVE = 8          -- metres : en dessous, la fleche devient un losange "tu y es"
-    local AREA_IN, AREA_OUT = 50, 75   -- zone de chasse : cachee a moins de 50 m, revient au-dela de 75 m
-    local inArea = false
+    local AREA_IN, AREA_OUT = 50, 250  -- zone de chasse : cachee des que tu y es (50 m), revient seulement au-dela de 250 m
+    local inArea, areaKey = false, nil
 
     local function Create()
         if frame then return end
@@ -59,6 +59,8 @@ do
         Create()
         local dx, dy = w[1] - me[1], w[2] - me[2]          -- x : nord, y : ouest
         local d = math.sqrt(dx * dx + dy * dy)
+        local tk = distTarget[1] .. ":" .. distTarget[2] .. ":" .. distTarget[3]
+        if tk ~= areaKey then areaKey = tk; inArea = false end   -- nouvelle etape : on repart de zero
         if distTarget[4] then
             if d < AREA_IN then inArea = true elseif d > AREA_OUT then inArea = false end
             if inArea then frame:Hide(); return end

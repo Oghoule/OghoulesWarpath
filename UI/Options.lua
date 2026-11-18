@@ -346,11 +346,11 @@ local function CreateOptions()
             if Guides[d.key] then
                 local col, row = n % 2, math.floor(n / 2)
                 n = n + 1
-                local b = FlatButton(pg, BW, 30, function() StartDungeon(d.key); RefreshOptions() end)
-                b:SetPoint("TOPLEFT", col * (BW + 8), y - row * 34)
+                local b = FlatButton(pg, BW, 23, function() StartDungeon(d.key); RefreshOptions() end)
+                b:SetPoint("TOPLEFT", col * (BW + 8), y - row * 26)
                 b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 10, 0)
                 b.fs:SetText(d.name)
-                if b.fs.SetFont then b.fs:SetFont(FONT, 11, "") end
+                if b.fs.SetFont then b.fs:SetFont(FONT, 10, "") end
                 local lv = FS(b, 9, COL.gold, FONT, "RIGHT"); lv:SetPoint("RIGHT", -10, 0)
                 optRows[#optRows + 1] = function()
                     local me = UnitLevel and UnitLevel("player") or 0
@@ -369,12 +369,12 @@ local function CreateOptions()
                 b:SetScript("OnLeave", function() E.Tip():Hide() end)
             end
         end
-        y = y - math.ceil(n / 2) * 34
-        y = y - 8
+        y = y - math.ceil(n / 2) * 26
+        y = y - 6
         local ask = CheckRow(pg, CW, "askDungeons", function() return not DB.noDungeonAsk end, function(v) DB.noDungeonAsk = not v end)
         ask:SetPoint("TOPLEFT", 0, y)
         local stop = FlatButton(pg, 200, 28, function() StopDungeon(); RefreshOptions() end)
-        stop:SetPoint("TOPLEFT", 0, y - 40)
+        stop:SetPoint("TOPLEFT", 0, y - 32)
         Loc(function() stop:SetLabel(Caps(T("leaveDungeon"))) end)
     end
 
@@ -611,7 +611,7 @@ local function CreateOptions()
         local pg = pages[7]
         local h = SmallHeader(pg, "tabAuto"); h:SetPoint("TOPLEFT", 0, 0)
         local y = -18
-        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "autoFly", "autoFly" }, { "itemBtn", "itemBtn" } }) do
+        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "autoFly", "autoFly" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "smartArrowOpt", "smartArrow" } }) do
             local field = o[2]
             local r = CheckRow(pg, CW, o[1], function() return DB[field] ~= false end, function(v) DB[field] = v; Refresh(true) end)
             r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H

@@ -265,7 +265,7 @@ function RefreshInner(forceWP)
         f.title:SetText(Caps(zone) .. "   |cff8c7f62·|r   " .. i .. " / " .. n)
         local st = peek and doneCache[i]
         -- prise impossible tant qu'un prerequis du journal n'est pas fini : on guide vers ce prerequis
-        local det = (not peek) and PrereqDetour and PrereqDetour(s) or nil
+        local det = (not peek) and ((TrainDetour and TrainDetour(s)) or (PrereqDetour and PrereqDetour(s))) or nil
         local g = det and { t = det.done and "turnin" or "do", id = det.id, m = det.m, x = det.x, y = det.y,
                             zone = MAPNAME[det.m] or s.zone, quest = det.name } or s
         -- grotte (entree/sortie) ou objet au sol le plus proche : la fleche vise ce point
@@ -341,10 +341,13 @@ function RefreshInner(forceWP)
             for _, q in ipairs(det and { det.id } or Ids(s)) do
                 if logById[q] == false and EST[q] then
                     for _, dr in ipairs(Estimate({ q }, false).drops) do
+                      -- deja affiche a cote des monstres dans « Cibles de l'objectif » : pas de doublon ici
+                      if not (dr.mobs and DB.targets ~= false) then
                         local pct = math.floor(dr.rate * 100 + 0.5)
                         local how = (dr.how == "unique") and T("dropHowUnique") or (dr.how == "measured") and T("dropHowMeasured", dr.k)
                             or (dr.how == "questie") and T("dropHowQuestie", dr.k or 0) or T("dropHowAssumed", dr.k or 0)
                         lines[#lines + 1] = (dr.name or "?") .. " : |cffffd100" .. pct .. " %|r  |cff8c7f62" .. how .. "|r"
+                      end
                     end
                 end
             end
@@ -357,7 +360,8 @@ function RefreshInner(forceWP)
             for j = 1, n do if steps[j].t == "go" then ent = j; break end end
             if ent and i > ent then body = "|cffd69a66" .. T("dgGroup") .. "|r\n\n" .. body end
         end
-        if det then body = "|cffd69a66" .. T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
+        if det and det.train then body = "|cffd69a66" .. T("trainStep", det.name) .. "|r\n\n" .. body
+        elseif det then body = "|cffd69a66" .. T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
         -- quetes pas encore prises faute de niveau, quetes laissees pour plus tard, et la suite
         if not peek then
             local lw = LevelWaitLines and LevelWaitLines(s) or {}
@@ -366,6 +370,8 @@ function RefreshInner(forceWP)
             if hn then body = body .. "\n\n|cff8c7f62" .. hn .. "|r" end
             local tg = TurninGroup and TurninGroup(i)
             if tg then body = "|cff9cc7a8" .. tg .. "|r\n\n" .. body end
+            local ow = OnTheWay and OnTheWay(i)
+            if ow then body = body .. "\n\n|cff9cc7a8" .. ow .. "|r" end
             local dt = DeathTip and DeathTip(i)
             if dt then body = body .. "\n\n|cff8c7f62" .. dt .. "|r" end
             local th = ThenLine and ThenLine(i)
