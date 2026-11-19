@@ -761,6 +761,7 @@ function RefreshInner(forceWP)
             elseif sp and sp.kind == "gate" then extra = T("gateVia")
             elseif sp and sp.kind == "citycave" then nm, extra = sp.name or nm, T("caveEnter")
             elseif sp and sp.kind == "errand" then nm, extra = sp.name or nm, T("errandSub")
+            elseif sp and sp.kind == "boss" then nm = sp.name or nm   -- v1.42 : le chef de l'etape
             elseif sp and sp.kind == "qm" then nm, extra = sp.label or nm, T("qmStopN", sp.idx or 1, sp.n or 1)
             elseif sp and sp.kind == "zone" then nm, extra = sp.name ~= "" and sp.name or nm, T("zoneCamp", sp.idx or 1, sp.n or 2)
             elseif sp and sp.kind == "enter" then extra = T("caveEnter") elseif sp and sp.kind == "exit" then extra = T("caveExit"):lower() end

@@ -123,6 +123,11 @@ function NearTick()
     if not steps or peek or focus or not baseCurrent or computingOther then return end
     if DungeonLogActive and DungeonLogActive() then return end
     pcall(CaveTrack)
+    -- v1.42 : prise laissee derriere toi : on refait le calcul quand tu arrives pres de son PNJ ou que tu t'en eloignes
+    for i, was in pairs(heldNear) do
+        local s = steps[i]
+        if s and NearNpc(s, was) ~= was then pcall(Advance); return end
+    end
     local ok, pk = pcall(function() return StepPointKey(steps[current]) .. (TrainDetour(steps[current]) and "T" or "") end)
     if ok and pk ~= lastPointKey then lastPointKey = pk; lastWP = nil; Refresh(true); return end
     local j = NearPick(baseCurrent) or baseCurrent
@@ -591,6 +596,38 @@ function CityGatePoint(s, me)
     end
 end
 
+-- v1.42 : etape Faire qui regroupe plusieurs quetes, dont un chef (un seul PNJ, dont il faut rapporter un
+-- objet unique) : la fleche va d'abord au chef -- tu tues le reste en chemin --,
+-- puis au point habituel.
+-- Seulement si le chef est pres du point de l'etape (meme camp) et pas elite.
+local BOSS_R = 300
+local function bossPoint(s, me)
+    if not (s and s.t == "do" and s.m and s.x and EST) or IS_DUNGEON[DB.guide] then return nil end
+    local ids = Ids(s)
+    if #ids < 2 then return nil end
+    local base = WP(s.m, s.x, s.y)
+    if not (base and base[3] == me[3]) then return nil end
+    local loc = WarpathDropDB and WarpathDropDB._npcLoc and WarpathDropDB._npcLoc[(GetLocale and GetLocale()) or "enUS"] or {}
+    local function npcName(id) return loc[id] or (ns.NpcNames or {})[id] end
+    for _, q in ipairs(ids) do
+        local e = EST[q]
+        local h = e and e.h
+        if h and logById[q] == false then
+            local w = WP(h[1], h[2], h[3])
+            if w and w[3] == me[3] and Dist(w[1], w[2], base[1], base[2]) < BOSS_R then
+                local name
+                -- objet unique (d[5]) lache par un seul PNJ (ex. la tete d'un chef) ; pas les objets communs
+                -- d'un type de monstre (Flatland Cougar Femur...)
+                for _, d in ipairs(e.d or {}) do
+                    if d[2] == 1 and d[5] == 1 and #d == 7 and d[4] ~= 1 and itemCount(d[1]) < 1 then name = npcName(d[7]) or d[6] end
+                end
+                if name then return { m = h[1], x = h[2], y = h[3], name = name, kind = "boss" } end
+            end
+        end
+    end
+    return nil
+end
+
 function StepPoint(s)
     if not (s and DB) then return nil end
     local me = PlayerWP(); if not me then return nil end
@@ -652,7 +689,7 @@ function StepPoint(s)
             return { m = here.m, x = here.x, y = here.y, name = T("caveIn"), kind = "enter" }
         end
     end
-    return objPoint(s, me) or MobZonePoint(s, me)
+    return objPoint(s, me) or bossPoint(s, me) or MobZonePoint(s, me)
 end
 function StepPointKey(s)
     local p = StepPoint(s)
@@ -707,18 +744,22 @@ end
 
 -- Nouveaux sorts (niveau pair) et entraineur de classe a moins de 250 m : etape temporaire avant l'etape en cours.
 -- Elle s'efface quand tu ouvres la fenetre d'un entraineur (TRAINER_SHOW) ou avec OK (passee pour ce niveau).
+-- v1.42 : seulement quand l'etape en cours est une prise ou une remise (tu es au camp, entre deux quetes) :
+-- plus d'interruption au milieu d'une etape Faire. Le rappel attend la prochaine remise pres d'un entraineur.
 local TRAIN_R = 250
 local trainLatch
 function TrainDetour(s)
     if not (DB and DB.trainDue and myClass and DB.trainer ~= false) then return nil end
     if DB.trainSkip == DB.trainDue or IS_DUNGEON[DB.guide] then return nil end
     if IsInInstance then local inI = IsInInstance(); if inI then return nil end end
-    if s and s.t == "do" and ((s.text or "") .. (s.en or "")):lower():find("escort", 1, true) then return nil end
+    if not (s and (s.t == "accept" or s.t == "turnin")) then return nil end
     if not NearestTrainer then return nil end
     local e, d = NearestTrainer((ns.ClassTrainers or {})[myClass])
     if not (e and d) then return nil end
-    if d > TRAIN_R and trainLatch ~= DB.trainDue then return nil end
-    trainLatch = DB.trainDue   -- une fois proposee, l'etape reste jusqu'a l'entraineur ou OK
+    -- deja proposee pour ce niveau : un peu plus de marge (pas de va-et-vient a la limite), mais plus de
+    -- fleche qui te ramene de loin
+    if d > (trainLatch == DB.trainDue and TRAIN_R * 1.5 or TRAIN_R) then return nil end
+    trainLatch = DB.trainDue
     return { id = 0, done = true, train = true, m = e[1], x = e[2], y = e[3], name = e[4] }
 end
 

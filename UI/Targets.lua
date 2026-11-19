@@ -24,6 +24,19 @@ do
     local lastDock
     local Dock   -- definie plus bas, mais appelee par Apply (sans ca : erreur cachee par pcall, liste refaite a chaque fois)
     local wanted, shownKey, waiting
+    -- v1.42 : deplacement ("move") ou largeur ("size") en cours avec la souris
+    local moving
+    local function EndMove()
+        if not (panel and moving) then return end
+        local mode = moving
+        moving = nil
+        panel:StopMovingOrSizing()
+        if mode == "size" then DB.tgtW = math.floor((panel:GetWidth() or W) + 0.5); lastDock = nil end
+        local point, _, _, x, y = panel:GetPoint(1)
+        if point and (mode == "move" or DB.tgtPos) then
+            DB.tgtPos = { point, math.floor(x + 0.5), math.floor(y + 0.5), panel:GetScale() }
+        end
+    end
 
     local function Create()
         if panel then return end
@@ -51,12 +64,12 @@ do
             Tip():Show()
         end)
         panel:EnableMouse(true); panel:SetMovable(true); panel:RegisterForDrag("LeftButton")
-        panel:SetScript("OnDragStart", function(self) if not DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving() end end)
-        panel:SetScript("OnDragStop", function(self)
-            self:StopMovingOrSizing()
-            local point, _, _, x, y = self:GetPoint(1)
-            DB.tgtPos = { point, math.floor(x + 0.5), math.floor(y + 0.5), self:GetScale() }
+        panel:SetScript("OnDragStart", function(self)
+            if not DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving(); moving = "move" end
         end)
+        -- v1.42 : en combat, le jeu bloque StopMovingOrSizing (boutons securises dans la fenetre) ; le
+        -- deplacement est deja termine a l'entree en combat (PLAYER_REGEN_DISABLED, plus bas)
+        panel:SetScript("OnDragStop", function() if not (InCombatLockdown and InCombatLockdown()) then EndMove() end end)
         -- poignee en bas a droite : glisser pour changer la largeur (hors combat, fenetre non verrouillee)
         if panel.SetResizable then panel:SetResizable(true) end
         if panel.SetResizeBounds then panel:SetResizeBounds(140, 20, 420, 600)
@@ -68,14 +81,9 @@ do
         local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
         grip:SetScript("OnMouseDown", function()
             if DB.locked or (InCombatLockdown and InCombatLockdown()) then return end
-            panel:StartSizing("RIGHT")
+            panel:StartSizing("RIGHT"); moving = "size"
         end)
-        grip:SetScript("OnMouseUp", function()
-            panel:StopMovingOrSizing()
-            DB.tgtW = math.floor((panel:GetWidth() or W) + 0.5); lastDock = nil
-            local point, _, _, x, y = panel:GetPoint(1)
-            if point and DB.tgtPos then DB.tgtPos = { point, math.floor(x + 0.5), math.floor(y + 0.5), panel:GetScale() } end
-        end)
+        grip:SetScript("OnMouseUp", function() if not (InCombatLockdown and InCombatLockdown()) then EndMove() end end)
         grip:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("tgtResize"), 1, 1, 1, true); Tip():Show() end)
         grip:SetScript("OnLeave", function() Tip():Hide() end)
         for i = 1, MAX do
@@ -306,7 +314,13 @@ do
 
     local ev = CreateFrame("Frame")
     ev:RegisterEvent("PLAYER_REGEN_ENABLED")
-    ev:SetScript("OnEvent", function() if waiting then pcall(Apply) end end)
+    -- v1.42 : juste avant le verrou du combat, on termine un deplacement en cours (encore permis a ce moment)
+    ev:RegisterEvent("PLAYER_REGEN_DISABLED")
+    ev:SetScript("OnEvent", function(_, e)
+        if e == "PLAYER_REGEN_DISABLED" then pcall(EndMove); return end
+        pcall(EndMove)
+        if waiting then pcall(Apply) end
+    end)
 
     ns.Targets = {
         Update = function(s) wanted = Build(s); local ok = pcall(Apply); if not ok then shownKey = nil end end,
