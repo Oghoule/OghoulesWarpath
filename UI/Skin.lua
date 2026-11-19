@@ -192,7 +192,8 @@ function WarpathName()
 end
 
 W, PAD = 300, 18
-FIXED_H = math.floor(W * 640 / 340 + 0.5) -- proportions de la maquette (340 x 640)
+FIXED_H = math.floor(W * 640 / 340 + 0.5) -- proportions de la maquette (340 x 640) (plus utilise pour la hauteur)
+MIN_H = 330                                 -- v1.41 : hauteur minimale ; au-dela, la fenetre suit son contenu
 DL = { rows = {}, n = 0 }   -- mode donjon : lignes du journal, detail ouvert
 INNER = W - 2 * PAD
 distTarget = nil -- { m, x, y } : prochaine position a atteindre (pour la distance affichee)
@@ -206,9 +207,17 @@ STEP_ICON = {
 STEP_TINT = { accept = COL.accent, turnin = COL.green, ["do"] = COL.gold }
 function SetUpcoming(items, passed)
     if not f or not f.up then return end
-    f.nUp = #items
+    -- v1.41 (audit, proposition A) : 2 etapes a venir, « +N ▾ » pour deplier jusqu'a 4 (DB.upOpen)
+    local limit = DB.upOpen and 4 or 2
+    local more = math.max(0, math.min(#items, 4) - 2)
+    f.nUp = math.min(#items, limit)
+    local tg = rawget(f, "upToggle")
+    if tg then
+        tg.fs:SetText(more > 0 and (DB.upOpen and "▴" or ("+" .. more .. " ▾")) or "")
+        tg:SetShown(more > 0)
+    end
     for k = 1, 4 do
-        local b, it = f.up[k], items[k]
+        local b, it = f.up[k], (k <= limit) and items[k] or nil
         if it then
             b.idx = it.idx; b.fs:SetText(it.text)
             if b.fs.SetTextColor then local c = (k == 1) and COL.white or COL.soft; b.fs:SetTextColor(c[1], c[2], c[3]) end
@@ -242,20 +251,32 @@ function Layout()
     if f.progBg then put(f.progBg, 3, 18) end
     local il = rawget(f, "infoLine")
     if il and il:IsShown() then put(il, sh(il, 10), 14) end
+    -- Intendance : icone de l'en-tete en capitale (pas pendant une tournee ni dans un donjon)
+    local qb = rawget(f, "qmBtn")
+    if qb then
+        local inCity = QMCity and QMCity() and not DB.qm and not (IS_DUNGEON and IS_DUNGEON[DB.guide] and DungeonLogActive and DungeonLogActive())
+        qb:SetShown(inCity and true or false)
+        -- icones de l'en-tete, de droite a gauche : « - », sac (en capitale), « ? » ; le titre s'arrete avant
+        local hb = rawget(f, "helpBtn")
+        if hb then hb:ClearAllPoints(); hb:SetPoint("RIGHT", inCity and qb or f.miniBtn, "LEFT", -2, 0) end
+        f.title:ClearAllPoints(); f.title:SetPoint("LEFT", f, "TOPLEFT", PAD + 12, -(HEAD_H or 34) / 2)
+        f.title:SetPoint("RIGHT", f, "TOPRIGHT", inCity and -62 or -44, -(HEAD_H or 34) / 2)
+    end
     -- en-tete de l'etape : badge de niveau a gauche, type + titre a droite
     local badge = f.badge and f.badge:IsShown()
     local bx = badge and (PAD + 42) or PAD
     local bw = badge and (INNER - 42) or INNER
     local top = y
     if badge then f.badge:ClearAllPoints(); f.badge:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, y - 1) end
-    if f.kind:IsShown() then f.kindRow:SetWidth(bw); f.kind:SetWidth(bw); put(f.kindRow, 13, 5, bx) end
+    if f.kind:IsShown() then f.kindRow:SetWidth(bw); f.kind:SetWidth(bw); put(f.kindRow, 15, 5, bx) end   -- (11 px depuis la v1.41)
     if f.qtitle:IsShown() then f.qtitle:SetWidth(bw); put(f.qtitle, sh(f.qtitle, 20), 5, bx) end
     if f.qsub and f.qsub:IsShown() then f.qsub:SetWidth(bw); put(f.qsub, sh(f.qsub, 12), 0, bx) end
     if badge and (top - y) < 46 then y = top - 46 end
     y = y - 18
     if f.dest and f.dest:IsShown() then
         if DB.compact then f.coord:Hide() end
-        local dh = f.coord:IsShown() and 48 or 34
+        -- hauteur selon le lieu (1 ou 2 lignes) et la ligne de precision
+        local dh = math.max(34, 18 + sh(f.destName, 12) + (f.coord:IsShown() and 15 or 0))
         f.dest:SetHeight(dh); put(f.dest, dh, 18)
     end
     local any = false
@@ -284,10 +305,28 @@ function Layout()
         end
         y = y - 8
     end
-    if f.chainBtn:IsShown() then put(f.chainBtn, 16, 14) end
-    if f.lockBtn:IsShown() then
-        local lh = math.max(32, (f.lockBtn.label.GetStringHeight and f.lockBtn.label:GetStringHeight() or 12) + 18)
-        f.lockBtn:SetHeight(lh); put(f.lockBtn, lh, 16)
+    -- v1.41 (audit, proposition A) : chaine et quetes bloquees ne prennent plus de ligne : deux pastilles a droite
+    -- de la ligne du type d'etape. Les anciennes lignes gardent leur logique (etat, clic) mais restent invisibles.
+    for _, b in ipairs({ f.chainBtn, f.lockBtn }) do
+        if b.SetAlpha then b:SetAlpha(0) end
+        if b.EnableMouse then b:EnableMouse(false) end
+    end
+    local cc, cl = rawget(f, "chipChain"), rawget(f, "chipLock")
+    if cc and cl then
+        local ch = f.chainBtn:IsShown() and f.chainInfo
+        cc:SetShown(ch and true or false)
+        if ch then
+            cc.fs:SetText(ch.pos .. "/" .. ch.len); cc:SetWidth(22 + (cc.fs.GetStringWidth and cc.fs:GetStringWidth() or 18))
+            cc.tipText = T("chainLine", ch.pos, ch.len)
+        end
+        local nl = f.lockBtn:IsShown() and #(f.lockBtn.list or {}) or 0
+        cl:SetShown(nl > 0)
+        if nl > 0 then cl.fs:SetText(tostring(nl)); cl:SetWidth(22 + (cl.fs.GetStringWidth and cl.fs:GetStringWidth() or 8)) end
+        cl:ClearAllPoints(); cl:SetPoint("RIGHT", f.kindRow, "RIGHT", 0, 0)
+        cc:ClearAllPoints(); cc:SetPoint("RIGHT", nl > 0 and cl or f.kindRow, nl > 0 and "LEFT" or "RIGHT", nl > 0 and -5 or 0, 0)
+        -- le texte du type d'etape s'arrete avant les pastilles
+        local cw = (cc:IsShown() and (cc:GetWidth() + 6) or 0) + (cl:IsShown() and (cl:GetWidth() + 6) or 0)
+        if f.kind.SetWidth then f.kind:SetWidth(math.max(40, bw - cw)) end
     end
     if f.caveBtn and f.caveBtn:IsShown() then put(f.caveBtn, 18, 14) end
     if f.nowBtn and f.nowBtn:IsShown() then put(f.nowBtn, 24, 14) end
@@ -307,16 +346,21 @@ function Layout()
     -- (la fenetre ne grandit que si le contenu depasse)
     local xl = rawget(f, "xph")
     local foot = rawget(f, "foot")
-    local footOn = foot and xl and xl:IsShown()
+    -- v1.41 : plus de pied (niveau, XP/h) a la demande de l'auteur : ces infos sont au survol de la barre
+    -- de progression de la zone (f.progHit, Window.lua)
+    local footOn = false
+    if xl then xl:Hide() end
     local BOT = 16
-    local bottomH = 34 + (footOn and (14 + 13) or 0) + BOT
-    local h = math.max(DB.compact and 0 or FIXED_H, -y + 24 + bottomH)
+    local bottomH = 34 + (footOn and (16 + 13) or 0) + BOT
+    -- v1.41 (audit) : la hauteur suit le contenu (plus de bande vide), avec un minimum pour que la fenetre
+    -- ne change pas trop de taille d'une etape a l'autre (avant : hauteur fixe aux proportions de la maquette)
+    local h = math.max(DB.compact and 0 or MIN_H, -y + 24 + bottomH)
     f:SetHeight(h)
     if foot then
         foot:SetShown(footOn and true or false)
         if footOn then foot:ClearAllPoints(); foot:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, BOT) end
     elseif xl and xl:IsShown() then xl:ClearAllPoints(); xl:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, BOT) end
-    f.btnRow:ClearAllPoints(); f.btnRow:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, BOT + (footOn and 27 or 0))
+    f.btnRow:ClearAllPoints(); f.btnRow:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, BOT + (footOn and 29 or 0))
 end
 
 function SetRoute(legs)
@@ -340,7 +384,21 @@ function SetRoute(legs)
     end
 end
 
+-- v1.41 (audit) : le bouton du bas change de role selon l'etape ; une icone de l'addon devant le mot le montre
+SKIP_ICON = { ok = "IcoOk", ignore = "IcoSkip", dgBack = "IcoTurnin", restore = "IcoUndo", dgExit = "IcoTurnin" }
+function SetSkip(key)
+    if not (f and f.skip) then return end
+    f.skip:SetLabel(Caps(T(key)))
+    local ic = rawget(f.skip, "icon")
+    if ic then
+        local name = SKIP_ICON[key]
+        if name then ic:SetTexture("Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\" .. name) end
+        ic:SetShown(name ~= nil)
+    end
+end
+
 function SetChain(ch)
+    f.chainInfo = ch   -- (lu par la pastille de chaine, Layout)
     if not ch then f.chainBtn:Hide(); return end
     f.chainBtn.label:SetText(T("chainLine", ch.pos, ch.len))
     for k = 1, 10 do
@@ -358,6 +416,14 @@ end
 function UpdateDistance()
     if not f or not f.dist then return end
     if NearTick then pcall(NearTick) end
+    if CheckDungeonLeft then pcall(CheckDungeonLeft) end
+    -- v1.41 : conseil (pierre de foyer...) recalcule quand tu te deplaces : avant, il restait celui de l'endroit
+    -- ou la fenetre avait ete mise a jour (ex. « retour a Sun Rock » alors que tu y etais deja arrive a pied)
+    if adviceArgs and Advice and GetTime and GetTime() - (adviceT or 0) > 3 then
+        adviceT = GetTime()
+        local ok, adv = pcall(Advice, adviceArgs[1], adviceArgs[2])
+        if ok and (adv and adv.text) ~= (currentAdvice and currentAdvice.text) then Refresh() end
+    end
     local me = PlayerWP()
     local w = distTarget and WP(distTarget[1], distTarget[2], distTarget[3])
     if me and w and me[3] == w[3] then
@@ -425,6 +491,10 @@ end
 -- en-tete : zone a gauche, etape a droite, barre de progression rouge
 function SetHeader(zone, right, frac)
     f.title:SetText(Caps(zone or ""))
+    -- nom long (ex. STONETALON MOUNTAINS) : capitales sans espacement s'il ne tient pas ; sinon coupe avec « … »
+    local sw = (f.title.GetUnboundedStringWidth and f.title:GetUnboundedStringWidth()) or (f.title.GetStringWidth and f.title:GetStringWidth())
+    local aw = f.title.GetWidth and f.title:GetWidth()
+    if type(sw) == "number" and type(aw) == "number" and aw > 0 and sw > aw then f.title:SetText(Upper(zone or "")) end
     if f.stepNo then f.stepNo:SetText(right or "") end
     if f.progFill then
         frac = math.max(0, math.min(1, frac or 0))
@@ -484,7 +554,7 @@ function RefreshInner(forceWP)
         f.kind:Hide(); f.qtitle:Hide(); f.text:SetText(T("endGuide")); f.text:Show()
         f.coord:SetText(""); f.coord:Hide(); f.list:SetText(""); SetUpcoming({}); SetRoute({}); SetChain(nil)
         ClearWaypoint(); lastWP = nil; distTarget = nil
-        f.skip:SetLabel(Caps(T("ok")))
+        SetSkip("ok")
         UpdateDistance(); Layout()
     else
         local zone = Title(G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "")
@@ -496,7 +566,7 @@ function RefreshInner(forceWP)
         local g = det and { t = det.done and "turnin" or "do", id = det.id, m = det.m, x = det.x, y = det.y,
                             zone = MAPNAME[det.m] or s.zone, quest = det.name } or s
         -- grotte (entree/sortie) ou objet au sol le plus proche : la fleche vise ce point
-        local sp = (not peek and (not det or DB.errand) and StepPoint) and StepPoint(s) or nil
+        local sp = (not peek and (not det or DB.errand or DB.qm) and StepPoint) and StepPoint(s) or nil
         if sp then g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest } end
         if f.caveBtn then
             local cave = sp and (sp.kind == "enter" or sp.kind == "exit")
@@ -567,6 +637,18 @@ function RefreshInner(forceWP)
             f.qtitle:SetText(main or qn); f.qtitle:Show()
             if f.qsub then
                 f.qsub:SetText(rest and (rest:gsub(" %+ ", " · ")) or ""); f.qsub:SetShown(rest ~= nil)
+                -- v1.41 : prise groupee commencee : combien sont prises, et lesquelles manquent (OK les saute)
+                if s.t == "accept" and type(s.id) == "table" and #s.id > 1 then
+                    local have, miss = 0, {}
+                    for _, id in ipairs(s.id) do
+                        if logById[id] ~= nil or Rendue(id) or DB.ignored[id] then have = have + 1
+                        else miss[#miss + 1] = (QuestTitle and QuestTitle(id)) or (EST[id] and EST[id].n) or tostring(id) end
+                    end
+                    if have > 0 and #miss > 0 then
+                        f.qsub:SetText((f.qsub:GetText() or "") .. "\n|cffd69a66" .. T("grpMissing", have, #s.id, table.concat(miss, ", ")) .. "|r")
+                        f.qsub:Show()
+                    end
+                end
             end
         else
             f.qtitle:Hide()
@@ -675,7 +757,9 @@ function RefreshInner(forceWP)
             if sp and sp.kind == "farm" then nm, extra = sp.name, T("farmSub", sp.lmin, sp.lmax, sp.n)
             elseif sp and sp.kind == "pass" then extra = T("tunnelVia")
             elseif sp and sp.kind == "gate" then extra = T("gateVia")
+            elseif sp and sp.kind == "citycave" then nm, extra = sp.name or nm, T("caveEnter")
             elseif sp and sp.kind == "errand" then nm, extra = sp.name or nm, T("errandSub")
+            elseif sp and sp.kind == "qm" then nm, extra = sp.label or nm, T("qmStopN", sp.idx or 1, sp.n or 1)
             elseif sp and sp.kind == "zone" then nm, extra = sp.name ~= "" and sp.name or nm, T("zoneCamp", sp.idx or 1, sp.n or 2)
             elseif sp and sp.kind == "enter" then extra = T("caveEnter") elseif sp and sp.kind == "exit" then extra = T("caveExit"):lower() end
             if fl then nm, extra = fl.from.name, T("flight") .. " > " .. fl.to.name
@@ -683,7 +767,9 @@ function RefreshInner(forceWP)
             if f.destName then f.destName:SetText(nm ~= "" and nm or (MAPNAME[first.m] or "")) end
             local cx, cy = first.x, first.y
             if fl then cx, cy = fl.from.x, fl.from.y elseif tr then cx, cy = tr.from[2], tr.from[3] end
-            f.coord:SetText((extra and (extra .. "  |cff6f6450·|r  ") or "") .. string.format("|cff8c7f62%.1f, %.1f|r", cx, cy)); f.coord:Show()
+            -- v1.41 (audit) : la precision seulement ; les coordonnees passent dans l'infobulle du bloc
+            f.coord:SetText(extra or ""); f.coord:SetShown(extra ~= nil and extra ~= "")
+            f.destCoord = string.format("%.1f, %.1f", cx, cy) .. ((MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) and ("  ·  " .. MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) or "")
             if f.dest then f.dest:Show() end
         else
             distTarget = nil
@@ -752,12 +838,12 @@ function RefreshInner(forceWP)
         f.chainBtn.target = (firstTodo and firstTodo ~= i) and firstTodo or nil
         SetChain(ch)
         if not peek and not focus and DB.dgOut and DB.dgOut[DB.guide] and InDgInstance() then
-            f.skip:SetLabel(Caps(T("dgBack")))
+            SetSkip("dgBack")
         elseif Restorable(i) then
-            f.skip:SetLabel(Caps(T("restore")))
+            SetSkip("restore")
             f.kind:SetText(f.kind:GetText() .. "   |cffd69a66" .. T("restoreHint") .. "|r")
         else
-            f.skip:SetLabel(Caps((s.t == "note" or s.t == "go" or s.t == "level") and T("ok") or T("ignore")))
+            SetSkip((s.t == "note" or s.t == "go" or s.t == "level") and "ok" or "ignore")
         end
         -- quete sautee faute de prerequis : on la montre, cliquable
         local locks = (not peek) and LockCandidates() or {}
@@ -776,6 +862,7 @@ function RefreshInner(forceWP)
         -- conseil : journal plein, pierre de foyer
         local adv = (not peek) and Advice and Advice(i, g) or nil
         currentAdvice = adv
+        adviceArgs = (not peek) and { i, g } or nil   -- pour le revoir quand tu te deplaces (UpdateDistance)
         if adv and f.advice then
             f.advice.icon:SetTexture(adv.icon); f.advice.label:SetText(adv.text); f.advice:Show()
             local c = adv.tint or { 1, 1, 1 }
@@ -806,9 +893,10 @@ local shownErr = {}
 function Refresh(forceWP)
     local ok, err = pcall(RefreshInner, forceWP)
     if ok and UpdateMini then ok, err = pcall(UpdateMini) end
+    if HearthPlace then pcall(HearthPlace) end
     if not ok then
         local m = tostring(err)
-        if not shownErr[m] then shownErr[m] = true; say(T("errDisplay", m)) end
+        if not shownErr[m] then shownErr[m] = true; say(T("errDisplay", m), "error") end
     end
 end
 
@@ -858,6 +946,93 @@ end
 -- OnShow, OnAccept, OnCancel, OnAlt, OnHide) : bouton 1 = OnAccept, bouton 2 = OnCancel("clicked"),
 -- bouton 3 = OnAlt, Echap = OnCancel("escape"). Sans interface (tests), on passe par StaticPopup_Show.
 ------------------------------------------------------------------
+------------------------------------------------------------------
+-- v1.41 (audit) : bandeau d'information au-dessus du guide (ne demande rien) ; disparait seul apres 10 s.
+-- Clic = action (ex. ouvrir le detail) ; « x » = fermer. Les vraies questions restent des fenetres (Popup).
+------------------------------------------------------------------
+do
+    local toast, gen = nil, 0
+    function Toast(head, text, onClick)
+        if not (CreateFrame and UIParent) then return end
+        if not toast then
+            toast = CreateFrame("Button", "WarpathToast", UIParent)
+            toast:SetSize(W, 38); toast:SetFrameStrata("HIGH")
+            local bg = Tex(toast, COL.panel or COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
+            Border(toast, COL.accent, 0.6)
+            local bar = Tex(toast, COL.accent, 1, "ARTWORK"); bar:SetWidth(3); bar:SetPoint("TOPLEFT"); bar:SetPoint("BOTTOMLEFT")
+            toast.head = FS(toast, 9, COL.gold, FONT, "LEFT"); toast.head:SetPoint("TOPLEFT", 12, -6)
+            toast.text = FS(toast, 11, COL.white, FONT, "LEFT"); toast.text:SetPoint("TOPLEFT", toast.head, "BOTTOMLEFT", 0, -3)
+            toast.text:SetPoint("RIGHT", toast, "RIGHT", -24, 0)
+            if toast.text.SetWordWrap then toast.text:SetWordWrap(false) end
+            toast.x = CreateFrame("Button", nil, toast); toast.x:SetSize(16, 16); toast.x:SetPoint("TOPRIGHT", -4, -4)
+            toast.x.fs = FS(toast.x, 11, COL.soft, FONT, "CENTER"); toast.x.fs:SetPoint("CENTER"); toast.x.fs:SetText("x")
+            toast.x:SetScript("OnClick", function() toast:Hide() end)
+            local hl = Tex(toast, COL.accent, 0.06, "HIGHLIGHT"); hl:SetAllPoints()
+            toast:SetScript("OnClick", function(self) self:Hide(); if self.action then pcall(self.action) end end)
+        end
+        -- au-dessus de la fenetre visible (grande ou compacte)
+        local mf = f and rawget(f, "mini")
+        local anchor = (mf and mf:IsShown() and mf) or f or UIParent
+        toast:ClearAllPoints()
+        if anchor == UIParent then toast:SetPoint("TOP", UIParent, "TOP", 0, -120)
+        else toast:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 6) end
+        if toast.SetScale then toast:SetScale(DB and DB.scale or 1) end
+        toast.head:SetText(Caps(head or "")); toast.text:SetText(text or ""); toast.action = onClick
+        toast:Show()
+        gen = gen + 1
+        local mine = gen
+        if C_Timer and C_Timer.After then C_Timer.After(10, function() if gen == mine then toast:Hide() end end) end
+    end
+end
+
+------------------------------------------------------------------
+-- v1.41 (uniformisation) : elements communs a toutes les fenetres de l'addon
+--   HeadButton(parent, label) : bouton carre 16 px a contour dore (« ? », « x », « - »...)
+--   ScaleGrip(frame, get, set) : poignee en bas a droite ; glisser = echelle de la fenetre (coin haut-gauche fixe)
+------------------------------------------------------------------
+function HeadButton(parent, label)
+    local b = CreateFrame("Button", nil, parent); b:SetSize(16, 16)
+    Border(b, COL.accent, 0.6)
+    b.fs = FS(b, 11, COL.accent, FONT, "CENTER"); b.fs:SetPoint("CENTER", 0, 0); b.fs:SetText(label or "")
+    local h = Tex(b, COL.accent, 0.15, "HIGHLIGHT"); h:SetAllPoints()
+    b:SetScript("OnLeave", function() Tip():Hide() end)
+    return b
+end
+function ScaleGrip(frame, get, set)
+    local grip = CreateFrame("Button", nil, frame)
+    grip:SetSize(12, 12); grip:SetPoint("BOTTOMRIGHT", -1, 1)
+    if grip.SetFrameLevel and frame.GetFrameLevel then grip:SetFrameLevel((frame:GetFrameLevel() or 1) + 10) end
+    local gt = grip:CreateTexture(nil, "OVERLAY"); gt:SetAllPoints()
+    gt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    if gt.SetVertexColor then gt:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
+    local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetScript("OnMouseDown", function(self)
+        if (DB and DB.locked) or (InCombatLockdown and InCombatLockdown()) or not GetCursorPosition then return end
+        local s, left, top = frame:GetScale() or 1, frame:GetLeft(), frame:GetTop()
+        if not (left and top) then return end
+        local ui = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+        local w = (frame:GetWidth() or 300) * s
+        self.drag = { s = s, left = left * s, top = top * s, x0 = GetCursorPosition() / ui, w = w, ui = ui }
+        self:SetScript("OnUpdate", function()
+            local d = self.drag; if not d then return end
+            local sc = math.max(0.6, math.min(1.5, d.s * (d.w + GetCursorPosition() / d.ui - d.x0) / d.w))
+            frame:SetScale(sc); frame:ClearAllPoints(); frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", d.left / sc, d.top / sc)
+        end)
+    end)
+    grip:SetScript("OnMouseUp", function(self)
+        self:SetScript("OnUpdate", nil)
+        if not self.drag then return end
+        self.drag = nil
+        if set then set(math.floor((frame:GetScale() or 1) * 100 + 0.5) / 100) end
+    end)
+    grip:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("winResize"), 1, 1, 1, true); Tip():Show() end)
+    grip:SetScript("OnLeave", function() Tip():Hide() end)
+    if get and frame.SetScale then frame:SetScale(get() or 1) end
+    return grip
+end
+
+POPUP_HEAD = { WARPATH_DUNGEON = "popDungeon", WARPATH_DGSWITCH = "popDungeon", WARPATH_CHAIN = "popChain",
+               WARPATH_ZONEUP = "popZone", WARPATH_PROFS = "popProfs", WARPATH_WEAPON = "popWeapon", WARPATH_NEWS = "popNews" }
 do
     local dlg, cur, curName, answered, replacing
     local queue = {} -- une question a la fois : les suivantes attendent leur tour
@@ -881,10 +1056,16 @@ do
             if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
             else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
         end
-        dlg.head = FS(dlg, 10, COL.gold, FONT, "CENTER"); dlg.head:SetPoint("TOP", 0, -12)
+        -- v1.41 (uniformisation) : en-tete standard (34 px, losange rouge, titre a gauche, « x » = comme Echap)
+        local hbg = Tex(dlg, COL.panel or COL.bg, 1, "BORDER"); hbg:SetHeight(34); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
+        local hln = Tex(dlg, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -34); hln:SetPoint("TOPRIGHT", 0, -34)
+        local gem = Diamond(dlg, 8, COL.red); gem:SetPoint("LEFT", dlg, "TOPLEFT", 14, -17)
+        dlg.head = FS(dlg, 12, COL.white, FONT, "LEFT"); dlg.head:SetPoint("LEFT", dlg, "TOPLEFT", 30, -17)
         dlg.head:SetText(Caps("Oghoule's Warpath"))
-        dlg.rule = Divider(dlg, 340); dlg.rule:SetPoint("TOP", dlg.head, "BOTTOM", 0, -5)
-        dlg.text = FS(dlg, 12, COL.white, FONT, "LEFT"); dlg.text:SetPoint("TOP", dlg.rule, "BOTTOM", 0, -8); dlg.text:SetWidth(340)
+        local x = HeadButton(dlg, "x"); x:SetPoint("RIGHT", dlg, "TOPRIGHT", -6, -17)
+        x:SetScript("OnClick", function() finish("OnCancel", "escape") end)
+        dlg.rule = CreateFrame("Frame", nil, dlg); dlg.rule:SetSize(340, 1); dlg.rule:SetPoint("TOP", dlg, "TOP", 0, -36)
+        dlg.text = FS(dlg, 12, COL.white, FONT, "LEFT"); dlg.text:SetPoint("TOP", dlg.rule, "BOTTOM", 0, -12); dlg.text:SetWidth(340)
         if dlg.text.SetSpacing then dlg.text:SetSpacing(2) end
         dlg.buttons = {}
         for i = 1, 3 do
@@ -932,6 +1113,9 @@ do
         local text = d.text or "%s"
         if txt and text:find("%%s") then text = text:format(txt) end
         dlg.text:SetText(text)
+        -- v1.41 : titre propre a chaque question (« DONJON SUGGÉRÉ »...) au lieu de « OGHOULE'S WARPATH » partout
+        local hk = POPUP_HEAD[name]
+        dlg.head:SetText(Caps(hk and T(hk) or "Oghoule's Warpath"))
         local labels = { d.button1, d.button2, d.button3 }
         for i, b in ipairs(dlg.buttons) do b:SetText(labels[i] or ""); b:SetShown(labels[i] ~= nil) end
         if d.OnShow then pcall(d.OnShow, dlg) end
@@ -948,7 +1132,7 @@ do
         for _, b in ipairs(dlg.buttons) do
             if b:IsShown() then b:ClearAllPoints(); b:SetPoint("BOTTOMLEFT", dlg, "BOTTOM", x, 14); x = x + b:GetWidth() + 10 end
         end
-        local h = 12 + 12 + 5 + 10 + 8 + (dlg.text:GetStringHeight() or 40) + 16 + 24 + 14
+        local h = 36 + 12 + (dlg.text:GetStringHeight() or 40) + 18 + 24 + 14
         dlg:SetSize(math.max(380, total + 40), math.max(120, h))
         dlg:Show()
         if PlaySound and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPEN then pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPEN) end
@@ -1018,9 +1202,31 @@ local function QDetails(row)
     local ent = DgEntrance() or 0
     local lines = {}
     if row.later then lines[#lines + 1] = "|cff8c7f62" .. T("dgStartsIn") .. "|r  " .. StepText(row.acc) end
-    for j = ent + 1, #steps do
-        local s = steps[j]
-        if s.t == "do" and Applies(s) and HasQ(s, q) then lines[#lines + 1] = StepText(s); break end
+    -- v1.41 : quete dans ton journal : une ligne par objectif (monstre ou objet) avec son compteur, plutot que
+    -- le long texte de l'etape (« tue 7 Deviate Ravagers, 7 Deviate Vipers... »). Les objectifs finis sont grises.
+    local objLines = {}
+    if logById[q] ~= nil and C_QuestLog and C_QuestLog.GetQuestObjectives then
+        local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
+        if ok and type(objs) == "table" then
+            for _, o in ipairs(objs) do
+                local txt = type(o.text) == "string" and o.text or ""
+                if not (issecretvalue and issecretvalue(txt)) and txt ~= "" then
+                    -- « Deviate Ravager slain: 3/7 » -> nom a gauche, compteur a droite
+                    local name = txt:gsub("^%s*%d+/%d+%s*", ""):gsub(":?%s*%d+/%d+%s*$", ""):gsub("%s+slain$", ""):gsub("%s+tué[e]?s?$", "")
+                    local cnt = (o.numRequired and o.numRequired > 0) and ((o.numFulfilled or 0) .. "/" .. o.numRequired) or ""
+                    local col = o.finished and "|cff6f6450" or "|cffe6dcc8"
+                    objLines[#objLines + 1] = col .. name .. "|r" .. (cnt ~= "" and ("   " .. (o.finished and "|cff6f6450" or "|cffd6b866") .. cnt .. "|r") or "")
+                end
+            end
+        end
+    end
+    if #objLines > 0 then
+        lines[#lines + 1] = table.concat(objLines, "\n")
+    else
+        for j = ent + 1, #steps do
+            local s = steps[j]
+            if s.t == "do" and Applies(s) and HasQ(s, q) then lines[#lines + 1] = StepText(s); break end
+        end
     end
     if EST[q] and logById[q] == false then
         for _, dr in ipairs(Estimate({ q }, false).drops) do
@@ -1090,7 +1296,7 @@ function DungeonLogRender()
     DL.n = math.min(#list, 12)
     if #list > 12 then f.text:SetText("|cffd69a66" .. T("dgGroup") .. "|r\n|cff8c7f62" .. T("dgMore", #list - 12) .. "|r") end
     if #list == 0 then f.text:SetText(T("dgEmpty")); f.text:Show() end
-    f.skip:SetLabel(Caps(T("dgExit")))
+    SetSkip("dgExit")
     if ns.Targets then ns.Targets.Update(steps[current]) end
     Layout()
 end

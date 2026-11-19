@@ -57,7 +57,9 @@ do
         nTick = nTick + 1
         if nTick % 5 ~= 0 then return end
         local fr = f and rawget(f, "xph"); if not fr then return end
-        local want = DB and DB.xphLine ~= false
+        -- v1.41 : le pied n'est plus affiche (infos au survol de la barre de progression) ; on calcule quand meme
+        -- les valeurs (f.footInfo) pour l'infobulle
+        local want = DB ~= nil
         local lv, ss = rawget(f, "footLvl"), rawget(f, "footSess")
         sessT0 = sessT0 or now()
         local cur, mx = UnitXP and UnitXP("player") or 0, UnitXPMax and UnitXPMax("player") or 1
@@ -68,17 +70,13 @@ do
         if want and lv and ss then
             -- pied : niveau | XP/h actif | temps avant le niveau suivant (au rythme actif)
             lv:SetText(T("footLvl", lvl, math.floor((cur or 0) * 100 / math.max(1, mx or 1))))
-            fr:SetText(T("footXph", rate > 0 and FormatNum(math.floor(rate)) or "—"))
+            -- v1.41 (audit) : sans donnees encore (debut de seance), « calcul… » au lieu de « — XP/h » et « Niv. 25 dans — »
+            fr:SetText(rate > 0 and T("footXph", FormatNum(math.floor(rate))) or T("footCalc"))
             local left = (mx or 0) - (cur or 0)
-            ss:SetText(rate > 0 and T("footNext", lvl + 1, FmtDur and FmtDur(left / rate * 3600) or (math.floor(left / rate * 60 + 0.5) .. " min")) or T("footNext", lvl + 1, "—"))
+            ss:SetText(rate > 0 and T("footNext", lvl + 1, FmtDur and FmtDur(left / rate * 3600) or (math.floor(left / rate * 60 + 0.5) .. " min")) or "")
             -- detail au survol du pied
-            f.footInfo = { rate = rate, active = dur(sessA), wallRate = wall > 60 and sessXP * 3600 / wall or 0, wall = dur(wall), xp = sessXP }
-        elseif want then
-            fr:SetText(Caps(T("jrBar", FormatNum(math.floor(rate)), dur(sessA))))
-        end
-        if (fr:IsShown() and true or false) ~= (want and true or false) then
-            fr:SetShown(want and true or false)
-            if Layout then pcall(Layout) end
+            f.footInfo = { rate = rate, active = dur(sessA), wallRate = wall > 60 and sessXP * 3600 / wall or 0, wall = dur(wall), xp = sessXP,
+                           lvl = lv:GetText(), xph = fr:GetText(), nxt = ss:GetText() }
         end
     end
 

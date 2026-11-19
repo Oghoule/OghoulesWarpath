@@ -210,6 +210,13 @@ do
         if not DB or DB.wmSeen or asking or PopupVisible() then return end
         local here = PlayerPos and select(1, PlayerPos())
         if not (here and CAPS[here]) then return end
+        -- v1.41 : plus de question pour le maitre d'armes, l'Intendance s'en charge : une seule ligne dans le chat
+        -- pour la faire connaitre (premiere capitale au-dessus du niveau 15, ou l'Intendance n'est pas proposee)
+        if QMOpen then
+            DB.wmSeen = true
+            if not DB.qmHint then DB.qmHint = true; say(T("qmHint")) end
+            return
+        end
         local list = {}
         for _, e in ipairs((ns.ClassTrainers or {}).WEAPON or {}) do if e[1] == here then list[#list + 1] = e end end
         local e = NearestTrainer(#list > 0 and list or (ns.ClassTrainers or {}).WEAPON)
@@ -352,7 +359,13 @@ do
     fr:SetScript("OnEvent", function(_, e)
         if not DB then return end
         if e == "SKILL_LINES_CHANGED" or e == "TRADE_SKILL_SHOW" then ProfDetect(true); return end
-        local function go() pcall(CheckProfIntro); pcall(CheckProfQuests); pcall(CheckWeaponMaster) end
+        local function go()
+            -- Intendance (premiere capitale, niveau 15 max) : elle inclut le maitre d'armes, donc pas de 2e question
+            local ok, qm = pcall(function() return CheckQuartermaster and CheckQuartermaster() end)
+            if ok and qm then return end
+            pcall(CheckProfIntro); pcall(CheckProfQuests)
+            if not (DB.qm or DB.qmPick) then pcall(CheckWeaponMaster) end
+        end
         if C_Timer and C_Timer.After then C_Timer.After(4, go) else go() end
     end)
 end

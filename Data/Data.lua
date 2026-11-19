@@ -88,7 +88,8 @@ D.TRANSPORTS = {
 -- Passages a pied entre zones (estimations ; l'addon apprend les vrais passages quand tu les traverses).
 -- m,x,y : position sur une des deux cartes ; z : les deux zones reliees ; cost : surcout (ascenseur, etc.)
 D.GATES = {
-    { m = 1412, x = 36.8, y = 36.5, z = { 1456, 1412 }, cost = 40 },   -- ascenseurs de Thunder Bluff
+    -- ascenseurs de Thunder Bluff ; inner = le haut de l'ascenseur, vise quand tu sors de la ville (releve en jeu le 2026-11-18)
+    { m = 1412, x = 36.8, y = 36.5, z = { 1456, 1412 }, cost = 40, inner = { 1456, 31.9, 62.5 } },
     { m = 1413, x = 38.6, y = 58.8, z = { 1412, 1413 } },              -- route Mulgore -> Barrens (Camp Taurajo)
     { m = 1411, x = 34.4, y = 42.4, z = { 1413, 1411 } },              -- pont de la Southfury
     { m = 1411, x = 45.6, y = 11.5, z = { 1411, 1454 } },              -- porte d'Orgrimmar
@@ -101,6 +102,17 @@ D.GATES = {
     { m = 1420, x = 61.9, y = 65.0, z = { 1420, 1458 }, cost = 40 },   -- entree d'Undercity
     { m = 1421, x = 67.5, y = 6.0, z = { 1420, 1421 } },               -- Tirisfal -> Silverpine
     { m = 1424, x = 14.0, y = 46.5, z = { 1421, 1424 } },              -- Silverpine -> Hillsbrad
+}
+
+-- Grottes dans les villes (v1.41) : PNJ a l'interieur ; la fleche vise l'entree tant que tu es dehors.
+-- npcs = noms exacts (Intendance) ; at = positions des PNJ (etapes du guide). Entree relevee en jeu (2026-11-18).
+-- /warpath passage grotte remplace l'entree par ta position (WarpathDropDB._cityCave).
+D.CITYCAVES = {
+    { m = 1456, x = 28.7, y = 25.8, name = "Pools of Vision",
+      npcs = { "Apothecary Zamah", "Archmage Shymm", "Ursyn Ghull", "Thurston Xane", "Alodan the Hopeful",
+               "Miles Welsh", "Malakai Cross", "Father Cobb" },
+      at = { { 22.8, 20.9 }, { 22.8, 14.5 }, { 25.7, 14.2 }, { 25.2, 21.0 }, { 25.4, 14.7 }, { 25.3, 15.3 },
+             { 24.6, 22.6 }, { 25.6, 20.7 } } },
 }
 
 D.FLIGHTS = {

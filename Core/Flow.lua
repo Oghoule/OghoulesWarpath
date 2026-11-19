@@ -68,7 +68,7 @@ function ScheduleAdvance()
         C_Timer.After(0.25, function()
             pending = false
             local ok, err = pcall(Advance)
-            if not ok and not errShown then errShown = true; say(T("errInternal", tostring(err))) end
+            if not ok and not errShown then errShown = true; say(T("errInternal", tostring(err)), "error") end
         end)
     else
         pending = false
@@ -245,10 +245,33 @@ function OnInstanceChange()
         local solo = (GetNumGroupMembers and GetNumGroupMembers() or 0) <= 1
         if allDone or solo then
             DB.dgOut = DB.dgOut or {}; DB.dgOut[DB.guide] = true
-            say(T("dgAutoOut"))
+            say(T("dgAutoOut"), true)
         end
     end
     wasIn = false
+    pcall(CheckDungeonLeft)
+end
+
+-- v1.41 : sortie du donjon jamais notee (sortie en groupe avec une quete pas finie, ou deconnexion dans
+-- l'instance) : des que tu es dehors, vivant, a plus de 300 m de l'entree, le journal se ferme et le guide
+-- passe aux remises. Seulement si tu es deja entre : le ramassage des quetes (partout) n'est pas touche.
+-- Si tu y retournes, le journal revient tout seul (OnInstanceChange).
+DG_LEFT_DIST = 300
+function CheckDungeonLeft()
+    if not (DB and steps and IS_DUNGEON[DB.guide]) then return end
+    if not (DB.dgIn and DB.dgIn[DB.guide]) or (DB.dgOut and DB.dgOut[DB.guide]) then return end
+    if IsInInstance and IsInInstance() then return end
+    if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then return end
+    local s
+    for j = 1, #steps do if steps[j].t == "go" then s = steps[j]; break end end   -- etape d'entree du donjon
+    if not (s and s.m and s.x) then return end
+    local me, w = PlayerWP(), WP(s.m, s.x, s.y)
+    if not me then return end
+    if w and me[3] == w[3] and Dist(me[1], me[2], w[1], w[2]) <= DG_LEFT_DIST then return end
+    DB.dgOut = DB.dgOut or {}; DB.dgOut[DB.guide] = true
+    say(T("dgAutoOut"), true)
+    lastWP = nil
+    pcall(Advance); Refresh(true)
 end
 
 function StartDungeon(key)
@@ -534,7 +557,17 @@ function Ignore()
     focus = nil
     if s.id then
         local names = {}
-        for _, id in ipairs(Ids(s)) do
+        -- v1.41 : prise groupee dont une partie est deja dans ton journal : OK n'ignore que les quetes pas prises
+        -- (avant, il ignorait tout, et les etapes Faire/Rendre des quetes prises disparaissaient aussi)
+        local ids = Ids(s)
+        if s.t == "accept" and #ids > 1 then
+            local missing = {}
+            for _, id in ipairs(ids) do
+                if logById[id] == nil and not Rendue(id) and not DB.ignored[id] then missing[#missing + 1] = id end
+            end
+            if #missing > 0 and #missing < #ids then ids = missing end
+        end
+        for _, id in ipairs(ids) do
             DB.ignored[id] = true
             names[#names + 1] = tostring(id)
         end

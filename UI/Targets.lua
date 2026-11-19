@@ -9,6 +9,7 @@ if setfenv then setfenv(1, _ENV) end
 -- la liste se met a jour des la fin du combat.
 do
     local MAX, W, RH = 8, 190, 18
+    local HDR = 26   -- hauteur de l'en-tete (v1.41)
     local ICON = {
         fly    = "Interface\\Minimap\\Tracking\\FlightMaster",
         giver  = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoAccept",
@@ -16,8 +17,8 @@ do
         mob    = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoDo",
         use    = "Interface\\CURSOR\\Interact",
         talk   = "Interface\\CURSOR\\Speak",
-        inn    = "Interface\\Minimap\\Tracking\\Innkeeper",
-        buy    = "Interface\\GossipFrame\\VendorGossipIcon",
+        inn    = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoInn",    -- v1.41 : icones de l'addon (avant : celles du jeu)
+        buy    = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoShop",
     }
     local panel, title, rows = nil, nil, {}
     local lastDock
@@ -27,7 +28,7 @@ do
         if panel then return end
         panel = CreateFrame("Frame", "WarpathTargets", UIParent)
         W = math.max(140, math.min(420, tonumber(DB.tgtW) or W))
-        panel:SetSize(W, 16 + RH)
+        panel:SetSize(W, HDR + 6 + RH)
         panel:SetFrameStrata("MEDIUM")
         panel:SetClampedToScreen(true)
         local p = DB.tgtPos
@@ -37,7 +38,17 @@ do
         local bg = Tex(panel, COL.bg, 0.85, "BACKGROUND"); bg:SetAllPoints()
         local top = Tex(panel, COL.line); top:SetHeight(1); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT")
         local bot = Tex(panel, COL.line); bot:SetHeight(1); bot:SetPoint("BOTTOMLEFT"); bot:SetPoint("BOTTOMRIGHT")
-        title = FS(panel, 9, COL.gold, FONT, "LEFT"); title:SetPoint("TOPLEFT", 6, -3)
+        -- v1.41 (uniformisation) : en-tete fin (26 px) comme les autres fenetres : bande, losange rouge, titre, « ? »
+        local hbg = Tex(panel, COL.panel or COL.bg, 1, "BORDER"); hbg:SetHeight(HDR); hbg:SetPoint("TOPLEFT", 0, -1); hbg:SetPoint("TOPRIGHT", 0, -1)
+        local hln = Tex(panel, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -HDR); hln:SetPoint("TOPRIGHT", 0, -HDR)
+        local gem = Diamond(panel, 7, COL.red); gem:SetPoint("LEFT", panel, "TOPLEFT", 10, -HDR / 2)
+        title = FS(panel, 10, COL.white, FONT, "LEFT"); title:SetPoint("LEFT", panel, "TOPLEFT", 22, -HDR / 2)
+        local help = HeadButton(panel, "?"); help:SetPoint("RIGHT", panel, "TOPRIGHT", -5, -HDR / 2)
+        help:SetScript("OnEnter", function(self)
+            Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("helpHead"))
+            for k = 1, 4 do Tip():AddLine("|cffccba8f" .. T("tgtHelpK" .. k) .. "|r  " .. T("tgtHelpV" .. k), 1, 1, 1, true) end
+            Tip():Show()
+        end)
         panel:EnableMouse(true); panel:SetMovable(true); panel:RegisterForDrag("LeftButton")
         panel:SetScript("OnDragStart", function(self) if not DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving() end end)
         panel:SetScript("OnDragStop", function(self)
@@ -70,7 +81,7 @@ do
             local b = CreateFrame("Button", "WarpathTarget" .. i, panel, "SecureActionButtonTemplate")
             -- largeur liee a celle de la fenetre (ancres gauche et droite) : rien a recalculer quand on l'elargit
             b:SetHeight(RH)
-            b:SetPoint("TOPLEFT", 4, -14 - (i - 1) * RH); b:SetPoint("TOPRIGHT", -4, -14 - (i - 1) * RH)
+            b:SetPoint("TOPLEFT", 4, -HDR - 3 - (i - 1) * RH); b:SetPoint("TOPRIGHT", -4, -HDR - 3 - (i - 1) * RH)
             b:RegisterForClicks("AnyUp", "AnyDown")
             b:SetAttribute("type", "macro")
             local hl = Tex(b, COL.accent, 0.12, "HIGHLIGHT"); hl:SetAllPoints()
@@ -235,7 +246,7 @@ do
                 b:SetAttribute("macrotext", nil); b:Hide()
             end
         end
-        panel:SetHeight(16 + #L * RH)
+        panel:SetHeight(HDR + 6 + #L * RH)
         panel:Show()
         lastDock = nil; Dock()
     end
@@ -248,6 +259,8 @@ do
         -- mode compact (v1.40) : collee sous la petite fenetre
         local mini = _G.WarpathMini
         if mini and mini.IsShown and mini:IsShown() then f = mini end
+        local qm = _G.WarpathQuartermaster   -- Intendance (v1.41)
+        if qm and qm.IsShown and qm:IsShown() then f = qm end
         if not (f and f:IsShown() and f:GetLeft()) then return end
         local sc, l, b, w = f:GetScale(), f:GetLeft(), f:GetBottom(), f:GetWidth()
         local key = sc .. ":" .. math.floor(l) .. ":" .. math.floor(b) .. ":" .. math.floor(w)

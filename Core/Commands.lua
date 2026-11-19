@@ -28,6 +28,8 @@ SlashCmdList["WARPATH"] = function(msg)
         ShowGuide(DB.shown == false)
     elseif cmd == "compact" or cmd == "mini" then
         ToggleMini()
+    elseif cmd == "intendance" or cmd == "quartermaster" or cmd == "qm" then
+        if arg == "stop" or arg == "quitter" or arg == "quit" then QMQuit() else QMOpen() end
     elseif cmd == "skip" or cmd == "ignore" then
         Ignore()
     elseif cmd == "unskip" then
@@ -230,6 +232,17 @@ end
 ------------------------------------------------------------------
 -- Raccourcis clavier (Echap > Raccourcis > AddOns > Oghoule's Warpath) : voir Bindings.xml
 ------------------------------------------------------------------
+-- v1.41 : pendant une commande /warpath, les messages s'affichent toujours (meme si le chat est reduit)
+do
+    local raw = SlashCmdList["WARPATH"]
+    SlashCmdList["WARPATH"] = function(msg)
+        inCommand = true
+        local ok, err = pcall(raw, msg)
+        inCommand = false
+        if not ok then say(T("errInternal", tostring(err)), "error") end
+    end
+end
+
 _G.BINDING_HEADER_WARPATH = "Oghoule's Warpath"
 _G.BINDING_NAME_WARPATH_OK = "Valider / passer l'étape"
 _G.BINDING_NAME_WARPATH_PREV = "Voir l'étape précédente"
@@ -253,6 +266,8 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.41", fr = "Intendance : en capitale, choisis tes arrêts (entraîneur de classe, maître d'armes, tes métiers et les autres, banque, aubergiste, hôtel des ventes, maître de vol). L'addon les met dans l'ordre le plus court, la flèche les enchaîne et chaque arrêt se coche quand tu parles au PNJ. Proposée à ta première arrivée dans une capitale (jusqu'au niveau 15), ensuite avec le bouton « Intendance » dans l'en-tête de la fenêtre ou /warpath intendance. Le mode compact marche aussi en donjon (les quêtes du donjon et leur progression). Donjons : le journal se ferme tout seul quand tu es loin de l'entrée (avant, il pouvait rester affiché partout après une sortie en groupe). Prises groupées : la fenêtre dit quelles quêtes manquent, et OK ne saute que celles-là. Corrigé : messages « action bloquée par le jeu » (SetHeight, SetShown, Hide) en combat, causés par le bouton de la pierre de foyer. Le conseil de pierre de foyer se met à jour quand tu te déplaces (il pouvait proposer de rentrer à l'auberge où tu étais déjà). Aussi : une victoire JcJ ne compte plus en double ; le vol automatique marche avec escale ; fenêtres compacte et normale au même endroit ; journal de donjon : une ligne par objectif au clic ; Thunder Bluff : la flèche passe par l'entrée des Pools of Vision et par le haut de l'ascenseur ; /warpath passage ville et /warpath passage grotte ; plus de question pour le maître d'armes (l'Intendance s'en charge) ; titres propres à chaque question ; Trouble at the Docks retirée du guide de Wailing Caverns. Fenêtre allégée : la chaîne et les quêtes bloquées deviennent deux pastilles (détail au survol), « À suivre » montre 2 étapes (+ pour déplier), le lieu tient sur 2 lignes (coordonnées au survol), la hauteur suit le contenu ; le mode compact a son en-tête (nom de la quête, clic = journal) et sa poignée de taille. Réglage « Messages du chat » (tous, importants, aucun). Bouton « ? » : les raccourcis. Les nouveautés s'annoncent dans un bandeau. Icônes de l'addon partout (pierre de foyer, auberge, marchand, cases cochées, bouton du bas). Textes plus lisibles (11 px minimum). Plus de pied : niveau et XP/h au survol de la barre de progression. Toutes les fenêtres ont le même en-tête (options, ciblage, questions, signalement, Intendance), avec « ? » et poignée de taille là où c'est utile ; options réorganisées en sections.",
+      en = "Quartermaster: in a capital city, pick your stops (class trainer, weapon master, your professions and the others, bank, innkeeper, auction house, flight master). The addon puts them in the shortest order, the arrow chains them and each stop is ticked when you talk to the NPC. Offered on your first arrival in a capital (up to level 15), then with the \"Quartermaster\" button in the window header or /warpath quartermaster. Compact mode now also works in dungeons (the dungeon quests and their progress). Dungeons: the dungeon log closes by itself once you are far from the entrance (it could stay up everywhere after leaving in a group). Grouped pick-ups: the window says which quests are missing, and OK skips only those. Fixed: \"action blocked by the game\" messages (SetHeight, SetShown, Hide) in combat, caused by the Hearthstone button. The Hearthstone tip updates as you move (it could suggest going back to the inn you were already at). Also: a PvP kill is no longer counted twice; auto-fly works with stopovers; compact and full windows share the same spot; dungeon log: one line per objective when expanded; Thunder Bluff: the arrow goes through the Pools of Vision entrance and the top of the elevator; /warpath passage city and /warpath passage cave; no more weapon master question (the Quartermaster handles it); each question has its own title; Trouble at the Docks removed from the Wailing Caverns guide. Lighter window: the chain and locked quests become two small chips (details on hover), \"Coming up\" shows 2 steps (+ to expand), the place fits on 2 lines (coordinates on hover), the height follows the content; compact mode has its own header (quest name, click = quest log) and resize grip. \"Chat messages\" setting (all, important, none). \"?\" button: the shortcuts. What's new shows up as a banner. Addon icons everywhere (Hearthstone, inn, vendor, checked boxes, bottom button). More readable text (11 px minimum). No more footer: level and XP/h on hover over the progress bar. Every window shares the same header (options, targeting, questions, bug report, Quartermaster), with \"?\" and a resize grip where useful; options reorganized into sections." },
     { v = "1.40", fr = "Mode compact : le « - » en haut à droite de la fenêtre (ou /warpath compact, ou un raccourci clavier) ne garde que les objectifs de l'étape avec leur compteur, ou une seule ligne pour prendre ou rendre une quête. Le « + » ramène la fenêtre complète. La fenêtre complète s'agrandit ou se réduit avec la poignée en bas à droite.",
       en = "Compact mode: the \"-\" at the top right of the window (or /warpath compact, or a key binding) keeps only the step's objectives with their counters, or a single line to pick up or turn in a quest. The \"+\" brings back the full window. The full window grows or shrinks with the grip at the bottom right." },
     { v = "1.39", fr = "Vols : l'addon ne croit plus connaître des points de vol jamais découverts (trajets faux, ex. Sun Rock) et apprend un vol dès que tu le découvres. Le bouton du maître d'armes et les repères d'entraîneurs dirigent maintenant la flèche (puis retour au guide une fois sur place). Orgrimmar, Thunder Bluff et Undercity : la flèche passe par la porte au lieu d'aller à vol d'oiseau.",
@@ -422,6 +437,13 @@ function ShowNews(all)
     if n == 0 then return false end
     if more > 0 and not all then lines[#lines + 1] = "|cff8c7f62" .. T("newsMore", more) .. "|r" end
     StaticPopupDialogs["WARPATH_NEWS"] = { text = "%s", button1 = T("newsOk"), timeout = 0, whileDead = true, hideOnEscape = true }
+    -- v1.41 (audit) : apres une mise a jour, un bandeau discret (10 s) plutot qu'une fenetre ; clic = le detail.
+    -- /warpath news ouvre toujours la fenetre complete.
+    if not all and Toast then
+        local txt = T("newsHead", VERSION) .. "\n\n" .. table.concat(lines, "\n\n")
+        Toast(T("popNews"), T("newsToast", VERSION), function() Popup("WARPATH_NEWS", txt) end)
+        return true
+    end
     Popup("WARPATH_NEWS", T("newsHead", VERSION) .. "\n\n" .. table.concat(lines, "\n\n"))
     return true
 end
@@ -458,10 +480,17 @@ do
                 if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
                 else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
             end
-            win.head = FS(win, 10, COL.gold, FONT, "CENTER"); win.head:SetPoint("TOP", 0, -12)
-            win.sub = FS(win, 11, COL.soft, FONT, "LEFT"); win.sub:SetPoint("TOPLEFT", 16, -32); win.sub:SetWidth(348)
+            -- v1.41 (uniformisation) : en-tete standard (34 px, losange rouge, titre a gauche, « x »)
+            win:SetHeight(264)
+            local hbg = Tex(win, COL.panel or COL.bg, 1, "BORDER"); hbg:SetHeight(34); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
+            local hln = Tex(win, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -34); hln:SetPoint("TOPRIGHT", 0, -34)
+            local gem = Diamond(win, 8, COL.red); gem:SetPoint("LEFT", win, "TOPLEFT", 14, -17)
+            win.head = FS(win, 12, COL.white, FONT, "LEFT"); win.head:SetPoint("LEFT", win, "TOPLEFT", 30, -17)
+            local x = HeadButton(win, "x"); x:SetPoint("RIGHT", win, "TOPRIGHT", -6, -17)
+            x:SetScript("OnClick", function() win:Hide() end)
+            win.sub = FS(win, 11, COL.soft, FONT, "LEFT"); win.sub:SetPoint("TOPLEFT", 16, -46); win.sub:SetWidth(348)
             local box = CreateFrame("EditBox", nil, win)
-            box:SetPoint("TOPLEFT", 16, -70); box:SetPoint("BOTTOMRIGHT", -16, 46)
+            box:SetPoint("TOPLEFT", 16, -84); box:SetPoint("BOTTOMRIGHT", -16, 46)
             box:SetMultiLine(true); box:SetAutoFocus(true); box:SetMaxLetters(600)
             if box.SetFontObject then box:SetFontObject(ChatFontNormal) end
             if box.SetFont then pcall(box.SetFont, box, FONT, 12, "") end

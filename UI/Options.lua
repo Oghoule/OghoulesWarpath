@@ -143,9 +143,11 @@ local function CreateOptions()
     local bg = Tex(opt, COL.bg, 0.95, "BACKGROUND"); bg:SetAllPoints()
     K.Border(opt, COL.line, 0.8, "BORDER")
     -- en-tete comme la fenetre du guide : bande plus claire, losange rouge, nom a gauche
-    local hbg = Tex(opt, COL.panel, 0.95, "BORDER"); hbg:SetHeight(56); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
-    local hln = Tex(opt, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -56); hln:SetPoint("TOPRIGHT", 0, -56)
-    local hgem = Diamond(opt, 9, COL.red); hgem:SetPoint("LEFT", opt, "TOPLEFT", 22, -28)
+    -- v1.41 (uniformisation) : en-tete standard de 34 px, comme le guide
+    local HH = 34
+    local hbg = Tex(opt, COL.panel, 0.95, "BORDER"); hbg:SetHeight(HH); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
+    local hln = Tex(opt, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -HH); hln:SetPoint("TOPRIGHT", 0, -HH)
+    local hgem = Diamond(opt, 8, COL.red); hgem:SetPoint("LEFT", opt, "TOPLEFT", 14, -HH / 2)
     opt:SetMovable(true)
     opt:EnableMouse(true)
     opt:RegisterForDrag("LeftButton")
@@ -155,12 +157,16 @@ local function CreateOptions()
     opt:Hide()
     if UISpecialFrames then table.insert(UISpecialFrames, "WarpathOptions") end
 
-    local close = FlatButton(opt, 28, 28, function() opt:Hide() end)
-    close:SetPoint("TOPRIGHT", -14, -14); close:SetLabel("x")
+    -- fermer : petit bouton carre 16 px, comme le « - » du guide
+    local close = K.HeadButton(opt, "x")
+    close:SetPoint("RIGHT", opt, "TOPRIGHT", -6, -HH / 2)
+    close:SetScript("OnClick", function() opt:Hide() end)
 
-    local name = FS(opt, 14, COL.white, FONT, "LEFT")
-    name:SetPoint("LEFT", opt, "TOPLEFT", 40, -28)
-    optRows[#optRows + 1] = function() name:SetText(Caps(E.WarpathName())) end
+    local name = FS(opt, 12, COL.white, FONT, "LEFT")
+    name:SetPoint("LEFT", opt, "TOPLEFT", 30, -HH / 2)
+    optRows[#optRows + 1] = function() name:SetText(Caps(E.WarpathName() .. " · " .. T("optTitle"))) end
+    -- poignee : taille de la fenetre d'options (a part de celle du guide)
+    K.ScaleGrip(opt, function() return DB.optScale or 1 end, function(v) DB.optScale = v end)
     local ver = FS(opt, 9, COL.faint, FONT, "LEFT"); ver:SetPoint("BOTTOMLEFT", 24, 16)
     ver:SetText(Caps("Oghoule's Warpath") .. "   v" .. VERSION)
     if ver.SetTextColor then ver:SetTextColor(COL.line[1], COL.line[2], COL.line[3]) end
@@ -221,12 +227,12 @@ local function CreateOptions()
     local TABS = { "tabCampaign", "tabDungeons", "tabClass", "tabStyle", "tabRoute", "tabDisplay", "tabAuto", "tabProf" }
     local ORDER = { 1, 4, 2, 3, 8, 5, 7, 6 }
     local navLine = Tex(opt, COL.faint); navLine:SetWidth(1)
-    navLine:SetPoint("TOPLEFT", NAVW + 10, -80); navLine:SetPoint("BOTTOMLEFT", NAVW + 10, 34)
+    navLine:SetPoint("TOPLEFT", NAVW + 10, -58); navLine:SetPoint("BOTTOMLEFT", NAVW + 10, 34)
     for pos, k in ipairs(ORDER) do
         local key = TABS[k]
         local tb = CreateFrame("Button", nil, opt)
         tb:SetSize(NAVW - 20, 32)
-        tb:SetPoint("TOPLEFT", 20, -84 - (pos - 1) * 36)
+        tb:SetPoint("TOPLEFT", 20, -62 - (pos - 1) * 36)
         tb.sel = Tex(tb, COL.panel, 1, "BACKGROUND"); tb.sel:SetAllPoints()
         local hl = Tex(tb, COL.accent, 0.06, "HIGHLIGHT"); hl:SetAllPoints()
         tb.fs = FS(tb, 10, COL.gold, FONT, "LEFT"); tb.fs:SetPoint("LEFT", 14, 0)
@@ -240,7 +246,7 @@ local function CreateOptions()
         tb:SetScript("OnLeave", function() E.Tip():Hide() end)
         tabs[k] = tb
         local pg = CreateFrame("Frame", nil, opt)
-        pg:SetPoint("TOPLEFT", NAVW + 30, -84)
+        pg:SetPoint("TOPLEFT", NAVW + 30, -62)
         pg:SetPoint("BOTTOMRIGHT", -OPAD, 34)
         pages[k] = pg
     end
@@ -515,78 +521,79 @@ local function CreateOptions()
 
     -- 3. Itineraire
     do
+        -- v1.41 (audit, point 8) : trois sections : Fleche · Trajets et vols · Ciblage
         local pg = pages[5]
-        local h = SmallHeader(pg, "tabRoute"); h:SetPoint("TOPLEFT", 0, 0)
-        local a = CheckRow(pg, CW, "arrow", function() return DB.wp end,
-            function(v) DB.wp = v; if not v then ClearWaypoint() end; E.ResetWP(); Refresh(true) end)
-        a:SetPoint("TOPLEFT", 0, -18)
-        local fl = CheckRow(pg, CW, "useFlights", function() return DB.useFlights ~= false end,
-            function(v) DB.useFlights = v; E.ResetWP(); Refresh(true) end)
-        fl:SetPoint("TOPLEFT", 0, -18 - ROW_H)
-        local mk = CheckRow(pg, CW, "targets", function() return DB.targets ~= false end, function(v) DB.targets = v; if ns.Targets then ns.Targets.Refresh() end end)
-        mk:SetPoint("TOPLEFT", 0, -18 - 2 * ROW_H)
-        local legend = FS(pg, 10, COL.gold, FONT, "LEFT"); legend:SetWidth(CW - 22)
-        legend:SetPoint("TOPLEFT", 22, -18 - 3 * ROW_H)
+        local y = 0
+        local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
+        local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
+        -- FLECHE
+        sec("secArrow")
+        row(CheckRow(pg, CW, "arrow", function() return DB.wp end,
+            function(v) DB.wp = v; if not v then ClearWaypoint() end; E.ResetWP(); Refresh(true) end))
+        row(CheckRow(pg, CW, "arrowOwn", function() return DB.ownArrow ~= false end,
+            function(v) DB.ownArrow = v; E.PlaceWaypointAgain() end))
+        row(CheckRow(pg, CW, "gameWP", function() return DB.gameWP ~= false end,
+            function(v) DB.gameWP = v; E.PlaceWaypointAgain() end))
+        row(CheckRow(pg, CW, "mmPin", function() return DB.mmPin ~= false end, function(v) DB.mmPin = v end))
+        local sl = FS(pg, 10, COL.gold, FONT, "LEFT"); sl:SetPoint("TOPLEFT", 0, y - 8)
+        Loc(function() sl:SetText(Caps(T("arrowScale"))) end)
+        local sv = FS(pg, 11, COL.white, FONT, "CENTER"); sv:SetWidth(60); sv:SetPoint("TOPLEFT", 216, y - 8)
+        local function setS(d) DB.arrowScale = math.max(0.6, math.min(1.6, (DB.arrowScale or 1) + d)); RefreshOptions() end
+        local m1 = FlatButton(pg, 28, 24, function() setS(-0.1) end); m1:SetPoint("TOPLEFT", 180, y - 2); m1:SetLabel("-")
+        local p1 = FlatButton(pg, 28, 24, function() setS(0.1) end); p1:SetPoint("TOPLEFT", 284, y - 2); p1:SetLabel("+")
+        local rs = FlatButton(pg, 200, 24, function() if ns.Arrow then ns.Arrow.Reset() end end)
+        rs:SetPoint("TOPLEFT", 330, y - 2)
+        Loc(function() rs:SetLabel(Caps(T("arrowReset"))) end)
+        if rs.fs.SetFont then rs.fs:SetFont(FONT, 9, "") end
+        optRows[#optRows + 1] = function() sv:SetText(math.floor((DB.arrowScale or 1) * 100 + 0.5) .. " %") end
+        y = y - 40
+        -- TRAJETS ET VOLS
+        sec("secTrips")
+        row(CheckRow(pg, CW, "useFlights", function() return DB.useFlights ~= false end,
+            function(v) DB.useFlights = v; E.ResetWP(); Refresh(true) end))
+        row(CheckRow(pg, CW, "hearthTips", function() return DB.hearthTips ~= false end,
+            function(v) DB.hearthTips = v; Refresh(true) end))
+        local BW2 = math.floor((CW - 12) / 2)
+        local rc = FlatButton(pg, BW2, 28, function() SlashCmdList.WARPATH("now") end)
+        rc:SetPoint("TOPLEFT", 0, y - 4)
+        Loc(function() rc:SetLabel(Caps(T("recalc"))) end)
+        local un = FlatButton(pg, BW2, 28, function() SlashCmdList.WARPATH("unskip all") end)
+        un:SetPoint("TOPLEFT", BW2 + 12, y - 4)
+        Loc(function() un:SetLabel(Caps(T("unignore"))) end)
+        if un.fs.SetFont then un.fs:SetFont(FONT, 9, ""); rc.fs:SetFont(FONT, 9, "") end
+        y = y - 48
+        -- CIBLAGE
+        sec("secTargeting")
+        row(CheckRow(pg, CW, "targets", function() return DB.targets ~= false end, function(v) DB.targets = v; if ns.Targets then ns.Targets.Refresh() end end))
+        local legend = FS(pg, 11, COL.gold, FONT, "LEFT"); legend:SetWidth(CW - 22)
+        legend:SetPoint("TOPLEFT", 22, y)
         Loc(function()
             local function ico(n, r, g, b) return string.format("|TInterface\\AddOns\\OghoulesWarpath\\Media\\%s:12:12:0:0:32:32:0:32:0:32:%d:%d:%d|t", n, r, g, b) end
             legend:SetText(T("tgtLegend", ico("IcoAccept", 214, 184, 102), ico("IcoTurnin", 156, 199, 168),
                 ico("IcoDo", 205, 187, 142), "|TInterface\\Minimap\\Tracking\\FlightMaster:12|t"))
         end)
-        local BW2 = math.floor((CW - 12) / 2)
-        local rc = FlatButton(pg, BW2, 28, function() SlashCmdList.WARPATH("now") end)
-        rc:SetPoint("TOPLEFT", 0, -18 - 4 * ROW_H - 18)
-        Loc(function() rc:SetLabel(Caps(T("recalc"))) end)
-        local un = FlatButton(pg, BW2, 28, function() SlashCmdList.WARPATH("unskip all") end)
-        un:SetPoint("TOPLEFT", BW2 + 12, -18 - 4 * ROW_H - 18)
-        Loc(function() un:SetLabel(Caps(T("unignore"))) end)
-        if un.fs.SetFont then un.fs:SetFont(FONT, 9, ""); rc.fs:SetFont(FONT, 9, "") end
-        -- fleche de l'addon
-        local ay = -18 - 4 * ROW_H - 18 - 28 - 22
-        local ao = CheckRow(pg, CW, "arrowOwn", function() return DB.ownArrow ~= false end,
-            function(v) DB.ownArrow = v; E.PlaceWaypointAgain() end)
-        ao:SetPoint("TOPLEFT", 0, ay)
-        local sl = FS(pg, 10, COL.gold, FONT, "LEFT"); sl:SetPoint("TOPLEFT", 0, ay - ROW_H - 8)
-        Loc(function() sl:SetText(Caps(T("arrowScale"))) end)
-        local sv = FS(pg, 11, COL.white, FONT, "CENTER"); sv:SetWidth(60); sv:SetPoint("TOPLEFT", 216, ay - ROW_H - 8)
-        local function setS(d) DB.arrowScale = math.max(0.6, math.min(1.6, (DB.arrowScale or 1) + d)); RefreshOptions() end
-        local m1 = FlatButton(pg, 28, 24, function() setS(-0.1) end); m1:SetPoint("TOPLEFT", 180, ay - ROW_H - 2); m1:SetLabel("-")
-        local p1 = FlatButton(pg, 28, 24, function() setS(0.1) end); p1:SetPoint("TOPLEFT", 284, ay - ROW_H - 2); p1:SetLabel("+")
-        local rs = FlatButton(pg, 200, 24, function() if ns.Arrow then ns.Arrow.Reset() end end)
-        rs:SetPoint("TOPLEFT", 330, ay - ROW_H - 2)
-        Loc(function() rs:SetLabel(Caps(T("arrowReset"))) end)
-        if rs.fs.SetFont then rs.fs:SetFont(FONT, 9, "") end
-        optRows[#optRows + 1] = function() sv:SetText(math.floor((DB.arrowScale or 1) * 100 + 0.5) .. " %") end
-        local hs = CheckRow(pg, CW, "hearthTips", function() return DB.hearthTips ~= false end,
-            function(v) DB.hearthTips = v; Refresh(true) end)
-        hs:SetPoint("TOPLEFT", 0, ay - 2 * ROW_H - 16)
-        local mp = CheckRow(pg, CW, "mmPin", function() return DB.mmPin ~= false end, function(v) DB.mmPin = v end)
-        mp:SetPoint("TOPLEFT", 0, ay - 3 * ROW_H - 16)
-        local gw = CheckRow(pg, CW, "gameWP", function() return DB.gameWP ~= false end,
-            function(v) DB.gameWP = v; E.PlaceWaypointAgain() end)
-        gw:SetPoint("TOPLEFT", 0, ay - 4 * ROW_H - 16)
     end
 
     -- 4. Affichage
     do
+        -- v1.41 (audit, point 8) : trois sections : Fenetre · Messages · Extras (venus d'Automatisation)
         local pg = pages[6]
-        local h = SmallHeader(pg, "display"); h:SetPoint("TOPLEFT", 0, 0)
-        local y = -18
-        local sw = CheckRow(pg, CW, "showWindow",
-            function() return DB.shown ~= false end,
-            function(v) E.ShowGuide(v) end)
-        sw:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        local lk = CheckRow(pg, CW, "lock", function() return DB.locked end, function(v) DB.locked = v end)
-        lk:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        local mb = CheckRow(pg, CW, "mmButton", function() return not DB.mmHide end,
-            function(v) DB.mmHide = not v; if mm then mm:SetShown(v) end end)
-        mb:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        for _, o in ipairs({ { "miniOpt", "mini", false }, { "compact", "compact", false }, { "trainerOpt", "trainer", true }, { "tipsOpt", "tips", true } }) do
-            local field, def = o[2], o[3]
-            local r = CheckRow(pg, CW, o[1], function() if def then return DB[field] ~= false end return DB[field] and true or false end,
+        local y = 0
+        local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
+        local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
+        local function flag(key, field, def)
+            return CheckRow(pg, CW, key, function() if def then return DB[field] ~= false end return DB[field] and true or false end,
                 function(v) DB[field] = v; if field == "trainer" and not v then DB.trainDue = nil end; Refresh(true) end)
-            r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
         end
-        y = y - 16
+        -- FENETRE
+        sec("secWindow")
+        row(CheckRow(pg, CW, "showWindow", function() return DB.shown ~= false end, function(v) E.ShowGuide(v) end))
+        row(CheckRow(pg, CW, "lock", function() return DB.locked end, function(v) DB.locked = v end))
+        row(CheckRow(pg, CW, "mmButton", function() return not DB.mmHide end,
+            function(v) DB.mmHide = not v; if mm then mm:SetShown(v) end end))
+        row(flag("miniOpt", "mini", false))
+        row(flag("compact", "compact", false))
+        y = y - 6
         -- taille de la fenetre : -  100 %  +
         local sl = FS(pg, 9, COL.gold, FONT, "LEFT"); sl:SetPoint("TOPLEFT", 0, y - 9)
         Loc(function() sl:SetText(Caps(T("scaleLbl"))) end)
@@ -613,6 +620,35 @@ local function CreateOptions()
         rp:SetPoint("TOPLEFT", 0, y)
         Loc(function() rp:SetLabel(Caps(T("resetPos"))) end)
         if rp.fs.SetFont then rp.fs:SetFont(FONT, 9, "") end
+        y = y - 44
+        -- MESSAGES : chat (tous / importants / aucun ; erreurs et commandes toujours), conseils, rappel d'entraineur
+        sec("secMessages")
+        local cl = FS(pg, 12, COL.white, FONT, "LEFT"); cl:SetPoint("TOPLEFT", 22, y - 7)
+        Loc(function() cl:SetText(T("chatLbl")) end)
+        local LV = { "all", "important", "none" }
+        local cb = FlatButton(pg, 170, 24, function()
+            local cur = DB.chatLevel or "all"
+            local k = 1; for i, v in ipairs(LV) do if v == cur then k = i end end
+            DB.chatLevel = LV[k % #LV + 1]
+            RefreshOptions()
+        end)
+        cb:SetPoint("TOPLEFT", 200, y)
+        optRows[#optRows + 1] = function() cb:SetLabel(T("chat_" .. (DB.chatLevel or "all"))) end
+        cb:HookScript("OnEnter", function(self) local t = E.Tip(); t:SetOwner(self, "ANCHOR_RIGHT"); t:AddLine(T("chatTip"), 1, 1, 1, true); t:Show() end)
+        cb:HookScript("OnLeave", function() E.Tip():Hide() end)
+        y = y - 30
+        row(flag("tipsOpt", "tips", true))
+        row(flag("trainerOpt", "trainer", true))
+        y = y - 10
+        -- EXTRAS : Trophees de guerre, Chronique (venus de l'onglet Automatisation ; la ligne XP/h a disparu avec le pied)
+        sec("hdrExtras")
+        row(CheckRow(pg, CW, "pvpShow", function() return not (WarpathDropDB and WarpathDropDB._pvpShow == false) end,
+            function(v) if WarpathDropDB then WarpathDropDB._pvpShow = v end; if _G.WarpathPvPRefresh then pcall(_G.WarpathPvPRefresh, true) end end))
+        row(CheckRow(pg, CW, "pvpShot", function() return DB.pvpShot and true or false end, function(v) DB.pvpShot = v end))
+        row(CheckRow(pg, CW, "chronBanner", function() return DB.chronBanner ~= false end, function(v) DB.chronBanner = v end))
+        local cv = FlatButton(pg, 200, 24, function() E.ChronShow() end)
+        cv:SetPoint("TOPLEFT", 0, y - 4)
+        Loc(function() cv:SetLabel(K.Upper(T("chOpen"))) end)
     end
 
     -- Automatisation
@@ -630,20 +666,7 @@ local function CreateOptions()
         sh:SetPoint("TOPLEFT", 0, y); y = y - ROW_H - 10
         local note = FS(pg, 10, COL.soft, FONT, "LEFT"); note:SetWidth(CW); note:SetPoint("TOPLEFT", 0, y)
         Loc(function() note:SetText(T("autoNote")) end)
-        y = y - 28
-        local h2 = SmallHeader(pg, "hdrExtras"); h2:SetPoint("TOPLEFT", 0, y); y = y - 18
-        local pv = CheckRow(pg, CW, "pvpShow", function() return not (WarpathDropDB and WarpathDropDB._pvpShow == false) end,
-            function(v) if WarpathDropDB then WarpathDropDB._pvpShow = v end; if _G.WarpathPvPRefresh then pcall(_G.WarpathPvPRefresh, true) end end)
-        pv:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        local ps = CheckRow(pg, CW, "pvpShot", function() return DB.pvpShot and true or false end, function(v) DB.pvpShot = v end)
-        ps:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        local xl = CheckRow(pg, CW, "xphLine", function() return DB.xphLine ~= false end, function(v) DB.xphLine = v end)
-        xl:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        local cb = CheckRow(pg, CW, "chronBanner", function() return DB.chronBanner ~= false end, function(v) DB.chronBanner = v end)
-        cb:SetPoint("TOPLEFT", 0, y); y = y - ROW_H - 6
-        local cv = FlatButton(pg, 200, 24, function() E.ChronShow() end)
-        cv:SetPoint("TOPLEFT", 0, y); y = y - 30
-        Loc(function() cv:SetLabel(K.Upper(T("chOpen"))) end)
+        -- (les extras sont passes dans l'onglet Affichage en v1.41)
     end
 
     opt:SetScript("OnShow", function()

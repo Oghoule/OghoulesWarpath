@@ -35,7 +35,21 @@ function CreateUI()
     if f.dest.arrow.SetVertexColor then f.dest.arrow:SetVertexColor(COL.cream[1], COL.cream[2], COL.cream[3]) end
     f.dist = FS(f.dest, 16, COL.white, DISPLAY, "RIGHT"); f.dist:SetPoint("RIGHT", -12, 0)
     f.destName = FS(f.dest, 12, COL.white, FONT, "LEFT"); f.destName:SetPoint("TOPLEFT", 42, -9); f.destName:SetPoint("RIGHT", f.dist, "LEFT", -8, 0)
-    if f.destName.SetWordWrap then f.destName:SetWordWrap(false) end
+    -- v1.41 (audit) : le lieu peut tenir sur 2 lignes (avant : coupe avec « … ») ; coordonnees dans l'infobulle
+    if f.destName.SetWordWrap then f.destName:SetWordWrap(true) end
+    if f.destName.SetMaxLines then f.destName:SetMaxLines(2) end
+    if f.dest.EnableMouse then f.dest:EnableMouse(true) end
+    if f.dest.RegisterForDrag then f.dest:RegisterForDrag("LeftButton") end
+    f.dest:SetScript("OnDragStart", function() if not DB.locked then f:StartMoving() end end)
+    f.dest:SetScript("OnDragStop", function()
+        f:StopMovingOrSizing(); local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
+    end)
+    f.dest:SetScript("OnEnter", function(self)
+        local c = rawget(f, "destCoord"); if not c then return end
+        Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(f.destName:GetText() or "")
+        Tip():AddLine(c, 0.79, 0.75, 0.68); Tip():Show()
+    end)
+    f.dest:SetScript("OnLeave", function() Tip():Hide() end)
     f.dest:Hide()
     f:SetClampedToScreen(true)
     f:SetMovable(true)
@@ -49,21 +63,32 @@ function CreateUI()
     end)
 
     -- (ordre de creation garde : title, text, list, coord)
+    -- v1.41 : le titre s'arrete avant les icones de droite (« - » et Intendance) : il ne chevauche plus rien
     f.title = FS(f, 12, COL.white, FONT, "LEFT"); f.title:SetPoint("LEFT", f, "TOPLEFT", PAD + 12, -HEAD_H / 2)
-    f.stepNo = FS(f, 10, COL.soft, FONT, "RIGHT"); f.stepNo:SetPoint("RIGHT", f, "TOPRIGHT", -PAD, -HEAD_H / 2)
+    f.title:SetPoint("RIGHT", f, "TOPRIGHT", -44, -HEAD_H / 2)
+    if f.title.SetWordWrap then f.title:SetWordWrap(false) end
+    -- numero d'etape : juste au-dessus de la barre de progression de la zone (avant : dans l'en-tete, sous le titre)
+    f.stepNo = FS(f, 11, COL.soft, FONT, "RIGHT"); f.stepNo:SetPoint("BOTTOMRIGHT", f.progBg, "TOPRIGHT", 0, 4)
     f.text = FS(f, 12, COL.soft, FONT, "LEFT"); f.text:SetWidth(INNER)
     if f.text.SetJustifyV then f.text:SetJustifyV("TOP") end
     if f.text.SetWordWrap then f.text:SetWordWrap(true) end
     if f.text.SetSpacing then f.text:SetSpacing(4) end
     f.nextRule = SectionHead(f, INNER)
     f.list = f.nextRule.label
-    f.coord = FS(f.dest, 10, COL.soft, FONT, "LEFT"); f.coord:SetPoint("TOPLEFT", f.destName, "BOTTOMLEFT", 0, -5); f.coord:SetPoint("RIGHT", f.dist, "LEFT", -8, 0)
+    -- v1.41 : « +2 ▾ » a droite de « A SUIVRE » : deplier / replier la liste (2 ou 4 etapes)
+    f.upToggle = CreateFrame("Button", nil, f.nextRule); f.upToggle:SetSize(44, 14); f.upToggle:SetPoint("RIGHT", f.nextRule, "RIGHT", 0, 0)
+    local utb = Tex(f.upToggle, COL.bg, 1, "BACKGROUND"); utb:SetAllPoints()
+    f.upToggle.fs = FS(f.upToggle, 10, COL.accent, FONT, "RIGHT"); f.upToggle.fs:SetPoint("RIGHT", -1, 0)
+    local uth = Tex(f.upToggle, COL.accent, 0.10, "HIGHLIGHT"); uth:SetAllPoints()
+    f.upToggle:SetScript("OnClick", function() DB.upOpen = not DB.upOpen; Refresh() end)
+    f.upToggle:Hide()
+    f.coord = FS(f.dest, 11, COL.soft, FONT, "LEFT"); f.coord:SetPoint("TOPLEFT", f.destName, "BOTTOMLEFT", 0, -5); f.coord:SetPoint("RIGHT", f.dist, "LEFT", -8, 0)
     if f.coord.SetWordWrap then f.coord:SetWordWrap(false) end
     -- pied : niveau, XP/h actif (Journal.lua), duree de la session
-    f.foot = CreateFrame("Frame", nil, f); f.foot:SetSize(INNER, 12); f.foot:Hide()
-    f.footLvl = FS(f.foot, 10, COL.gold, FONT, "LEFT"); f.footLvl:SetPoint("LEFT")
-    f.xph = FS(f.foot, 10, COL.gold, FONT, "CENTER"); f.xph:SetPoint("CENTER"); f.xph:Hide()
-    f.footSess = FS(f.foot, 10, COL.gold, FONT, "RIGHT"); f.footSess:SetPoint("RIGHT")
+    f.foot = CreateFrame("Frame", nil, f); f.foot:SetSize(INNER, 14); f.foot:Hide()
+    f.footLvl = FS(f.foot, 11, COL.gold, FONT, "LEFT"); f.footLvl:SetPoint("LEFT")
+    f.xph = FS(f.foot, 11, COL.gold, FONT, "CENTER"); f.xph:SetPoint("CENTER"); f.xph:Hide()
+    f.footSess = FS(f.foot, 11, COL.gold, FONT, "RIGHT"); f.footSess:SetPoint("RIGHT")
     if f.foot.EnableMouse then f.foot:EnableMouse(true) end
     f.foot:SetScript("OnEnter", function(self)
         local i = rawget(f, "footInfo"); if type(i) ~= "table" then return end
@@ -75,6 +100,23 @@ function CreateUI()
         t:Show()
     end)
     f.foot:SetScript("OnLeave", function() Tip():Hide() end)
+    -- v1.41 : niveau, XP/h et temps avant le niveau suivant au survol de la barre de progression (le pied a disparu)
+    f.progHit = CreateFrame("Frame", nil, f)
+    f.progHit:SetPoint("TOPLEFT", f.progBg, "TOPLEFT", 0, 16); f.progHit:SetPoint("BOTTOMRIGHT", f.progBg, "BOTTOMRIGHT", 0, -4)
+    if f.progHit.EnableMouse then f.progHit:EnableMouse(true) end
+    f.progHit:SetScript("OnEnter", function(self)
+        local i = rawget(f, "footInfo")
+        local t = Tip(); t:SetOwner(self, "ANCHOR_BOTTOM")
+        t:AddLine((type(i) == "table" and i.lvl) or T("footLvl", UnitLevel("player") or 1, 0))
+        if type(i) == "table" then
+            if i.xph and i.xph ~= "" then t:AddLine(i.xph, 1, 1, 1) end
+            if i.nxt and i.nxt ~= "" then t:AddLine(i.nxt, 1, 1, 1) end
+            t:AddLine(T("footTipActive", i.rate > 0 and FormatNum(math.floor(i.rate)) or "—", i.active), 0.79, 0.75, 0.68, true)
+            t:AddLine(T("footTipNote"), 0.66, 0.60, 0.48, true)
+        end
+        t:Show()
+    end)
+    f.progHit:SetScript("OnLeave", function() Tip():Hide() end)
 
     f.name = FS(f, 13, COL.white, FONT, "CENTER"); f.name:SetWidth(INNER); f.name:Hide() -- (garde pour les tests)
     f.div = Divider(f, INNER); f.div:Hide()
@@ -94,14 +136,43 @@ function CreateUI()
     f.badge:SetScript("OnLeave", function() Tip():Hide() end)
     f.badge:Hide()
 
-    f.kindRow = CreateFrame("Frame", nil, f); f.kindRow:SetSize(INNER, 12)
-    f.kind = FS(f.kindRow, 9, COL.accent, FONT, "LEFT"); f.kind:SetPoint("LEFT")
+    f.kindRow = CreateFrame("Frame", nil, f); f.kindRow:SetSize(INNER, 14)
+    f.kind = FS(f.kindRow, 11, COL.accent, FONT, "LEFT"); f.kind:SetPoint("LEFT")
     if f.kind.SetWordWrap then f.kind:SetWordWrap(false) end
     -- clic sur l'en-tete (le crochet) d'une etape passee ou validee a la main : on l'annule
     if f.kindRow.EnableMouse then f.kindRow:EnableMouse(true) end
     f.kindRow:SetScript("OnMouseUp", function()
         local i = peek or focus or current
         if steps and i and Restorable(i) then Restore(i) end
+    end)
+    -- v1.41 (audit, proposition A) : chaine et quetes bloquees = deux pastilles a droite de la ligne du type
+    -- d'etape (detail au survol, meme clic qu'avant) au lieu de deux lignes pleines
+    local function chip(icon, col)
+        local b = CreateFrame("Button", nil, f.kindRow); b:SetSize(36, 14)
+        if b.RegisterForClicks then b:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+        Border(b, col, 0.45)
+        b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(10, 10); b.icon:SetPoint("LEFT", 3, 0)
+        b.icon:SetTexture("Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\" .. icon)
+        if b.icon.SetVertexColor then b.icon:SetVertexColor(col[1], col[2], col[3]) end
+        b.fs = FS(b, 10, col, FONT, "LEFT"); b.fs:SetPoint("LEFT", 16, 0)
+        local h = Tex(b, col, 0.12, "HIGHLIGHT"); h:SetAllPoints()
+        b:SetScript("OnLeave", function() Tip():Hide() end)
+        b:Hide()
+        return b
+    end
+    f.chipLock = chip("IcoLock", COL.warn or COL.accent)
+    f.chipChain = chip("IcoChain", COL.accent)
+    -- memes actions que les anciennes lignes (f.chainBtn / f.lockBtn, gardees cachees pour leur logique)
+    f.chipChain:SetScript("OnClick", function() local fn = f.chainBtn and f.chainBtn:GetScript("OnClick"); if fn then fn(f.chainBtn) end end)
+    f.chipChain:SetScript("OnEnter", function(self)
+        Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(self.tipText or "")
+        if f.chainBtn and f.chainBtn.target then Tip():AddLine(T("chainStart"), 0.66, 0.60, 0.48, true) end
+        Tip():Show()
+    end)
+    f.chipLock:SetScript("OnClick", function(_, btn) local fn = f.lockBtn and f.lockBtn:GetScript("OnClick"); if fn then fn(f.lockBtn, btn) end end)
+    f.chipLock:SetScript("OnEnter", function(self)
+        local fn = f.lockBtn and f.lockBtn:GetScript("OnEnter")
+        if fn then self.list = f.lockBtn.list; fn(self) end
     end)
 
     f.qtitle = FS(f, 20, COL.white, DISPLAY, "LEFT"); f.qtitle:SetWidth(INNER)
@@ -135,7 +206,7 @@ function CreateUI()
     for k = 1, 3 do
         local row = CreateFrame("Frame", nil, f); row:SetSize(INNER, 16)
         row.gem = Diamond(row, 7, COL.white); row.gem:SetPoint("LEFT", -2, 0)
-        row.mode = FS(row, 9, COL.accent, FONT, "RIGHT"); row.mode:SetPoint("RIGHT")
+        row.mode = FS(row, 10, COL.accent, FONT, "RIGHT"); row.mode:SetPoint("RIGHT")
         row.name = FS(row, 12, COL.white, FONT, "LEFT"); row.name:SetPoint("LEFT", 16, 0); row.name:SetPoint("RIGHT", row.mode, "LEFT", -6, 0)
         if row.name.SetWordWrap then row.name:SetWordWrap(false) end
         row:Hide()
@@ -169,27 +240,52 @@ function CreateUI()
     f.advice.label = FS(f.advice, 11, COL.gold, FONT, "LEFT"); f.advice.label:SetPoint("TOPLEFT", 20, -2)
     f.advice.label:SetWidth(INNER - 20); if f.advice.label.SetWordWrap then f.advice.label:SetWordWrap(true) end
     f.advice:Hide()
-    -- pierre de foyer : l'icone du conseil devient un bouton qui l'utilise (bouton securise, change hors combat seulement)
+    -- pierre de foyer : l'icone du conseil devient un bouton qui l'utilise (bouton securise).
+    -- v1.41 : le bouton n'est PLUS un enfant de la fenetre ni ancre a elle. Un bouton securise dans la fenetre
+    -- la verrouille en combat : SetHeight / SetShown / Hide etaient bloques sans arret en donjon. On recopie la
+    -- position de l'icone hors combat (comme les boutons de ciblage) et on le cache a l'entree en combat.
     function HearthButton(on)
+        f.hsWant = on and true or false
+        f.advice.icon:SetSize(on and 18 or 14, on and 18 or 14)
+        f.advice.label:ClearAllPoints(); f.advice.label:SetPoint("TOPLEFT", on and 26 or 20, on and -4 or -2)
         if InCombatLockdown and InCombatLockdown() then return end
         if not f.hsBtn and on then
-            local ok, b = pcall(CreateFrame, "Button", "WarpathHearthButton", f.advice, "SecureActionButtonTemplate")
+            local ok, b = pcall(CreateFrame, "Button", "WarpathHearthButton", UIParent, "SecureActionButtonTemplate")
             if not ok or not b then return end
-            b:SetAllPoints(f.advice.icon)
+            b:SetSize(18, 18)
+            if b.SetFrameStrata then b:SetFrameStrata("HIGH") end
             if b.RegisterForClicks then b:RegisterForClicks("AnyUp", "AnyDown") end
             b:SetAttribute("type", "item"); b:SetAttribute("item", "item:6948")
             local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.25)
             Border(b, COL.accent)
             b:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("hsClick")); Tip():Show() end)
             b:SetScript("OnLeave", function() Tip():Hide() end)
+            b:Hide()
             f.hsBtn = b
         end
-        if f.hsBtn then
-            f.hsBtn:SetShown(on and true or false)
-            f.advice.icon:SetSize(on and 18 or 14, on and 18 or 14)
-            f.advice.label:ClearAllPoints(); f.advice.label:SetPoint("TOPLEFT", on and 26 or 20, on and -4 or -2)
-        end
     end
+    -- place le bouton sur l'icone (apres la mise en page), hors combat seulement
+    function HearthPlace()
+        local b = rawget(f, "hsBtn")
+        if not b or (InCombatLockdown and InCombatLockdown()) then return end
+        local ic = f.advice.icon
+        local want = f.hsWant and f:IsShown() and f.advice:IsShown()
+        local l, bot = want and ic.GetLeft and ic:GetLeft(), want and ic.GetBottom and ic:GetBottom()
+        if not (l and bot) then b:Hide(); return end
+        local k = (f.GetEffectiveScale and UIParent.GetEffectiveScale) and (f:GetEffectiveScale() / UIParent:GetEffectiveScale()) or 1
+        b:SetScale(1); b:SetSize(18 * k, 18 * k)
+        b:ClearAllPoints(); b:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l * k, bot * k)
+        b:Show()
+    end
+    -- entree en combat : on le cache juste avant le verrouillage (il ne sert a rien en combat)
+    local hsEv = CreateFrame("Frame")
+    hsEv:RegisterEvent("PLAYER_REGEN_DISABLED")
+    hsEv:RegisterEvent("PLAYER_REGEN_ENABLED")
+    hsEv:SetScript("OnEvent", function(_, e)
+        local b = rawget(f, "hsBtn")
+        if e == "PLAYER_REGEN_DISABLED" then if b then b:Hide() end
+        else pcall(HearthPlace) end
+    end)
 
     f.lockBtn = CreateFrame("Button", nil, f); f.lockBtn:SetSize(INNER, 16)
     if f.lockBtn.RegisterForClicks then f.lockBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
@@ -252,6 +348,11 @@ function CreateUI()
     local nxt = FlatButton(f.btnRow, 46, 34, nav(1)); nxt:SetPoint("RIGHT"); nxt:SetLabel(">")
     f.skip = FlatButton(f.btnRow, INNER - 104, 34, Ignore); f.skip:SetPoint("CENTER")
     if f.skip.fs.SetFont then f.skip.fs:SetFont(FONT, 10, ""); f.skip.fs:SetTextColor(COL.gold[1], COL.gold[2], COL.gold[3]) end
+    -- icone du role (passer, OK, revenir, retablir), devant le mot : voir SetSkip (Skin.lua)
+    f.skip.icon = f.skip:CreateTexture(nil, "ARTWORK"); f.skip.icon:SetSize(11, 11)
+    f.skip.icon:SetPoint("RIGHT", f.skip.fs, "LEFT", -6, 0)
+    if f.skip.icon.SetVertexColor then f.skip.icon:SetVertexColor(COL.gold[1], COL.gold[2], COL.gold[3]) end
+    f.skip.icon:Hide()
     for _, b in ipairs({ prev, nxt }) do
         if b.fs.SetFont then b.fs:SetFont(FONT, 13, ""); b.fs:SetTextColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
         b:SetLabel(b == prev and "<" or ">")
@@ -273,7 +374,7 @@ function CreateUI()
         b:SetSize(INNER, 26)
         local sep = Tex(b, COL.faint, 1, "ARTWORK"); sep:SetHeight(1); sep:SetPoint("TOPLEFT"); sep:SetPoint("TOPRIGHT")
         b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(14, 14); b.icon:SetPoint("LEFT", 2, -1)
-        b.right = FS(b, 10, COL.gold, FONT, "RIGHT"); b.right:SetPoint("RIGHT", 0, -1)
+        b.right = FS(b, 11, COL.gold, FONT, "RIGHT"); b.right:SetPoint("RIGHT", 0, -1)
         local fs = FS(b, 11, COL.soft, FONT, "LEFT")
         fs:SetPoint("LEFT", 22, -1); fs:SetPoint("RIGHT", b.right, "LEFT", -6, 0)
         if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -300,39 +401,46 @@ function CreateUI()
     f.passed = FS(f, 10, COL.gold, FONT, "LEFT"); f.passed:SetWidth(INNER - 22); f.passed:Hide()
     f.badge.lbl:SetText(T("lvlShort"))
 
-    -- v1.40 : poignee en bas a droite = agrandir / reduire la fenetre (echelle, comme dans les options), hors combat
-    local grip = CreateFrame("Button", nil, f)
-    grip:SetSize(12, 12); grip:SetPoint("BOTTOMRIGHT", -1, 1)
-    if grip.SetFrameLevel and f.GetFrameLevel then grip:SetFrameLevel((f:GetFrameLevel() or 1) + 10) end
-    local gt = grip:CreateTexture(nil, "OVERLAY"); gt:SetAllPoints()
-    gt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    if gt.SetVertexColor then gt:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
-    local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    grip:SetScript("OnMouseDown", function(self)
-        if DB.locked or (InCombatLockdown and InCombatLockdown()) or not GetCursorPosition then return end
-        local s, left, top = f:GetScale() or 1, f:GetLeft(), f:GetTop()
-        if not (left and top) then return end
-        local ui = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-        -- le coin haut-gauche reste en place ; la largeur suit la souris
-        self.drag = { s = s, left = left * s, top = top * s, x0 = GetCursorPosition() / ui, w = W * s, ui = ui }
-        self:SetScript("OnUpdate", function()
-            local d = self.drag; if not d then return end
-            local dx = GetCursorPosition() / d.ui - d.x0
-            local sc = math.max(0.6, math.min(1.5, d.s * (d.w + dx) / d.w))
-            f:SetScale(sc); f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", d.left / sc, d.top / sc)
+    -- v1.40 : poignee en bas a droite = agrandir / reduire la fenetre (echelle, comme dans les options), hors combat.
+    -- v1.41 : la meme poignee existe sur le mode compact. Les deux fenetres ont la meme largeur et partagent leur
+    -- coin : on garde fixe le coin haut-gauche de la fenetre visible (src) et on change l'echelle des deux.
+    local function makeGrip(src)
+        local grip = CreateFrame("Button", nil, src)
+        grip:SetSize(12, 12); grip:SetPoint("BOTTOMRIGHT", -1, 1)
+        if grip.SetFrameLevel and src.GetFrameLevel then grip:SetFrameLevel((src:GetFrameLevel() or 1) + 10) end
+        local gt = grip:CreateTexture(nil, "OVERLAY"); gt:SetAllPoints()
+        gt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+        if gt.SetVertexColor then gt:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
+        local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+        grip:SetScript("OnMouseDown", function(self)
+            if DB.locked or (InCombatLockdown and InCombatLockdown()) or not GetCursorPosition then return end
+            local s, left, top = src:GetScale() or 1, src:GetLeft(), src:GetTop()
+            if not (left and top) then return end
+            local ui = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+            -- le coin haut-gauche reste en place ; la largeur suit la souris
+            self.drag = { s = s, left = left * s, top = top * s, x0 = GetCursorPosition() / ui, w = W * s, ui = ui }
+            self:SetScript("OnUpdate", function()
+                local d = self.drag; if not d then return end
+                local dx = GetCursorPosition() / d.ui - d.x0
+                local sc = math.max(0.6, math.min(1.5, d.s * (d.w + dx) / d.w))
+                f:SetScale(sc); f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", d.left / sc, d.top / sc)
+                local mf = rawget(f, "mini"); if mf and mf.SetScale then mf:SetScale(sc) end
+            end)
         end)
-    end)
-    grip:SetScript("OnMouseUp", function(self)
-        self:SetScript("OnUpdate", nil)
-        if not self.drag then return end
-        self.drag = nil
-        DB.scale = math.floor((f:GetScale() or 1) * 100 + 0.5) / 100
-        local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
-        local mf = rawget(f, "mini"); if mf and mf.SetScale then mf:SetScale(DB.scale) end
-        if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
-    end)
-    grip:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("winResize"), 1, 1, 1, true); Tip():Show() end)
-    grip:SetScript("OnLeave", function() Tip():Hide() end)
+        grip:SetScript("OnMouseUp", function(self)
+            self:SetScript("OnUpdate", nil)
+            if not self.drag then return end
+            self.drag = nil
+            DB.scale = math.floor((f:GetScale() or 1) * 100 + 0.5) / 100
+            local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
+            local mf = rawget(f, "mini"); if mf and mf.SetScale then mf:SetScale(DB.scale) end
+            if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
+        end)
+        grip:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("winResize"), 1, 1, 1, true); Tip():Show() end)
+        grip:SetScript("OnLeave", function() Tip():Hide() end)
+        return grip
+    end
+    f.grip = makeGrip(f)
 
     -- bouton « - » en haut a droite : passer en mode compact
     local function miniBtn(parent, label, tipKey)
@@ -344,23 +452,91 @@ function CreateUI()
         b:SetScript("OnLeave", function() Tip():Hide() end)
         return b
     end
-    f.miniBtn = miniBtn(f, "-", "miniEnter"); f.miniBtn:SetPoint("TOPRIGHT", -2, -1)
+    f.miniBtn = miniBtn(f, "-", "miniEnter"); f.miniBtn:SetPoint("RIGHT", f, "TOPRIGHT", -6, -HEAD_H / 2)
+    -- bouton « Intendance » : icone sac de courses (Media/IcoShop, choisie par l'auteur sur maquette) a gauche
+    -- du « - », en capitale seulement (affiche/cache par Layout ; infobulle au survol)
+    f.qmBtn = CreateFrame("Button", nil, f); f.qmBtn:SetSize(16, 16)
+    f.qmBtn:SetPoint("RIGHT", f.miniBtn, "LEFT", -2, 0)
+    Border(f.qmBtn, COL.accent, 0.6)
+    f.qmBtn.icon = f.qmBtn:CreateTexture(nil, "ARTWORK"); f.qmBtn.icon:SetSize(14, 14); f.qmBtn.icon:SetPoint("CENTER")
+    f.qmBtn.icon:SetTexture("Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\IcoShop")
+    if f.qmBtn.icon.SetVertexColor then f.qmBtn.icon:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
+    local qh = Tex(f.qmBtn, COL.accent, 0.15, "HIGHLIGHT"); qh:SetAllPoints()
+    f.qmBtn:SetScript("OnClick", function() if QMOpen then QMOpen() end end)
+    f.qmBtn:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("qmTitle")); Tip():AddLine(T("qmBtnTip"), 1, 1, 1, true); Tip():Show() end)
+    f.qmBtn:SetScript("OnLeave", function() Tip():Hide() end)
+    f.qmBtn:Hide()
+    -- v1.41 (audit) : « ? » = les gestes caches, affiches par-dessus la fenetre (un clic referme)
+    f.helpBtn = CreateFrame("Button", nil, f); f.helpBtn:SetSize(16, 16)
+    f.helpBtn:SetPoint("RIGHT", f.miniBtn, "LEFT", -2, 0)
+    Border(f.helpBtn, COL.accent, 0.6)
+    f.helpBtn.fs = FS(f.helpBtn, 11, COL.accent, FONT, "CENTER"); f.helpBtn.fs:SetPoint("CENTER", 0, 0); f.helpBtn.fs:SetText("?")
+    local hph = Tex(f.helpBtn, COL.accent, 0.15, "HIGHLIGHT"); hph:SetAllPoints()
+    f.helpOver = CreateFrame("Button", nil, f)
+    f.helpOver:SetPoint("TOPLEFT", 1, -HEAD_H - 1); f.helpOver:SetPoint("BOTTOMRIGHT", -1, 1)
+    if f.helpOver.SetFrameLevel and f.GetFrameLevel then f.helpOver:SetFrameLevel((f:GetFrameLevel() or 1) + 30) end
+    local hob = Tex(f.helpOver, COL.bg, 0.97, "BACKGROUND"); hob:SetAllPoints()
+    f.helpOver.head = FS(f.helpOver, 10, COL.gold, FONT, "LEFT"); f.helpOver.head:SetPoint("TOPLEFT", PAD, -14)
+    f.helpOver.fs = FS(f.helpOver, 11, COL.soft, FONT, "LEFT"); f.helpOver.fs:SetPoint("TOPLEFT", f.helpOver.head, "BOTTOMLEFT", 0, -10)
+    f.helpOver.fs:SetWidth(INNER)
+    if f.helpOver.fs.SetWordWrap then f.helpOver.fs:SetWordWrap(true) end
+    if f.helpOver.fs.SetSpacing then f.helpOver.fs:SetSpacing(5) end
+    f.helpOver:SetScript("OnClick", function(self) self:Hide() end)
+    f.helpOver:Hide()
+    f.helpBtn:SetScript("OnClick", function()
+        if f.helpOver:IsShown() then f.helpOver:Hide(); return end
+        f.helpOver.head:SetText(Caps(T("helpHead")))
+        local L = {}
+        for k = 1, 8 do L[#L + 1] = "|cffccba8f" .. T("helpK" .. k) .. "|r  " .. T("helpV" .. k) end
+        f.helpOver.fs:SetText(table.concat(L, "\n"))
+        f.helpOver:Show()
+    end)
+    f.helpBtn:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("helpHead")); Tip():Show() end)
+    f.helpBtn:SetScript("OnLeave", function() Tip():Hide() end)
 
     -- v1.40 : mode compact = une petite fenetre a part, seulement les objectifs (ou une ligne pour prendre/rendre)
     local mf = CreateFrame("Frame", "WarpathMini", UIParent)
     mf:SetSize(MINI_W, 30)
-    if DB.mpos then mf:SetPoint(DB.mpos[1], UIParent, DB.mpos[2], DB.mpos[3], DB.mpos[4])
-    else mf:SetPoint("TOPRIGHT", f, "TOPRIGHT") end
+    -- v1.41 : collee au coin haut-droit de la grande fenetre (le « - » et le « + » au meme endroit) ;
+    -- la deplacer deplace la grande fenetre (une seule position, DB.wpos)
+    DB.mpos = nil
+    mf:SetPoint("TOPRIGHT", f, "TOPRIGHT")
     local mbg = Tex(mf, COL.bg, 0.90, "BACKGROUND"); mbg:SetAllPoints()
     Border(mf, COL.line, 0.8, "BORDER")
     mf:SetClampedToScreen(true); mf:SetMovable(true); mf:EnableMouse(true); mf:RegisterForDrag("LeftButton")
     mf:SetScript("OnDragStart", function(self) if not DB.locked then self:StartMoving() end end)
     mf:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        local p, _, rp, x, y = self:GetPoint(); DB.mpos = { p, rp, x, y }
+        local r, t = self:GetRight(), self:GetTop()
+        if r and t then
+            local k = (self.GetEffectiveScale and f.GetEffectiveScale) and (self:GetEffectiveScale() / f:GetEffectiveScale()) or 1
+            f:ClearAllPoints(); f:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", r * k, t * k)
+            local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
+        end
+        self:ClearAllPoints(); self:SetPoint("TOPRIGHT", f, "TOPRIGHT")
     end)
-    mf.plus = miniBtn(mf, "+", "miniExit"); mf.plus:SetPoint("TOPRIGHT", -2, -2)
+    -- en-tete comme la grande fenetre (meme hauteur, losange rouge) : le « + » tombe exactement a la place du « - »
+    local mhb = Tex(mf, COL.panel or COL.bg, 1, "BORDER"); mhb:SetHeight(HEAD_H); mhb:SetPoint("TOPLEFT", 1, -1); mhb:SetPoint("TOPRIGHT", -1, -1)
+    local mhl = Tex(mf, COL.line, 1, "ARTWORK"); mhl:SetHeight(1); mhl:SetPoint("TOPLEFT", 0, -HEAD_H); mhl:SetPoint("TOPRIGHT", 0, -HEAD_H)
+    mf.gem = Diamond(mf, 8, COL.red); mf.gem:SetPoint("LEFT", mf, "TOPLEFT", PAD - 4, -HEAD_H / 2)
+    mf.plus = miniBtn(mf, "+", "miniExit"); mf.plus:SetPoint("RIGHT", mf, "TOPRIGHT", -6, -HEAD_H / 2)
+    mf.title = FS(mf, 12, COL.white, FONT, "LEFT"); mf.title:SetPoint("LEFT", mf, "TOPLEFT", PAD + 12, -HEAD_H / 2)
+    mf.title:SetPoint("RIGHT", mf, "TOPRIGHT", -28, -HEAD_H / 2)
+    if mf.title.SetWordWrap then mf.title:SetWordWrap(false) end
+    -- titre = nom de la quete : clic = journal de quetes (comme le titre de la grande fenetre) ; glisser = deplacer
+    mf.hit = CreateFrame("Button", nil, mf); mf.hit:SetPoint("TOPLEFT", 0, 0); mf.hit:SetPoint("BOTTOMRIGHT", mf, "TOPRIGHT", -26, -HEAD_H)
+    mf.hit.hl = Tex(mf.hit, COL.accent, 0.06, "HIGHLIGHT"); mf.hit.hl:SetAllPoints()
+    if mf.hit.RegisterForDrag then mf.hit:RegisterForDrag("LeftButton") end
+    mf.hit:SetScript("OnDragStart", function() local fn = mf:GetScript("OnDragStart"); if fn then fn(mf) end end)
+    mf.hit:SetScript("OnDragStop", function() local fn = mf:GetScript("OnDragStop"); if fn then fn(mf) end end)
+    mf.hit:SetScript("OnClick", function() if mf.questClick and OpenStepQuest then OpenStepQuest() end end)
+    mf.hit:SetScript("OnEnter", function(self)
+        if not mf.questClick then return end
+        Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(mf.title:GetText() or ""); Tip():AddLine(T("qtitleClick"), 0.66, 0.60, 0.48, true); Tip():Show()
+    end)
+    mf.hit:SetScript("OnLeave", function() Tip():Hide() end)
     mf.rows = {}
+    mf.grip = makeGrip(mf)   -- v1.41 : redimensionner aussi en mode compact
     if mf.SetScale then mf:SetScale(DB.scale or 1) end
     mf:Hide()
     f.mini = mf
@@ -372,11 +548,12 @@ end
 ------------------------------------------------------------------
 -- Mode compact (v1.40) : la grande fenetre est cachee, la petite montre l'essentiel de l'etape
 ------------------------------------------------------------------
-MINI_W, MINI_PAD = 230, 10
+-- v1.41 : meme largeur que la grande fenetre, memes marges (demande de l'auteur)
+MINI_W, MINI_PAD = W, PAD
 local function miniRow(mf, k)
     local r = mf.rows[k]
     if r then return r end
-    r = CreateFrame("Frame", nil, mf); r:SetSize(MINI_W - 2 * MINI_PAD - 14, 16)
+    r = CreateFrame("Frame", nil, mf); r:SetSize(MINI_W - 2 * MINI_PAD, 16)
     r.gem = Diamond(r, 7, COL.accent, true); r.gem:SetPoint("LEFT", -2, 0)
     r.count = FS(r, 12, COL.accent, FONT, "RIGHT"); r.count:SetPoint("RIGHT")
     r.name = FS(r, 12, COL.white, FONT, "LEFT"); r.name:SetPoint("LEFT", 14, 0); r.name:SetPoint("RIGHT", r.count, "LEFT", -8, 0)
@@ -389,13 +566,32 @@ function UpdateMini()
     local mf = f and rawget(f, "mini")
     if not mf then return end
     local dl = DungeonLogActive and DungeonLogActive()
-    local on = DB.mini and DB.shown ~= false and steps and not dl and true or false
-    f:SetShown(DB.shown ~= false and not on)
+    local shown = DB.shown ~= false
+    -- Intendance (v1.41) : l'ecran de choix, ou la tournee (sauf en mode compact : une ligne)
+    local qs = QMPanelState and QMPanelState() or nil
+    local qpanel = qs and shown and not dl and (qs == "pick" or not DB.mini) and qs or nil
+    -- v1.41 : le mode compact marche aussi dans le journal de donjon (les quetes du donjon et leur progression)
+    local on = DB.mini and shown and steps and not qpanel and true or false
+    f:SetShown(shown and not on and not qpanel)
     mf:SetShown(on)
+    if QMShowPanel then QMShowPanel(qpanel) end
     if not on then return end
-    -- objectifs de l'etape (ceux de la grande fenetre), sinon une ligne : type d'etape + PNJ ou lieu
     local lines = {}
-    for k = 1, (rawget(f, "nObj") or 0) do
+    local qs2, qk, qn = nil, nil, nil
+    if qs == "tour" and QMCurrent then qs2, qk, qn = QMCurrent() end
+    if qs2 then lines[1] = { verb = Caps(T("qmStopN", qk, qn)), text = qs2.label } end
+    -- journal de donjon : une ligne par quete prise, compteur a droite (coche quand c'est fini)
+    if dl and not qs2 and DungeonLogList then
+        for _, r in ipairs(DungeonLogList()) do
+            if not r.later then
+                local cnt = (r.prog or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+                lines[#lines + 1] = { text = r.name or "", count = cnt, done = r.done }
+            end
+        end
+        if #lines == 0 then lines[1] = { verb = Caps(T("dgLog")), text = Title and G and Title(G) or "" } end
+    end
+    -- objectifs de l'etape (ceux de la grande fenetre), sinon une ligne : type d'etape + PNJ ou lieu
+    for k = 1, ((qs2 or dl) and 0 or rawget(f, "nObj") or 0) do
         local w = f.obj[k]
         if w and w.kind == "obj" then lines[#lines + 1] = { text = w.name:GetText() or "", count = w.count:GetText() or "", done = w.done } end
     end
@@ -407,7 +603,23 @@ function UpdateMini()
             lines[1] = { verb = Caps(T(s.t)), text = nm }
         end
     end
-    local y = -MINI_PAD
+    -- en-tete : nom de la quete (cliquable), sinon Intendance / donjon / guide
+    local head, click = nil, false
+    if qs2 then head = T("qmTitle")
+    elseif dl then head = Title and G and Title(G) or ""
+    else
+        local s = steps[peek or focus or current]
+        local qn = s and s.quest and QName(s)
+        if qn and qn ~= "" then head = qn:match("^(.-) %+ ") or qn; click = true
+        else head = Title and G and Title(G) or "" end
+    end
+    head = (head or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    mf.questClick = click
+    mf.title:SetText(Caps(head))
+    local sw = (mf.title.GetUnboundedStringWidth and mf.title:GetUnboundedStringWidth()) or (mf.title.GetStringWidth and mf.title:GetStringWidth())
+    local aw = mf.title.GetWidth and mf.title:GetWidth()
+    if type(sw) == "number" and type(aw) == "number" and aw > 0 and sw > aw then mf.title:SetText(Upper(head)) end
+    local y = -HEAD_H - 12
     for k, l in ipairs(lines) do
         if k > 8 then break end
         local r = miniRow(mf, k)
@@ -431,7 +643,7 @@ function UpdateMini()
         y = y - h - 4
     end
     for k = #lines + 1, #mf.rows do mf.rows[k]:Hide() end
-    mf:SetHeight(-y + MINI_PAD - 4)
+    mf:SetHeight(-y + 14)   -- (place pour la poignee en bas a droite)
 end
 
 function ToggleMini()
@@ -457,7 +669,7 @@ ns.E = {
     StartDungeon = StartDungeon, StopDungeon = StopDungeon, ClearWaypoint = ClearWaypoint,
     AutoPick = AutoPick, AllDone = AllDone,
     ClassQuestList = function() return ClassQuestList() end, PlaceWaypointAgain = function() if steps and current and steps[current] then pcall(SetWaypoint, steps[current]) end end, StyleGet = function() return StyleGet() end,
-    ApplyPreset = function(n) local ok, err = pcall(ApplyPreset, n); if not ok then say(T("errInternal", tostring(err))) end end, StyleChanged = function() styleCache = nil; local ok, err = pcall(Advance); if not ok then say(T("errInternal", tostring(err))) end; Refresh(true) end, AskClass = function(q) AskChain(q, true) end, ChronShow = function(k) ChronShow(k) end, BugWindow = function() BugWindow() end,
+    ApplyPreset = function(n) local ok, err = pcall(ApplyPreset, n); if not ok then say(T("errInternal", tostring(err)), "error") end end, StyleChanged = function() styleCache = nil; local ok, err = pcall(Advance); if not ok then say(T("errInternal", tostring(err)), "error") end; Refresh(true) end, AskClass = function(q) AskChain(q, true) end, ChronShow = function(k) ChronShow(k) end, BugWindow = function() BugWindow() end,
     Guides = Guides, ICON = ICON, VERSION = VERSION, CHECK = CHECK,
     MAIN_ORDER = MAIN_ORDER, IS_DUNGEON = IS_DUNGEON, DUNGEONS = DUNGEONS, MINLVL = MINLVL, MAXLVL = MAXLVL,
     DB = function() return DB end,
@@ -476,7 +688,8 @@ ns.E = {
     AskProf = function(q) AskChain(q, true, "prof") end,
     Kit = { COL = COL, FONT = FONT, DISPLAY = DISPLAY, Caps = Caps, Upper = Upper, Spaced = Spaced, FS = FS, Tex = Tex,
             Diamond = Diamond, Divider = Divider, TitledRule = TitledRule, FlatButton = FlatButton,
-            Border = Border, SectionHead = SectionHead, Chip = Chip, DiamondCheck = DiamondCheck },
+            Border = Border, SectionHead = SectionHead, Chip = Chip, DiamondCheck = DiamondCheck,
+            HeadButton = HeadButton, ScaleGrip = ScaleGrip },
 }
 ns.UI = ns.UI or {}
 
@@ -539,7 +752,13 @@ function OnTaxiOpened()
         say(T("flyTo", flightPlan.to.name))
         if DB.autoFly ~= false and not (IsShiftKeyDown and IsShiftKeyDown()) and TakeTaxiNode then
             local node = target
-            if C_Timer and C_Timer.After then C_Timer.After(0.4, function() if TaxiFrame and TaxiFrame:IsShown() or (TaxiNodeName and TaxiNodeName(node)) then ns.Trace("TakeTaxiNode"); TakeTaxiNode(node) end end) else ns.Trace("TakeTaxiNode"); TakeTaxiNode(node) end
+            -- v1.41 : le jeu veut que le trajet soit calcule avant de decoller (c'est ce que fait le survol du point a
+            -- la souris) ; sans ca, un vol avec escale donnait « There is no direct path » (Ratchet -> Thunder Bluff)
+            local function go()
+                if GetNumRoutes then pcall(GetNumRoutes, node) end
+                ns.Trace("TakeTaxiNode"); TakeTaxiNode(node)
+            end
+            if C_Timer and C_Timer.After then C_Timer.After(0.4, function() if TaxiFrame and TaxiFrame:IsShown() or (TaxiNodeName and TaxiNodeName(node)) then go() end end) else go() end
         end
     end
     Refresh(true)

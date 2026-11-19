@@ -155,11 +155,11 @@ do
                             end
                             local vn = best and (ns.NpcNames or {})[best] or "?"
                             if best and bestD < 120 then
-                                return { kind = "buy", npc = best, icon = "Interface\\GossipFrame\\VendorGossipIcon",
+                                return { kind = "buy", npc = best, icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoShop", tint = COL.accent,
                                          text = (j == i) and T("buyNow", miss, name, vn) or ((j - i == 1) and T("buyHere1", miss, name, vn, QName(s) or name) or T("buyHere", miss, name, vn, j - i, QName(s) or name)) }
                             elseif j == i and s.t ~= "accept" then
                                 local v = best and ns.Vendors[best]
-                                return { kind = "buyFar", npc = best, icon = "Interface\\GossipFrame\\VendorGossipIcon",
+                                return { kind = "buyFar", npc = best, icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoShop", tint = COL.accent,
                                          text = T("buyMissing", miss, name, vn, v and (MAPNAME[v[1]] or "") or "") }
                             end
                         end
@@ -186,12 +186,14 @@ do
             if w and w[3] == here[3] and Dist(here[1], here[2], w[1], w[2]) < 60 and not (h and h.inn == inn.id) then
                 local vNew, vCur = InnValue(w, up, len), InnValue(H, up, len)
                 if vNew > MIN_GAIN and vNew > vCur + 90 then
-                    return { kind = "bind", npc = inn.id, icon = "Interface\\Minimap\\Tracking\\Innkeeper",
+                    return { kind = "bind", npc = inn.id, icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoInn", tint = COL.accent,
                              text = T("hsBind", (ns.NpcNames or {})[inn.id] or "?", math.floor(vNew / 60 + 0.5)) }
                 end
             end
         end
         if not H or not g or not g.m or not g.x then return nil end
+        -- deja a ton auberge (ou juste a cote) : la pierre ne te ferait rien gagner
+        if H[3] == here[3] and Dist(here[1], here[2], H[1], H[2]) < 150 then return nil end
         local T1 = WP(g.m, g.x, g.y)
         local now = Gain(H, here, T1, known)
         if now < MIN_GAIN then return nil end
@@ -199,7 +201,7 @@ do
         if cd > 0 then
             -- en recharge : l'attendre vaut-il le coup ?
             if cd < now - MIN_GAIN then
-                return { kind = "wait", icon = "Interface\\Icons\\INV_Misc_Rune_01",
+                return { kind = "wait", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoHearth", tint = COL.accent,
                          text = T("hsWait", math.ceil(cd / 60), math.floor((now - cd) / 60 + 0.5)) }
             end
             return nil
@@ -219,10 +221,10 @@ do
         end
         local need = (now < SMALL) and now or now * 1.3
         if bestU and best >= MIN_GAIN and best >= need then
-            return { kind = "hold", icon = "Interface\\Icons\\INV_Misc_Rune_01",
+            return { kind = "hold", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoHearth", tint = COL.accent,
                      text = T("hsHold", math.floor(best / 60 + 0.5), math.max(1, math.floor(bestU.eta / 60 + 0.5)), QName(bestU.s) or bestU.s.zone or MAPNAME[bestU.s.m] or "?") }
         end
-        return { kind = "use", icon = "Interface\\Icons\\INV_Misc_Rune_01", text = T("hsUse", h.name or "?", mins, math.floor(len / 60 + 0.5)) }
+        return { kind = "use", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoHearth", tint = COL.accent, text = T("hsUse", h.name or "?", mins, math.floor(len / 60 + 0.5)) }
     end
 
     -- appele par l'affichage ; resultat garde quelques secondes (calcul de trajets)

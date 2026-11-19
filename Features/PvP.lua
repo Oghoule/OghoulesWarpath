@@ -69,11 +69,14 @@ do
         return inI and (kind == "pvp" or kind == "arena")
     end
     local function trim(t) while #t > MAXREC do table.remove(t, 1) end end
+    local lastKill   -- v1.41 : le jeu envoie parfois 2 fois le signal pour une seule victoire (2 X pour Dardrenn)
     local function onKill()
         if inPvPInstance() then return end     -- champs de bataille : des dizaines de victoires d'equipe, pas des trophees
         local p = P(); if not p then return end
         local m, x, y = here(); if not m then return end
         local en = recentEnemy(30) or {}
+        if lastKill and now() - lastKill.t < 3 and lastKill.nm == (en.nm or "?") then return end
+        lastKill = { t = now(), nm = en.nm or "?" }
         local e = { m = m, x = x, y = y, z = zoneName(m), when = stamp(), me = UnitLevel("player"),
                     lvl = en.lvl, cl = en.cl, ct = en.ct, rc = en.rc, nm = en.nm }
         table.insert(p.k, e); trim(p.k)
@@ -81,7 +84,7 @@ do
         pending[#pending + 1] = e
         if not (UnitAffectingCombat and UnitAffectingCombat("player")) then finish() end
         if DB.pvpShot and Screenshot and C_Timer then C_Timer.After(0.3, function() pcall(Screenshot) end) end
-        say(L("|cffc24a3eVictoire !|r Un X rouge marque l'endroit sur ta carte.", "|cffc24a3eVictory!|r A red X marks the spot on your map."))
+        say(L("|cffc24a3eVictoire !|r Un X rouge marque l'endroit sur ta carte.", "|cffc24a3eVictory!|r A red X marks the spot on your map."), true)
         if WarpathPvPRefresh then WarpathPvPRefresh() end
     end
     local function onDeath()

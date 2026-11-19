@@ -123,7 +123,7 @@ function OnEvent(self, event, ...)
         ns.Drops.OnBagUpdate()
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         local who, fn = ...
-        if who == ADDON then say(T("errBlocked", tostring(fn))) end
+        if who == ADDON then say(T("errBlocked", tostring(fn)), "error") end
     elseif event == "CHAT_MSG_ADDON" then
         local prefix, msg, _, sender = ...
         if prefix == ns.COMM then
@@ -200,6 +200,6 @@ ev:SetScript("OnEvent", function(self, event, ...)
     local ok, err = pcall(OnEvent, self, event, ...)
     if not ok and not errShown then
         errShown = true
-        say(T("errInternal", tostring(err)))
+        say(T("errInternal", tostring(err)), "error")
     end
 end)

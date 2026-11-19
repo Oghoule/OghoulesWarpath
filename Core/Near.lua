@@ -342,8 +342,43 @@ function PassageFor(s, q)
     local k = PassageKey(s, q)
     local own = WarpathDropDB and WarpathDropDB._pass and WarpathDropDB._pass[k]
     if own == "x" then return nil end
-    if type(own) == "table" then return own end
-    return ns.Passages and ns.Passages[k]
+    local v = (type(own) == "table" and own) or (ns.Passages and ns.Passages[k])
+    -- v1.41 : un passage loin de l'objectif (autre continent, ou a plus de 800 m) a ete enregistre par erreur
+    -- (ex. l'ascenseur de Thunder Bluff sur Goblin Invaders, dans Stonetalon) : on l'ignore
+    if v and s and s.m and s.x then
+        local a, b = WP(v[1], v[2], v[3]), WP(s.m, s.x, s.y)
+        if a and b and (a[3] ~= b[3] or Dist(a[1], a[2], b[1], b[2]) > 800) then return nil end
+    end
+    return v
+end
+
+-- Grottes des villes (Data.lua : D.CITYCAVES) : entree, eventuellement remplacee par la tienne (/warpath passage grotte)
+local function caveEntrance(c)
+    local own = WarpathDropDB and WarpathDropDB._cityCave and WarpathDropDB._cityCave[c.m]
+    if type(own) == "table" then return own[1], own[2] end
+    return c.x, c.y
+end
+-- la grotte qui contient ce PNJ (par son nom) ou ce point (a moins de 1,5 % de la carte d'un PNJ connu)
+function CityCaveFor(m, x, y, npc)
+    for _, c in ipairs(D.CITYCAVES or {}) do
+        if c.m == m then
+            for _, n in ipairs(c.npcs or {}) do if npc and n == npc then return c end end
+            if x and y then
+                for _, p in ipairs(c.at or {}) do
+                    if math.abs(p[1] - x) <= 1.5 and math.abs(p[2] - y) <= 1.5 then return c end
+                end
+            end
+        end
+    end
+end
+-- dehors et loin de l'entree : la fleche vise l'entree de la grotte ; dedans (ou sur le seuil) : le PNJ
+function CityCavePoint(m, x, y, npc, me)
+    local c = CityCaveFor(m, x, y, npc)
+    if not c or (IsIndoors and IsIndoors()) then return nil end
+    local ex, ey = caveEntrance(c)
+    local w = WP(c.m, ex, ey)
+    if not (w and me and w[3] == me[3]) or Dist(me[1], me[2], w[1], w[2]) <= 8 then return nil end
+    return { m = c.m, x = ex, y = ey, name = c.name, kind = "citycave" }
 end
 -- /warpath passage : ta position devient le point de passage de l'etape affichee ; "efface" le retire
 function PassageCmd(arg)
@@ -354,6 +389,24 @@ function PassageCmd(arg)
     local k = PassageKey(s, q)
     local name = QName(s) or ("#" .. q)
     arg = (arg or ""):lower()
+    -- v1.41 : passages de ville, pas lies a une quete
+    if arg == "ville" or arg == "city" or arg == "grotte" or arg == "cave" then
+        local pm, px, py = PlayerPos()
+        local city = pm and ZoneOf(pm)
+        if not (city and px and (city == 1454 or city == 1456 or city == 1458)) then say(T("passNotCity")); return end
+        local x, y = math.floor(px * 10 + 0.5) / 10, math.floor(py * 10 + 0.5) / 10
+        if arg == "ville" or arg == "city" then
+            WarpathDropDB._cityExit = WarpathDropDB._cityExit or {}
+            WarpathDropDB._cityExit[city] = { pm, x, y }
+            say(T("passCitySaved", MAPNAME[city] or tostring(city), x, y))
+        else
+            WarpathDropDB._cityCave = WarpathDropDB._cityCave or {}
+            WarpathDropDB._cityCave[city] = { x, y }
+            say(T("passCaveSaved", MAPNAME[city] or tostring(city), x, y))
+        end
+        lastWP = nil; Refresh(true)
+        return
+    end
     if arg == "efface" or arg == "clear" or arg == "x" then
         WarpathDropDB._pass[k] = "x"; say(T("passCleared", name))
     elseif arg == "liste" or arg == "list" then
@@ -369,6 +422,7 @@ function PassageCmd(arg)
         local x, y = math.floor(px * 10 + 0.5) / 10, math.floor(py * 10 + 0.5) / 10
         WarpathDropDB._pass[k] = { pm, x, y }
         say(T("passSaved", name, MAPNAME[pm] or tostring(pm), x, y))
+        say(T("passHint"))   -- rappel : ce point sert a CETTE quete ; pour une ville, /warpath passage ville ou grotte
     end
     lastWP = nil; Refresh(true)
 end
@@ -521,7 +575,20 @@ function CityGatePoint(s, me)
             end
         end
     end
-    if best and bd > 12 then return { m = best.m, x = best.x, y = best.y, name = MAPNAME[city] or "", kind = "gate" } end
+    if best and bd > 12 then
+        -- dans la ville : on vise la sortie cote ville (haut de l'ascenseur de Thunder Bluff...), la tienne d'abord
+        if city == zMe then
+            local own = WarpathDropDB and WarpathDropDB._cityExit and WarpathDropDB._cityExit[city]
+            local inner = (type(own) == "table" and own) or best.inner
+            if inner then
+                local w = WP(inner[1], inner[2], inner[3])
+                if w and w[3] == me[3] and Dist(me[1], me[2], w[1], w[2]) > 12 then
+                    return { m = inner[1], x = inner[2], y = inner[3], name = MAPNAME[city] or "", kind = "gate" }
+                elseif w then return nil end
+            end
+        end
+        return { m = best.m, x = best.x, y = best.y, name = MAPNAME[city] or "", kind = "gate" }
+    end
 end
 
 function StepPoint(s)
@@ -541,11 +608,22 @@ function StepPoint(s)
     -- course en ville demandee par toi (maitre d'armes, entraineur)
     local er = ErrandPoint(me)
     if er then return er end
+    -- Intendance : l'arret en cours de la tournee en ville
+    local qp = QMPoint and QMPoint()
+    if qp then
+        -- PNJ dans une grotte de la ville (Pools of Vision...) : d'abord l'entree
+        local cc = CityCavePoint(qp.m, qp.x, qp.y, qp.name, me)
+        if cc then cc.label, cc.idx, cc.n, cc.kind = qp.label, qp.idx, qp.n, "qm"; cc.name = T("caveIn") .. " · " .. cc.name end
+        return cc or qp
+    end
     if not smart then return nil end
     if s.t == "level" then return FarmSpot(s, me) end
     -- ville fermee : passer par la porte
     local gate = CityGatePoint(s, me)
     if gate then return gate end
+    -- etape dont le PNJ est dans une grotte de la ville (ex. Apothecary Zamah, Pools of Vision)
+    local cc = s.m and s.x and CityCavePoint(s.m, s.x, s.y, nil, me)
+    if cc then return cc end
     -- point de passage (tunnel, rampe, pont...) : l'entree tant que tu es du mauvais cote, puis l'objectif
     if s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept") then
         for _, q in ipairs(Ids(s)) do
