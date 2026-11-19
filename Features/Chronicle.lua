@@ -209,20 +209,34 @@ do
             banner.btn = FlatButton(banner, 70, 22, function() banner:Hide(); ChronShow(1) end)
             banner.btn:SetPoint("RIGHT", -12, 0)
             banner:SetScript("OnMouseUp", function() banner:Hide(); ChronShow(1) end)
-            banner:SetScript("OnLeave", function() if banner.expired and not (banner.IsMouseOver and banner:IsMouseOver()) then banner:Hide() end end)
+            banner:SetScript("OnLeave", function() if banner.expired and not (banner.IsMouseOver and banner:IsMouseOver()) then FadeOut(banner, 0.6) end end)
         end
         banner.l1:SetText(Caps(T("chBanner")))
         local m = c.mt and c.mt[1] and T(c.mt[1]) or ""
         banner.l2:SetText(T("chBannerLine", hm(c.a), lvTxt(c), "|cff" .. (GCOL[c.gr] or "cdbb8e") .. (c.gr or "-") .. "|r", m))
         banner.btn:SetLabel(Caps(T("chView")))
-        banner:SetAlpha(1); banner.expired = false; banner:Show()
+        -- v1.42 : arrivee en fondu (petite descente) + reflet dore, depart en fondu
+        banner.expired = false
+        FadeIn(banner, 0.4, 8); Shine(banner)
+        -- le « Quoi de neuf » deja affiche passe juste en dessous (meme place en haut de l'ecran)
+        local toast = _G.WarpathToast
+        if toast and toast:IsShown() then toast:ClearAllPoints(); toast:SetPoint("TOP", banner, "BOTTOM", 0, -8) end
         DB.chronNew = nil
         if C_Timer and C_Timer.After then
             C_Timer.After(10, function()
                 banner.expired = true
-                if banner:IsShown() and not (banner.IsMouseOver and banner:IsMouseOver()) then banner:Hide() end
+                if banner:IsShown() and not (banner.IsMouseOver and banner:IsMouseOver()) then FadeOut(banner, 0.6) end
             end)
         end
+    end
+
+    -- /warpath apercu (v1.42) : la banniere de la derniere Chronique, sans toucher a DB.chronNew
+    function ChronPreview()
+        if not (DB and DB.chron and DB.chron[1]) then return false end
+        local keep = DB.chronNew
+        local ok = pcall(Banner)
+        DB.chronNew = keep
+        return ok
     end
 
     ------------------------------------------------------------------

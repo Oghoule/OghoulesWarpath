@@ -22,6 +22,7 @@ do
     }
     local panel, title, rows = nil, nil, {}
     local lastDock
+    local Dock   -- definie plus bas, mais appelee par Apply (sans ca : erreur cachee par pcall, liste refaite a chaque fois)
     local wanted, shownKey, waiting
 
     local function Create()
@@ -253,7 +254,7 @@ do
 
     -- Par defaut, collee sous la fenetre du guide. Pas d'ancrage direct (un bouton securise ancre a la
     -- fenetre bloquerait ses changements de taille en combat) : on recopie sa position hors combat.
-    local function Dock()
+    function Dock()
         if not panel or DB.tgtPos or (InCombatLockdown and InCombatLockdown()) then return end
         local f = _G.WarpathFrame
         -- mode compact (v1.40) : collee sous la petite fenetre

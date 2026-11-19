@@ -213,7 +213,8 @@ function SetUpcoming(items, passed)
     f.nUp = math.min(#items, limit)
     local tg = rawget(f, "upToggle")
     if tg then
-        tg.fs:SetText(more > 0 and (DB.upOpen and "▴" or ("+" .. more .. " ▾")) or "")
+        -- (la police du jeu n'a pas les fleches ▾ ▴ : un petit carre s'affichait)
+        tg.fs:SetText(more > 0 and (DB.upOpen and "-" or ("+" .. more)) or "")
         tg:SetShown(more > 0)
     end
     for k = 1, 4 do
@@ -239,7 +240,8 @@ end
 
 -- Place les blocs visibles les uns sous les autres et ajuste la hauteur
 function Layout()
-    local y = -(HEAD_H or 34) - 14
+    -- (v1.41 : 24 px sous l'en-tete au lieu de 14, pour que « Step x / y » au-dessus de la barre respire)
+    local y = -(HEAD_H or 34) - 24
     local function put(obj, h, gap, x)
         obj:ClearAllPoints()
         obj:SetPoint("TOPLEFT", f, "TOPLEFT", x or PAD, y)
@@ -950,6 +952,81 @@ end
 -- v1.41 (audit) : bandeau d'information au-dessus du guide (ne demande rien) ; disparait seul apres 10 s.
 -- Clic = action (ex. ouvrir le detail) ; « x » = fermer. Les vraies questions restent des fenetres (Popup).
 ------------------------------------------------------------------
+-- v1.42 : fondus et reflet pour les bannieres (Chronique, Quoi de neuf).
+-- Un simple OnUpdate qui change l'opacite (pas d'AnimationGroup) ; tout est protege : si un appel manque
+-- sur Forever, le cadre s'affiche / se cache d'un coup comme avant.
+local function fxDriver(fr)
+    if not fr.fxDrv then fr.fxDrv = CreateFrame("Frame") end
+    return fr.fxDrv
+end
+-- apparition : opacite 0 -> 1 en dur s ; dy = petite descente vers sa place (pixels), facultative
+function FadeIn(fr, dur, dy)
+    if not fr then return end
+    dur = dur or 0.4
+    local ok, d = pcall(fxDriver, fr)
+    local p, rel, rp, x, y
+    if dy and fr.GetPoint then p, rel, rp, x, y = fr:GetPoint(1) end
+    if not ok or not d then fr:SetAlpha(1); fr:Show(); return end
+    fr:SetAlpha(0); fr:Show()
+    local t = 0
+    d:SetScript("OnUpdate", function(self, el)
+        t = t + (el or 0)
+        local k = math.min(1, t / dur)
+        local e = 1 - (1 - k) * (1 - k)   -- ralentit a l'arrivee
+        fr:SetAlpha(e)
+        if p then pcall(fr.SetPoint, fr, p, rel, rp, x, y + dy * (1 - e)) end
+        if k >= 1 then self:SetScript("OnUpdate", nil) end
+    end)
+end
+-- disparition : opacite actuelle -> 0 en dur s, puis Hide
+function FadeOut(fr, dur)
+    if not (fr and fr:IsShown()) then return end
+    dur = dur or 0.6
+    local ok, d = pcall(fxDriver, fr)
+    if not ok or not d then fr:Hide(); return end
+    local a0, t = fr:GetAlpha() or 1, 0
+    d:SetScript("OnUpdate", function(self, el)
+        t = t + (el or 0)
+        local k = math.min(1, t / dur)
+        fr:SetAlpha(a0 * (1 - k))
+        if k >= 1 then self:SetScript("OnUpdate", nil); fr:Hide(); fr:SetAlpha(1) end
+    end)
+end
+-- reflet : un trait de lumiere doree traverse le cadre une fois, de gauche a droite
+function Shine(fr, delay)
+    if not (fr and CreateFrame) then return end
+    local clip = fr.fxClip
+    if clip == false then return end   -- deja essaye : le jeu ne sait pas faire le degrade
+    if not clip then
+        local ok = pcall(function()
+            clip = CreateFrame("Frame", nil, fr); clip:SetAllPoints()
+            if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+            clip:SetFrameLevel((fr:GetFrameLevel() or 1) + 5)
+            local band = CreateFrame("Frame", nil, clip); band:SetWidth(90)
+            local l = band:CreateTexture(nil, "OVERLAY"); l:SetPoint("TOPLEFT"); l:SetPoint("BOTTOMRIGHT", band, "BOTTOM")
+            local r = band:CreateTexture(nil, "OVERLAY"); r:SetPoint("TOPRIGHT"); r:SetPoint("BOTTOMLEFT", band, "BOTTOM")
+            local c0, c1 = CreateColor(1, 0.88, 0.6, 0), CreateColor(1, 0.88, 0.6, 0.30)
+            for _, t in ipairs({ l, r }) do t:SetColorTexture(1, 1, 1, 1); t:SetBlendMode("ADD") end
+            l:SetGradient("HORIZONTAL", c0, c1); r:SetGradient("HORIZONTAL", c1, c0)
+            clip.band = band
+        end)
+        if not ok then if clip then clip:Hide() end; fr.fxClip = false; return end
+        fr.fxClip = clip
+    end
+    local band, w = clip.band, fr:GetWidth() or 300
+    band:SetHeight(fr:GetHeight() or 50)
+    band:ClearAllPoints(); band:SetPoint("LEFT", clip, "LEFT", -90, 0)
+    clip:Show(); band:Show()
+    local t, dur = -(delay or 0.35), 0.8
+    clip:SetScript("OnUpdate", function(self, el)
+        t = t + (el or 0)
+        if t < 0 then return end
+        local k = math.min(1, t / dur)
+        band:SetPoint("LEFT", self, "LEFT", -90 + (w + 90) * k, 0)
+        if k >= 1 then self:SetScript("OnUpdate", nil); band:Hide() end
+    end)
+end
+
 do
     local toast, gen = nil, 0
     function Toast(head, text, onClick)
@@ -970,18 +1047,17 @@ do
             local hl = Tex(toast, COL.accent, 0.06, "HIGHLIGHT"); hl:SetAllPoints()
             toast:SetScript("OnClick", function(self) self:Hide(); if self.action then pcall(self.action) end end)
         end
-        -- au-dessus de la fenetre visible (grande ou compacte)
-        local mf = f and rawget(f, "mini")
-        local anchor = (mf and mf:IsShown() and mf) or f or UIParent
+        -- v1.42 : en haut au centre de l'ecran (au-dessus du guide, il cachait la minicarte quand le guide est
+        -- colle dessous) ; sous la banniere de la Chronique si elle est affichee
         toast:ClearAllPoints()
-        if anchor == UIParent then toast:SetPoint("TOP", UIParent, "TOP", 0, -120)
-        else toast:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 6) end
-        if toast.SetScale then toast:SetScale(DB and DB.scale or 1) end
+        local cb = _G.WarpathChronBanner
+        if cb and cb:IsShown() then toast:SetPoint("TOP", cb, "BOTTOM", 0, -8)
+        else toast:SetPoint("TOP", UIParent, "TOP", 0, -110) end
         toast.head:SetText(Caps(head or "")); toast.text:SetText(text or ""); toast.action = onClick
-        toast:Show()
+        FadeIn(toast, 0.4)
         gen = gen + 1
         local mine = gen
-        if C_Timer and C_Timer.After then C_Timer.After(10, function() if gen == mine then toast:Hide() end end) end
+        if C_Timer and C_Timer.After then C_Timer.After(10, function() if gen == mine then FadeOut(toast, 0.6) end end) end
     end
 end
 

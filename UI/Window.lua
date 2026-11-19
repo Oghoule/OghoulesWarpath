@@ -758,7 +758,11 @@ function OnTaxiOpened()
                 if GetNumRoutes then pcall(GetNumRoutes, node) end
                 ns.Trace("TakeTaxiNode"); TakeTaxiNode(node)
             end
-            if C_Timer and C_Timer.After then C_Timer.After(0.4, function() if TaxiFrame and TaxiFrame:IsShown() or (TaxiNodeName and TaxiNodeName(node)) then go() end end) else go() end
+            if C_Timer and C_Timer.After then C_Timer.After(0.4, function()
+                -- carte des vols encore ouverte seulement (fermee entre-temps = le joueur a change d'avis, ou Maj)
+                local open = (TaxiFrame and TaxiFrame:IsShown()) or (not TaxiFrame and TaxiNodeName and TaxiNodeName(node))
+                if open and not (IsShiftKeyDown and IsShiftKeyDown()) then go() end
+            end) else go() end
         end
     end
     Refresh(true)
