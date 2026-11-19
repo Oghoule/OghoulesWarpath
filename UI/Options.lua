@@ -572,15 +572,15 @@ local function CreateOptions()
         local h = SmallHeader(pg, "display"); h:SetPoint("TOPLEFT", 0, 0)
         local y = -18
         local sw = CheckRow(pg, CW, "showWindow",
-            function() local f = E.Frame(); return f and f:IsShown() end,
-            function(v) local f = E.Frame(); if f then f:SetShown(v) end; DB.shown = v; if ns.Targets then ns.Targets.Refresh() end end)
+            function() return DB.shown ~= false end,
+            function(v) E.ShowGuide(v) end)
         sw:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
         local lk = CheckRow(pg, CW, "lock", function() return DB.locked end, function(v) DB.locked = v end)
         lk:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
         local mb = CheckRow(pg, CW, "mmButton", function() return not DB.mmHide end,
             function(v) DB.mmHide = not v; if mm then mm:SetShown(v) end end)
         mb:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        for _, o in ipairs({ { "compact", "compact", false }, { "trainerOpt", "trainer", true }, { "tipsOpt", "tips", true } }) do
+        for _, o in ipairs({ { "miniOpt", "mini", false }, { "compact", "compact", false }, { "trainerOpt", "trainer", true }, { "tipsOpt", "tips", true } }) do
             local field, def = o[2], o[3]
             local r = CheckRow(pg, CW, o[1], function() if def then return DB[field] ~= false end return DB[field] and true or false end,
                 function(v) DB[field] = v; if field == "trainer" and not v then DB.trainDue = nil end; Refresh(true) end)
@@ -594,7 +594,7 @@ local function CreateOptions()
         local function SetScale(v)
             v = math.max(0.6, math.min(1.5, math.floor(v * 20 + 0.5) / 20))
             DB.scale = v
-            local f = E.Frame(); if f then f:SetScale(v) end
+            local f = E.Frame(); if f then f:SetScale(v); local mf = rawget(f, "mini"); if mf then mf:SetScale(v) end end
             val:SetText(math.floor(v * 100 + 0.5) .. " %")
         end
         local minus = FlatButton(pg, 28, 26, function() SetScale((DB.scale or 1) - 0.05) end); minus:SetPoint("TOPLEFT", 150, y); minus:SetLabel("-")
@@ -689,7 +689,7 @@ local function CreateMinimapButton()
     if hl.SetAlpha then hl:SetAlpha(0.35) end
     mm:SetScript("OnClick", function(_, button)
         if button == "RightButton" then
-            local f = E.Frame(); if f then f:SetShown(not f:IsShown()); DB.shown = f:IsShown() end; if ns.Targets then ns.Targets.Refresh() end; RefreshOptions()
+            E.ShowGuide(DB.shown == false); RefreshOptions()
         else
             ToggleOptions()
         end

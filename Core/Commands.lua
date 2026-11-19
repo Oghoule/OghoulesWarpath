@@ -25,9 +25,9 @@ SlashCmdList["WARPATH"] = function(msg)
     local cmd, arg = (msg or ""):match("^(%S*)%s*(.-)$")
     cmd = (cmd or ""):lower()
     if cmd == "" or cmd == "toggle" then
-        f:SetShown(not f:IsShown())
-        DB.shown = f:IsShown()
-        if ns.Targets then ns.Targets.Refresh() end
+        ShowGuide(DB.shown == false)
+    elseif cmd == "compact" or cmd == "mini" then
+        ToggleMini()
     elseif cmd == "skip" or cmd == "ignore" then
         Ignore()
     elseif cmd == "unskip" then
@@ -237,6 +237,7 @@ _G.BINDING_NAME_WARPATH_NEXT = "Voir l'étape suivante"
 _G.BINDING_NAME_WARPATH_TOGGLE = "Afficher / cacher le guide"
 _G.BINDING_NAME_WARPATH_OPTIONS = "Ouvrir les options"
 _G.BINDING_NAME_WARPATH_NOW = "Revenir à l'étape actuelle"
+_G.BINDING_NAME_WARPATH_MINI = "Mode compact / normal"
 _G["BINDING_NAME_CLICK WarpathTarget1:LeftButton"] = "Cibler la 1re cible de l'étape"
 _G["BINDING_NAME_CLICK WarpathTarget2:LeftButton"] = "Cibler la 2e cible de l'étape"
 _G.WarpathBinding = function(action)
@@ -245,12 +246,19 @@ _G.WarpathBinding = function(action)
     elseif action == "next" then Peek(1)
     elseif action == "now" then BackToNow()
     elseif action == "toggle" then SlashCmdList.WARPATH("toggle")
+    elseif action == "mini" then ToggleMini()
     elseif action == "options" then SlashCmdList.WARPATH("options") end
 end
 
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.40", fr = "Mode compact : le « - » en haut à droite de la fenêtre (ou /warpath compact, ou un raccourci clavier) ne garde que les objectifs de l'étape avec leur compteur, ou une seule ligne pour prendre ou rendre une quête. Le « + » ramène la fenêtre complète. La fenêtre complète s'agrandit ou se réduit avec la poignée en bas à droite.",
+      en = "Compact mode: the \"-\" at the top right of the window (or /warpath compact, or a key binding) keeps only the step's objectives with their counters, or a single line to pick up or turn in a quest. The \"+\" brings back the full window. The full window grows or shrinks with the grip at the bottom right." },
+    { v = "1.39", fr = "Vols : l'addon ne croit plus connaître des points de vol jamais découverts (trajets faux, ex. Sun Rock) et apprend un vol dès que tu le découvres. Le bouton du maître d'armes et les repères d'entraîneurs dirigent maintenant la flèche (puis retour au guide une fois sur place). Orgrimmar, Thunder Bluff et Undercity : la flèche passe par la porte au lieu d'aller à vol d'oiseau.",
+      en = "Flights: the addon no longer thinks it knows flight points you never discovered (wrong routes, e.g. Sun Rock) and learns a flight as soon as you discover it. The weapon master button and trainer pins now steer the arrow (then back to the guide once there). Orgrimmar, Thunder Bluff and Undercity: the arrow goes through the gate instead of as the crow flies." },
+    { v = "1.38", fr = "Western Plaguelands : All Along the Watchtowers ajoutée (prise à The Bulwark, les 4 tours à marquer pendant le passage à Andorhal).",
+      en = "Western Plaguelands: All Along the Watchtowers added (picked up at The Bulwark, the 4 towers marked during the Andorhal visit)." },
     { v = "1.37", fr = "Zephras Isle : la fin de l'histoire est maintenant dans le guide (Desperate Times jusqu'à What Comes Next), sans quoi The Earthen Ring restait bloquée. Style de jeu : une quête qui débloque une quête d'un guide suivant n'est plus jamais sautée.",
       en = "Zephras Isle: the end of the story is now in the guide (Desperate Times through What Comes Next); without it The Earthen Ring stayed locked. Play style: a quest that unlocks a quest in a later guide is never skipped." },
     { v = "1.36", fr = "Étapes « Monte au niveau » : la flèche et le bloc destination indiquent un coin de farm près de toi, avec des monstres de ton niveau (Manque d'XP : Farmer ou Les deux). « Les deux » propose aussi le donjon de ton niveau.",

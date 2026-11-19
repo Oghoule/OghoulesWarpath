@@ -245,6 +245,9 @@ do
     local function Dock()
         if not panel or DB.tgtPos or (InCombatLockdown and InCombatLockdown()) then return end
         local f = _G.WarpathFrame
+        -- mode compact (v1.40) : collee sous la petite fenetre
+        local mini = _G.WarpathMini
+        if mini and mini.IsShown and mini:IsShown() then f = mini end
         if not (f and f:IsShown() and f:GetLeft()) then return end
         local sc, l, b, w = f:GetScale(), f:GetLeft(), f:GetBottom(), f:GetWidth()
         local key = sc .. ":" .. math.floor(l) .. ":" .. math.floor(b) .. ":" .. math.floor(w)

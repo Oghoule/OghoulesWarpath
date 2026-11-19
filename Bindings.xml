@@ -5,6 +5,7 @@
     <Binding name="WARPATH_NOW" category="ADDONS">WarpathBinding("now")</Binding>
     <Binding name="WARPATH_TOGGLE" category="ADDONS">WarpathBinding("toggle")</Binding>
     <Binding name="WARPATH_OPTIONS" category="ADDONS">WarpathBinding("options")</Binding>
+    <Binding name="WARPATH_MINI" category="ADDONS">WarpathBinding("mini")</Binding>
     <Binding name="CLICK WarpathTarget1:LeftButton" category="ADDONS"/>
     <Binding name="CLICK WarpathTarget2:LeftButton" category="ADDONS"/>
 </Bindings>

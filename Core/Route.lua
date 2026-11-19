@@ -290,6 +290,29 @@ function KnownFlights()
     return list
 end
 
+-- Nouveau point de vol decouvert (message du jeu) : on note le maitre de vol le plus proche,
+-- sans attendre que tu ouvres la carte des vols (v1.39).
+function LearnFlightHere()
+    local here = PlayerWP()
+    if not (here and DB) then return end
+    local best, bd
+    for _, n in ipairs(FLIGHTS) do
+        local w = WP(n.m, n.x, n.y)
+        if w and w[3] == here[3] then
+            local d = Dist(here[1], here[2], w[1], w[2])
+            if not bd or d < bd then best, bd = n, d end
+        end
+    end
+    if best and bd < 100 then
+        DB.fp = DB.fp or {}
+        if not DB.fp[best.key] then
+            DB.fp[best.key] = true
+            lastWP = nil
+            ScheduleAdvance()
+        end
+    end
+end
+
 -- Meilleur vol entre deux points du meme continent (ou nil s'il ne fait pas gagner assez de temps).
 function BestFlight(a, b, known)
     if not (a and b) or a[3] ~= b[3] then return nil end

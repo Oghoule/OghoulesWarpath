@@ -299,8 +299,154 @@ function CreateUI()
 
     f.passed = FS(f, 10, COL.gold, FONT, "LEFT"); f.passed:SetWidth(INNER - 22); f.passed:Hide()
     f.badge.lbl:SetText(T("lvlShort"))
+
+    -- v1.40 : poignee en bas a droite = agrandir / reduire la fenetre (echelle, comme dans les options), hors combat
+    local grip = CreateFrame("Button", nil, f)
+    grip:SetSize(12, 12); grip:SetPoint("BOTTOMRIGHT", -1, 1)
+    if grip.SetFrameLevel and f.GetFrameLevel then grip:SetFrameLevel((f:GetFrameLevel() or 1) + 10) end
+    local gt = grip:CreateTexture(nil, "OVERLAY"); gt:SetAllPoints()
+    gt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    if gt.SetVertexColor then gt:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
+    local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetScript("OnMouseDown", function(self)
+        if DB.locked or (InCombatLockdown and InCombatLockdown()) or not GetCursorPosition then return end
+        local s, left, top = f:GetScale() or 1, f:GetLeft(), f:GetTop()
+        if not (left and top) then return end
+        local ui = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+        -- le coin haut-gauche reste en place ; la largeur suit la souris
+        self.drag = { s = s, left = left * s, top = top * s, x0 = GetCursorPosition() / ui, w = W * s, ui = ui }
+        self:SetScript("OnUpdate", function()
+            local d = self.drag; if not d then return end
+            local dx = GetCursorPosition() / d.ui - d.x0
+            local sc = math.max(0.6, math.min(1.5, d.s * (d.w + dx) / d.w))
+            f:SetScale(sc); f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", d.left / sc, d.top / sc)
+        end)
+    end)
+    grip:SetScript("OnMouseUp", function(self)
+        self:SetScript("OnUpdate", nil)
+        if not self.drag then return end
+        self.drag = nil
+        DB.scale = math.floor((f:GetScale() or 1) * 100 + 0.5) / 100
+        local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
+        local mf = rawget(f, "mini"); if mf and mf.SetScale then mf:SetScale(DB.scale) end
+        if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
+    end)
+    grip:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("winResize"), 1, 1, 1, true); Tip():Show() end)
+    grip:SetScript("OnLeave", function() Tip():Hide() end)
+
+    -- bouton « - » en haut a droite : passer en mode compact
+    local function miniBtn(parent, label, tipKey)
+        local b = CreateFrame("Button", nil, parent); b:SetSize(16, 14)
+        b.fs = FS(b, 12, COL.gold, FONT, "CENTER"); b.fs:SetPoint("CENTER"); b.fs:SetText(label)
+        local h = Tex(b, COL.accent, 0.12, "HIGHLIGHT"); h:SetAllPoints()
+        b:SetScript("OnClick", function() ToggleMini() end)
+        b:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T(tipKey), 1, 1, 1, true); Tip():Show() end)
+        b:SetScript("OnLeave", function() Tip():Hide() end)
+        return b
+    end
+    f.miniBtn = miniBtn(f, "-", "miniEnter"); f.miniBtn:SetPoint("TOPRIGHT", -2, -1)
+
+    -- v1.40 : mode compact = une petite fenetre a part, seulement les objectifs (ou une ligne pour prendre/rendre)
+    local mf = CreateFrame("Frame", "WarpathMini", UIParent)
+    mf:SetSize(MINI_W, 30)
+    if DB.mpos then mf:SetPoint(DB.mpos[1], UIParent, DB.mpos[2], DB.mpos[3], DB.mpos[4])
+    else mf:SetPoint("TOPRIGHT", f, "TOPRIGHT") end
+    local mbg = Tex(mf, COL.bg, 0.90, "BACKGROUND"); mbg:SetAllPoints()
+    Border(mf, COL.line, 0.8, "BORDER")
+    mf:SetClampedToScreen(true); mf:SetMovable(true); mf:EnableMouse(true); mf:RegisterForDrag("LeftButton")
+    mf:SetScript("OnDragStart", function(self) if not DB.locked then self:StartMoving() end end)
+    mf:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local p, _, rp, x, y = self:GetPoint(); DB.mpos = { p, rp, x, y }
+    end)
+    mf.plus = miniBtn(mf, "+", "miniExit"); mf.plus:SetPoint("TOPRIGHT", -2, -2)
+    mf.rows = {}
+    if mf.SetScale then mf:SetScale(DB.scale or 1) end
+    mf:Hide()
+    f.mini = mf
+
     f:SetShown(DB.shown ~= false)
     if f.SetScale then f:SetScale(DB.scale or 1) end
+end
+
+------------------------------------------------------------------
+-- Mode compact (v1.40) : la grande fenetre est cachee, la petite montre l'essentiel de l'etape
+------------------------------------------------------------------
+MINI_W, MINI_PAD = 230, 10
+local function miniRow(mf, k)
+    local r = mf.rows[k]
+    if r then return r end
+    r = CreateFrame("Frame", nil, mf); r:SetSize(MINI_W - 2 * MINI_PAD - 14, 16)
+    r.gem = Diamond(r, 7, COL.accent, true); r.gem:SetPoint("LEFT", -2, 0)
+    r.count = FS(r, 12, COL.accent, FONT, "RIGHT"); r.count:SetPoint("RIGHT")
+    r.name = FS(r, 12, COL.white, FONT, "LEFT"); r.name:SetPoint("LEFT", 14, 0); r.name:SetPoint("RIGHT", r.count, "LEFT", -8, 0)
+    if r.name.SetWordWrap then r.name:SetWordWrap(false) end
+    mf.rows[k] = r
+    return r
+end
+
+function UpdateMini()
+    local mf = f and rawget(f, "mini")
+    if not mf then return end
+    local dl = DungeonLogActive and DungeonLogActive()
+    local on = DB.mini and DB.shown ~= false and steps and not dl and true or false
+    f:SetShown(DB.shown ~= false and not on)
+    mf:SetShown(on)
+    if not on then return end
+    -- objectifs de l'etape (ceux de la grande fenetre), sinon une ligne : type d'etape + PNJ ou lieu
+    local lines = {}
+    for k = 1, (rawget(f, "nObj") or 0) do
+        local w = f.obj[k]
+        if w and w.kind == "obj" then lines[#lines + 1] = { text = w.name:GetText() or "", count = w.count:GetText() or "", done = w.done } end
+    end
+    if #lines == 0 then
+        local s = steps[peek or focus or current]
+        if s then
+            local nm = (s.t ~= "do" and f.dest and f.dest:IsShown() and f.destName:GetText()) or (s.t ~= "do" and s.quest and QName(s)) or ""
+            if nm == "" and StepText then nm = (StepText(s) or ""):gsub("\n.*", "") end
+            lines[1] = { verb = Caps(T(s.t)), text = nm }
+        end
+    end
+    local y = -MINI_PAD
+    for k, l in ipairs(lines) do
+        if k > 8 then break end
+        local r = miniRow(mf, k)
+        r:ClearAllPoints(); r:SetPoint("TOPLEFT", mf, "TOPLEFT", MINI_PAD, y)
+        r.name:SetText(l.verb and ("|cffd6b866" .. l.verb .. "|r  " .. l.text) or l.text)
+        r.count:SetText(l.count or "")
+        local c = l.done and COL.dim or COL.white
+        if r.name.SetTextColor then r.name:SetTextColor(c[1], c[2], c[3]) end
+        c = l.done and COL.dim or COL.accent
+        if r.count.SetTextColor then r.count:SetTextColor(c[1], c[2], c[3]) end
+        r.gem:SetStyle(l.done and COL.dim or COL.accent, not l.done)
+        -- ligne unique (note, prise, remise) : le texte peut passer a la ligne ; objectifs : une ligne chacun
+        if r.name.SetWordWrap then r.name:SetWordWrap(l.verb and true or false) end
+        local h = 16
+        if l.verb and r.name.GetStringHeight then
+            local sh = r.name:GetStringHeight()
+            if type(sh) == "number" and sh > h then h = math.min(sh, 60) end
+        end
+        r:SetHeight(h)
+        r:Show()
+        y = y - h - 4
+    end
+    for k = #lines + 1, #mf.rows do mf.rows[k]:Hide() end
+    mf:SetHeight(-y + MINI_PAD - 4)
+end
+
+function ToggleMini()
+    DB.mini = not DB.mini
+    Refresh(true)
+end
+
+-- afficher / cacher le guide (grande ou petite fenetre selon le mode)
+function ShowGuide(v)
+    DB.shown = v and true or false
+    if f then
+        if UpdateMini then pcall(UpdateMini) end
+        if not rawget(f, "mini") then f:SetShown(DB.shown) end
+    end
+    if ns.Targets then ns.Targets.Refresh() end
 end
 
 ------------------------------------------------------------------
@@ -321,6 +467,7 @@ ns.E = {
     Current = function() return current end,
     Race = function() return myRace end,
     ResetWP = function() lastWP = nil end,
+    ShowGuide = function(v) ShowGuide(v) end,
     WarpathName = WarpathName,
     Tip = function() return Tip() end, GuideStatus = function(k) return GuideStatus(k) end,
     ProfOrder = function() return PROF_ORDER end, ProfKey = function(id) return PROF_KEY[id] end, ProfName = function(id) return ProfName(id) end, TrainerPins = function() if TrainerPinsRefresh then pcall(TrainerPinsRefresh, true) end end,
@@ -356,8 +503,9 @@ function OnTaxiOpened()
         local kind = TaxiNodeGetType and TaxiNodeGetType(i)
         local key = NodeKeyFor(name)
         if key then
-            -- CURRENT = ici ; REACHABLE = connu et atteignable ; DISTANT = connu mais pas relie d'ici
-            if kind == "CURRENT" or kind == "REACHABLE" or kind == "DISTANT" then DB.fp[key] = true end
+            -- CURRENT = ici ; REACHABLE = connu et atteignable. Sur Forever, DISTANT designe aussi les points
+            -- JAMAIS decouverts (Everlook, Moonglade... au niveau 23) : on ne les compte plus (v1.39).
+            if kind == "CURRENT" or kind == "REACHABLE" then DB.fp[key] = true end
             if kind == "CURRENT" then here = key; ns.Comfort.SetTaxiFrom(name) end
             if kind == "REACHABLE" then reach[key] = true end
         end

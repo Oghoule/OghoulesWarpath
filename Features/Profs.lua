@@ -191,6 +191,8 @@ do
         return (ok and i and i.name) or ""
     end
     local function setWP(e)
+        -- la fleche de l'addon y va (avant, seul le point du jeu changeait, et le guide l'ecrasait aussitot)
+        if SetErrand then SetErrand(e[1], e[2], e[3], e[4]); return end
         if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates then
             pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(e[1], e[2] / 100, e[3] / 100))
             if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
@@ -254,7 +256,10 @@ do
         b:SetScript("OnLeave", function() Tip():Hide() end)
         b:SetScript("OnClick", function(self)
             local d = self.t
-            if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates and d.m > 0 then
+            if SetErrand and d.m > 0 then
+                SetErrand(d.m, d.x, d.y, d.n)
+                say(T("trainerWP", d.n, d.label or ProfName(d.s)))
+            elseif C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates and d.m > 0 then
                 pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(d.m, d.x / 100, d.y / 100))
                 if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
                 say(T("trainerWP", d.n, d.label or ProfName(d.s)))

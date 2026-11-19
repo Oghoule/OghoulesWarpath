@@ -398,6 +398,7 @@ function SetObjRows(rows)
             f.obj[k] = w
         end
         w.kind = r.k
+        w.done = r.done and true or false   -- (lu par le mode compact)
         w.name:ClearAllPoints()
         if r.k == "obj" then
             w.icon:SetTexture("Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\" .. (r.done and "BoxDone" or "Box")); w.icon:Show()
@@ -495,7 +496,7 @@ function RefreshInner(forceWP)
         local g = det and { t = det.done and "turnin" or "do", id = det.id, m = det.m, x = det.x, y = det.y,
                             zone = MAPNAME[det.m] or s.zone, quest = det.name } or s
         -- grotte (entree/sortie) ou objet au sol le plus proche : la fleche vise ce point
-        local sp = (not peek and not det and StepPoint) and StepPoint(s) or nil
+        local sp = (not peek and (not det or DB.errand) and StepPoint) and StepPoint(s) or nil
         if sp then g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest } end
         if f.caveBtn then
             local cave = sp and (sp.kind == "enter" or sp.kind == "exit")
@@ -673,6 +674,8 @@ function RefreshInner(forceWP)
             end
             if sp and sp.kind == "farm" then nm, extra = sp.name, T("farmSub", sp.lmin, sp.lmax, sp.n)
             elseif sp and sp.kind == "pass" then extra = T("tunnelVia")
+            elseif sp and sp.kind == "gate" then extra = T("gateVia")
+            elseif sp and sp.kind == "errand" then nm, extra = sp.name or nm, T("errandSub")
             elseif sp and sp.kind == "zone" then nm, extra = sp.name ~= "" and sp.name or nm, T("zoneCamp", sp.idx or 1, sp.n or 2)
             elseif sp and sp.kind == "enter" then extra = T("caveEnter") elseif sp and sp.kind == "exit" then extra = T("caveExit"):lower() end
             if fl then nm, extra = fl.from.name, T("flight") .. " > " .. fl.to.name
@@ -802,6 +805,7 @@ end
 local shownErr = {}
 function Refresh(forceWP)
     local ok, err = pcall(RefreshInner, forceWP)
+    if ok and UpdateMini then ok, err = pcall(UpdateMini) end
     if not ok then
         local m = tostring(err)
         if not shownErr[m] then shownErr[m] = true; say(T("errDisplay", m)) end

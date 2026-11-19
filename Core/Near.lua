@@ -474,11 +474,62 @@ function FarmSpot(s, me)
     end
     return best
 end
+-- Course en ville (v1.39) : maitre d'armes, entraineur... La fleche y va en priorite, puis revient au guide
+-- une fois sur place (8 m), a l'ouverture de l'entraineur, ou apres 15 min.
+function SetErrand(m, x, y, name)
+    if not (DB and m and x and y) then return end
+    DB.errand = { m = m, x = x, y = y, name = name, t = time and time() or 0 }
+    lastWP = nil
+    Refresh(true)
+end
+function ClearErrand()
+    if not (DB and DB.errand) then return end
+    DB.errand = nil
+    lastWP = nil
+    Refresh(true)
+end
+function ErrandPoint(me)
+    local e = DB and DB.errand
+    if not e then return nil end
+    local w = WP(e.m, e.x, e.y)
+    if (time and e.t and time() - e.t > 900) or (w and me and w[3] == me[3] and Dist(me[1], me[2], w[1], w[2]) < 8) then
+        DB.errand = nil
+        return nil
+    end
+    return { m = e.m, x = e.x, y = e.y, name = e.name, kind = "errand" }
+end
+
+-- Villes fermees (Orgrimmar, Thunder Bluff, Undercity) : on y entre et on en sort par la porte,
+-- pas a vol d'oiseau a travers les murs (v1.39). Les portes sont dans D.GATES (Data.lua).
+local WALLED = { [1454] = true, [1456] = true, [1458] = true }
+function CityGatePoint(s, me)
+    if not (s and s.m and s.x) then return nil end
+    local zMe, zTo = ZoneOf(me[4]), ZoneOf(s.m)
+    if not (zMe and zTo) or zMe == zTo then return nil end
+    local city = WALLED[zTo] and zTo or (WALLED[zMe] and zMe) or nil
+    if not city then return nil end
+    local other = (city == zTo) and zMe or zTo
+    local best, bd
+    for _, g in ipairs(D.GATES or {}) do
+        local z1, z2 = g.z[1], g.z[2]
+        -- dehors : seulement une porte qui donne sur ta zone ; dedans : n'importe quelle porte de la ville
+        if (z1 == city or z2 == city) and (city == zMe or z1 == other or z2 == other) then
+            local w = WP(g.m, g.x, g.y)
+            if w and w[3] == me[3] then
+                local d = Dist(me[1], me[2], w[1], w[2])
+                if not bd or d < bd then best, bd = g, d end
+            end
+        end
+    end
+    if best and bd > 12 then return { m = best.m, x = best.x, y = best.y, name = MAPNAME[city] or "", kind = "gate" } end
+end
+
 function StepPoint(s)
-    if not (s and DB and DB.smartArrow ~= false) then return nil end
+    if not (s and DB) then return nil end
     local me = PlayerWP(); if not me then return nil end
+    local smart = DB.smartArrow ~= false
     -- mort (fantome) : la fleche va a ton corps
-    if UnitIsGhost and UnitIsGhost("player") and C_DeathInfo and C_DeathInfo.GetCorpseMapPosition then
+    if smart and UnitIsGhost and UnitIsGhost("player") and C_DeathInfo and C_DeathInfo.GetCorpseMapPosition then
         local pm = PlayerPos()
         local ok, p = pcall(C_DeathInfo.GetCorpseMapPosition, pm)
         if ok and p then
@@ -487,7 +538,14 @@ function StepPoint(s)
             if x and y then return { m = pm, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10, name = T("corpse"), kind = "corpse" } end
         end
     end
+    -- course en ville demandee par toi (maitre d'armes, entraineur)
+    local er = ErrandPoint(me)
+    if er then return er end
+    if not smart then return nil end
     if s.t == "level" then return FarmSpot(s, me) end
+    -- ville fermee : passer par la porte
+    local gate = CityGatePoint(s, me)
+    if gate then return gate end
     -- point de passage (tunnel, rampe, pont...) : l'entree tant que tu es du mauvais cote, puis l'objectif
     if s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept") then
         for _, q in ipairs(Ids(s)) do

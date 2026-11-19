@@ -27,6 +27,16 @@ function OnEvent(self, event, ...)
         DB.dAnswer = DB.dAnswer or {}
         DB.fp = DB.fp or {}
         DB.fpLinks = DB.fpLinks or {}
+        -- v1.39 : DB.fp contenait a tort les points de vol "DISTANT" (jamais decouverts). On le reconstruit
+        -- a partir des liaisons vues sur la carte des vols (fpLinks), qui ne contiennent que des points connus.
+        if not DB.fpV2 then
+            local fp = {}
+            for here, reach in pairs(DB.fpLinks) do
+                fp[here] = true
+                for k in pairs(reach) do fp[k] = true end
+            end
+            DB.fp, DB.fpV2 = fp, true
+        end
         DB.lockHide = DB.lockHide or {}
         local fresh = WarpathDropDB == nil
         WarpathDropDB = WarpathDropDB or {}
@@ -85,6 +95,7 @@ function OnEvent(self, event, ...)
         self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
         self:RegisterEvent("TAXIMAP_OPENED")
         self:RegisterEvent("TAXIMAP_CLOSED")
+        self:RegisterEvent("UI_INFO_MESSAGE")
         self:RegisterEvent("PLAYER_CONTROL_GAINED")
         self:RegisterEvent("PLAYER_CONTROL_LOST")
         self:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN")
@@ -132,6 +143,8 @@ function OnEvent(self, event, ...)
         end
         if IsTradeskillTrainer then local ok, v = pcall(IsTradeskillTrainer); if ok and v then prof = true end end
         if not prof then DB.trainDue = nil end
+        -- arrive chez l'entraineur vise : la fleche revient au guide
+        if DB.errand and ClearErrand then ClearErrand() end
     elseif event == "PLAYER_REGEN_ENABLED" then
         ns.Comfort.UpdateItemButton()
     elseif event == "GROUP_ROSTER_UPDATE" then
@@ -152,6 +165,12 @@ function OnEvent(self, event, ...)
         if id then DB.done[id] = true end
         peek = nil
         ScheduleAdvance()
+    elseif event == "UI_INFO_MESSAGE" then
+        -- "Nouveau trajet aerien decouvert" : on apprend le point de vol tout de suite
+        local _, msg = ...
+        if type(msg) == "string" and ERR_NEWTAXIPATH and not (issecretvalue and issecretvalue(msg)) and msg == ERR_NEWTAXIPATH then
+            pcall(LearnFlightHere)
+        end
     elseif event == "TAXIMAP_OPENED" then
         OnTaxiOpened()
     elseif event == "TAXIMAP_CLOSED" or event == "PLAYER_CONTROL_LOST" then
