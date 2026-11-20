@@ -273,6 +273,8 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.43", fr = "Données de Questie mises à jour (QuestieDB 1.1.3) : positions de PNJ, XP et prérequis des quêtes. Vorsha the Lasher : la flèche et le ciblage montrent maintenant Vorsha. Mont Hyjal : Stemming the Demon Tide retirée du guide (réservée à l'Alliance).",
+      en = "Questie data updated (QuestieDB 1.1.3): NPC positions, quest XP and prerequisites. Vorsha the Lasher: the arrow and targeting now show Vorsha. Mount Hyjal: Stemming the Demon Tide removed from the guide (Alliance only)." },
     { v = "1.43", fr = "Vols : l'addon ne te fait plus marcher longtemps en croyant qu'un vol est impossible. Un point de vol découvert est maintenant relié tout de suite à tes autres points du continent, et une ancienne carte des vols ne bloque plus un vol vers un point appris depuis.",
       en = "Flights: the addon no longer makes you walk a long way thinking a flight is impossible. A newly discovered flight point is now linked right away to your other points on the continent, and an old flight map no longer blocks a flight to a point learned since." },
     { v = "1.43", fr = "Grand détour : la proposition de garder le chemin attend que tu fermes la carte du monde avant de s'effacer. Seul le « x » compte comme un non ; une proposition ratée revient à la séance suivante. Pierre de foyer : le bouton du conseil suit maintenant la fenêtre quand tu la déplaces (hors combat).",
