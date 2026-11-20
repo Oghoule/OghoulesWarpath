@@ -361,10 +361,15 @@ local function CreateOptions()
                 b.fs:SetText(d.name)
                 if b.fs.SetFont then b.fs:SetFont(FONT, 10, "") end
                 local lv = FS(b, 9, COL.gold, FONT, "RIGHT"); lv:SetPoint("RIGHT", -10, 0)
+                -- v1.42 : le nom s'arrete avant les niveaux (coupe en « ... » si trop long)
+                b.fs:SetPoint("RIGHT", lv, "LEFT", -6, 0); b.fs:SetJustifyH("LEFT")
+                if b.fs.SetWordWrap then b.fs:SetWordWrap(false) end
                 optRows[#optRows + 1] = function()
                     local me = UnitLevel and UnitLevel("player") or 0
                     local inRange = me >= d.min and me <= d.max
-                    lv:SetText((inRange and "|cffcdbb8e" or "") .. d.min .. "-" .. d.max .. (inRange and "|r" or ""))
+                    local ideal = DungeonIdeal and DungeonIdeal(d.key)
+                    lv:SetText((inRange and "|cffcdbb8e" or "") .. d.min .. "-" .. d.max .. (inRange and "|r" or "")
+                        .. (ideal and ("  |cff8c7f62·|r " .. ((me >= ideal and inRange) and "|cffcdbb8e" or "") .. ideal .. ((me >= ideal and inRange) and "|r" or "")) or ""))
                     local active = (DB.guide == d.key)
                     local c = active and COL.accent or COL.white
                     if b.fs.SetTextColor then b.fs:SetTextColor(c[1], c[2], c[3]) end
@@ -373,6 +378,8 @@ local function CreateOptions()
                     E.Tip():SetOwner(self, "ANCHOR_RIGHT")
                     E.Tip():AddLine(d.name)
                     E.Tip():AddLine(T("dTip", d.min, d.max), 1, 1, 1, true)
+                    local ideal = DungeonIdeal and DungeonIdeal(d.key)
+                    if ideal then E.Tip():AddLine(T("dIdeal", ideal), 0.84, 0.72, 0.4, true) end
                     E.Tip():Show()
                 end)
                 b:SetScript("OnLeave", function() E.Tip():Hide() end)
@@ -415,7 +422,7 @@ local function CreateOptions()
                     b.fs:SetText(c.name)
                     local col = c.done and COL.gold or (me >= c.lvl and COL.white or COL.soft)
                     if b.fs.SetTextColor then b.fs:SetTextColor(col[1], col[2], col[3]) end
-                    b.lv:SetText(c.done and T("classDone") or T("classLvl", c.lvl))
+                    b.lv:SetText(c.done and T("classDone") or (c.lvl2 > c.lvl and T("classLvls", c.lvl, c.lvl2) or T("classLvl", c.lvl)))
                     b:Show()
                 else
                     b.q = nil; b:Hide()

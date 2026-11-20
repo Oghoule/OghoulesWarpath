@@ -432,6 +432,33 @@ function DungeonReqText(key)
     return T(n == 1 and "dReqAll1" or "dReqAll", n)
 end
 
+-- v1.42 : niveau ideal d'un donjon, tire du guide (quetes non optionnelles) : le plus haut entre le niveau
+-- requis le plus eleve (toutes les quetes prenables) et le niveau median des quetes - 3 (XP complete sans
+-- donjon trop dur), borne a la plage min-max. nil si le guide n'a aucune quete principale.
+local idealCache = {}
+function DungeonIdeal(key)
+    if idealCache[key] ~= nil then return idealCache[key] or nil end
+    local g, d = Guides[key], nil
+    for _, x in ipairs(DUNGEONS) do if x.key == key then d = x end end
+    local res = false
+    if g and d then
+        local reqMax, lvls = 0, {}
+        for _, s in ipairs(g.steps or {}) do
+            if s.t == "accept" and not s.optional and s.req then
+                if s.req > reqMax then reqMax = s.req end
+                if s.lvl then lvls[#lvls + 1] = s.lvl end
+            end
+        end
+        if #lvls > 0 then
+            table.sort(lvls)
+            local v = math.max(reqMax, lvls[math.floor(#lvls / 2) + 1] - 3)
+            res = math.min(d.max, math.max(d.min, v))
+        end
+    end
+    idealCache[key] = res
+    return res or nil
+end
+
 function CheckDungeons()
     if not DB or DB.noDungeonAsk or IS_DUNGEON[DB.guide] or not StaticPopup_Show or asking then return end
     local lvl = UnitLevel("player")
@@ -464,7 +491,7 @@ function ClassQuestList()
                 if Rendue(id) then done = true elseif not pick then pick = id end
             end
         end
-        if pick or done then out[#out + 1] = { lvl = r[1], name = r[2], q = pick, done = done } end
+        if pick or done then out[#out + 1] = { lvl = r[1], lvl2 = r[4] or r[1], name = r[2], q = pick, done = done } end
     end
     return out
 end
