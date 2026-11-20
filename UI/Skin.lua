@@ -1030,7 +1030,13 @@ end
 
 do
     local toast, gen = nil, 0
-    function Toast(head, text, onClick)
+    -- v1.43 : onX = appele seulement si le joueur ferme avec le « x » (un vrai « non ») ;
+    -- le compte a rebours de 10 s est en pause tant que la carte du monde est ouverte (elle cache le toast)
+    local function mapOpen()
+        local wm = _G.WorldMapFrame
+        return wm and wm.IsShown and wm:IsShown()
+    end
+    function Toast(head, text, onClick, onX)
         if not (CreateFrame and UIParent) then return end
         if not toast then
             toast = CreateFrame("Button", "WarpathToast", UIParent)
@@ -1045,7 +1051,10 @@ do
             toast.x = CreateFrame("Button", nil, toast); toast.x:SetSize(16, 16); toast.x:SetPoint("TOPRIGHT", -4, -4)
             toast.x.fs = FS(toast.x, 11, COL.soft, FONT, "CENTER"); toast.x.fs:SetPoint("CENTER")
             toast.x.fs:SetText(Glyph(toast.x, "x", COL.soft, 7) and "" or "x")
-            toast.x:SetScript("OnClick", function() toast:Hide() end)
+            toast.x:SetScript("OnClick", function()
+                toast:Hide(); local fn = toast.onX; toast.onX = nil
+                if fn then pcall(fn) end
+            end)
             local hl = Tex(toast, COL.accent, 0.06, "HIGHLIGHT"); hl:SetAllPoints()
             toast:SetScript("OnClick", function(self) self:Hide(); if self.action then pcall(self.action) end end)
         end
@@ -1055,11 +1064,20 @@ do
         local cb = _G.WarpathChronBanner
         if cb and cb:IsShown() then toast:SetPoint("TOP", cb, "BOTTOM", 0, -8)
         else toast:SetPoint("TOP", UIParent, "TOP", 0, -110) end
-        toast.head:SetText(Caps(head or "")); toast.text:SetText(text or ""); toast.action = onClick
+        toast.head:SetText(Caps(head or "")); toast.text:SetText(text or ""); toast.action = onClick; toast.onX = onX
         FadeIn(toast, 0.4)
         gen = gen + 1
         local mine = gen
-        if C_Timer and C_Timer.After then C_Timer.After(10, function() if gen == mine then FadeOut(toast, 0.6) end end) end
+        if C_Timer and C_Timer.After then
+            local left = 10
+            local function tick()
+                if gen ~= mine or not toast:IsShown() then return end
+                if mapOpen() then left = 10          -- carte ouverte : on repart pour 10 s a sa fermeture
+                else left = left - 1 end
+                if left <= 0 then FadeOut(toast, 0.6) else C_Timer.After(1, tick) end
+            end
+            C_Timer.After(1, tick)
+        end
     end
 end
 

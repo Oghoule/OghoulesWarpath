@@ -172,8 +172,10 @@ local function checkArrival(here)
     if not cand then return end
     cand.key = key
     candidate = cand
-    refused()[key] = true          -- propose une seule fois ; le garder retire ce « non »
-    Toast(T("trailHead"), T("trailAsk", math.floor(cand.ex)), TrailKeep)
+    -- v1.43 : « non » seulement si le joueur ferme avec le « x ». Sans reponse (toast efface), on
+    -- reproposera a la prochaine seance (arrived[] evite de redemander dans la meme seance).
+    Toast(T("trailHead"), T("trailAsk", math.floor(cand.ex)), TrailKeep,
+        function() refused()[key] = true end)
 end
 
 -- Appele chaque seconde (Window.lua, a cote de LearnGates)

@@ -40,10 +40,9 @@ function CreateUI()
     if f.destName.SetMaxLines then f.destName:SetMaxLines(2) end
     if f.dest.EnableMouse then f.dest:EnableMouse(true) end
     if f.dest.RegisterForDrag then f.dest:RegisterForDrag("LeftButton") end
-    f.dest:SetScript("OnDragStart", function() if not DB.locked then f:StartMoving() end end)
-    f.dest:SetScript("OnDragStop", function()
-        f:StopMovingOrSizing(); local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
-    end)
+    -- v1.43 : memes gestes que la fenetre (pierre de foyer cachee puis replacee)
+    f.dest:SetScript("OnDragStart", function() local fn = f:GetScript("OnDragStart"); if fn then fn(f) end end)
+    f.dest:SetScript("OnDragStop", function() local fn = f:GetScript("OnDragStop"); if fn then fn(f) end end)
     f.dest:SetScript("OnEnter", function(self)
         local c = rawget(f, "destCoord"); if not c then return end
         Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(f.destName:GetText() or "")
@@ -55,11 +54,19 @@ function CreateUI()
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self) if not DB.locked then self:StartMoving() end end)
+    -- v1.43 : le bouton de pierre de foyer (securise, hors de la fenetre) se cache pendant le deplacement
+    -- et se replace sur l'icone au lacher, hors combat (en combat : replace a la fin du combat)
+    f:SetScript("OnDragStart", function(self)
+        if DB.locked then return end
+        local b = rawget(self, "hsBtn")
+        if b and not (InCombatLockdown and InCombatLockdown()) then b:Hide() end
+        self:StartMoving()
+    end)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         local p, _, rp, x, y = self:GetPoint()
         DB.wpos = { p, rp, x, y }
+        if HearthPlace then pcall(HearthPlace) end
     end)
 
     -- (ordre de creation garde : title, text, list, coord)
@@ -725,7 +732,15 @@ function OnTaxiOpened()
         end
         if flightPlan and key == flightPlan.to.key and kind == "REACHABLE" then target = i end
     end
-    if here then DB.fpLinks[here] = reach end
+    if here then
+        DB.fpLinks[here] = reach
+        -- Instantane des points connus a ce moment (voir CanFly, v1.43)
+        local snap = {}
+        for k in pairs(DB.fp) do snap[k] = true end
+        DB.fpLinksKnown = DB.fpLinksKnown or {}
+        DB.fpLinksKnown[here] = snap
+        lastWP = nil
+    end
     if target then
         local btn = _G["TaxiButton" .. target]
         if btn then

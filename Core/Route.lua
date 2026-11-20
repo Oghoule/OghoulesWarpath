@@ -272,10 +272,14 @@ end
 
 -- Peut-on voler de A vers B ? Si on a deja ouvert la carte de vol en A, on connait la liste exacte
 -- des destinations atteignables (correspondances comprises). Sinon on suppose que oui.
+-- v1.43 : la liste de A ne bloque B que si B etait deja connu quand on l'a enregistree (fpLinksKnown).
+-- Un point appris plus tard, ou une liste ancienne sans cet instantane, ne bloque plus rien.
 function CanFly(aKey, bKey)
     local links = DB and DB.fpLinks and DB.fpLinks[aKey]
-    if not links then return true end
-    return links[bKey] and true or false
+    if not links or links[bKey] then return true end
+    local knownThen = DB.fpLinksKnown and DB.fpLinksKnown[aKey]
+    if not knownThen then return true end
+    return not knownThen[bKey]
 end
 
 function KnownFlights()
@@ -307,6 +311,16 @@ function LearnFlightHere()
         DB.fp = DB.fp or {}
         if not DB.fp[best.key] then
             DB.fp[best.key] = true
+            -- v1.43 : tes points connus d'un meme continent sont relies ; on ajoute le nouveau point
+            -- aux liaisons deja notees sur ce continent, sans attendre de rouvrir chaque carte des vols.
+            local bw = WP(best.m, best.x, best.y)
+            for _, n in ipairs(FLIGHTS) do
+                local links = DB.fpLinks and DB.fpLinks[n.key]
+                if links and n.key ~= best.key then
+                    local w = WP(n.m, n.x, n.y)
+                    if w and bw and w[3] == bw[3] then links[best.key] = true end
+                end
+            end
             lastWP = nil
             ScheduleAdvance()
         end
