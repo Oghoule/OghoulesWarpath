@@ -758,6 +758,7 @@ function RefreshInner(forceWP)
             end
             if sp and sp.kind == "farm" then nm, extra = sp.name, T("farmSub", sp.lmin, sp.lmax, sp.n)
             elseif sp and sp.kind == "pass" then extra = T("tunnelVia")
+            elseif sp and sp.kind == "trail" then extra = T(sp.out and "trailOutSub" or "trailInSub")
             elseif sp and sp.kind == "gate" then extra = T("gateVia")
             elseif sp and sp.kind == "citycave" then nm, extra = sp.name or nm, T("caveEnter")
             elseif sp and sp.kind == "errand" then nm, extra = sp.name or nm, T("errandSub")
@@ -1042,7 +1043,8 @@ do
             toast.text:SetPoint("RIGHT", toast, "RIGHT", -24, 0)
             if toast.text.SetWordWrap then toast.text:SetWordWrap(false) end
             toast.x = CreateFrame("Button", nil, toast); toast.x:SetSize(16, 16); toast.x:SetPoint("TOPRIGHT", -4, -4)
-            toast.x.fs = FS(toast.x, 11, COL.soft, FONT, "CENTER"); toast.x.fs:SetPoint("CENTER"); toast.x.fs:SetText("x")
+            toast.x.fs = FS(toast.x, 11, COL.soft, FONT, "CENTER"); toast.x.fs:SetPoint("CENTER")
+            toast.x.fs:SetText(Glyph(toast.x, "x", COL.soft, 7) and "" or "x")
             toast.x:SetScript("OnClick", function() toast:Hide() end)
             local hl = Tex(toast, COL.accent, 0.06, "HIGHLIGHT"); hl:SetAllPoints()
             toast:SetScript("OnClick", function(self) self:Hide(); if self.action then pcall(self.action) end end)
@@ -1066,10 +1068,42 @@ end
 --   HeadButton(parent, label) : bouton carre 16 px a contour dore (« ? », « x », « - »...)
 --   ScaleGrip(frame, get, set) : poignee en bas a droite ; glisser = echelle de la fenetre (coin haut-gauche fixe)
 ------------------------------------------------------------------
+-- v1.42 : « x », « - », « + » dessines avec deux traits au lieu d'une lettre : la lettre de la police n'est pas
+-- centree verticalement dans sa case (le « x » est une minuscule posee sur la ligne de base).
+-- Renvoie true si le dessin a marche ; sinon on garde la lettre (fallback).
+function Glyph(b, label, c, size)
+    if label ~= "x" and label ~= "-" and label ~= "+" then return false end
+    size = size or 8
+    local ok = pcall(function()
+        local function bar(w, h, rot)
+            local t = b:CreateTexture(nil, "ARTWORK")
+            t:SetColorTexture(c[1], c[2], c[3], 1)
+            t:SetSize(w, h); t:SetPoint("CENTER", b, "CENTER", 0, 0)
+            if rot then t:SetRotation(rot) end
+            return t
+        end
+        if label == "x" then
+            local d = size * 1.25   -- diagonale : meme encombrement visuel que les autres signes
+            b.g1 = bar(d, 1.5, math.pi / 4); b.g2 = bar(d, 1.5, -math.pi / 4)
+        elseif label == "-" then
+            b.g1 = bar(size, 1.5)
+        else
+            b.g1 = bar(size, 1.5); b.g2 = bar(1.5, size)
+        end
+    end)
+    if not ok then
+        if b.g1 then b.g1:Hide() end
+        if b.g2 then b.g2:Hide() end
+        b.g1, b.g2 = nil, nil
+    end
+    return ok
+end
+
 function HeadButton(parent, label)
     local b = CreateFrame("Button", nil, parent); b:SetSize(16, 16)
     Border(b, COL.accent, 0.6)
-    b.fs = FS(b, 11, COL.accent, FONT, "CENTER"); b.fs:SetPoint("CENTER", 0, 0); b.fs:SetText(label or "")
+    b.fs = FS(b, 11, COL.accent, FONT, "CENTER"); b.fs:SetPoint("CENTER", 0, 0)
+    b.fs:SetText(Glyph(b, label, COL.accent) and "" or (label or ""))
     local h = Tex(b, COL.accent, 0.15, "HIGHLIGHT"); h:SetAllPoints()
     b:SetScript("OnLeave", function() Tip():Hide() end)
     return b

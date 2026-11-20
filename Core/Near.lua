@@ -624,6 +624,9 @@ function StepPoint(s)
     -- etape dont le PNJ est dans une grotte de la ville (ex. Apothecary Zamah, Pools of Vision)
     local cc = s.m and s.x and CityCavePoint(s.m, s.x, s.y, nil, me)
     if cc then return cc end
+    -- v1.42 : chemin garde (fil d'Ariane, Trail.lua) : la fleche le suit
+    local tp = TrailPoint and TrailPoint(s, me)
+    if tp then return tp end
     -- point de passage (tunnel, rampe, pont...) : l'entree tant que tu es du mauvais cote, puis l'objectif
     if s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept") then
         for _, q in ipairs(Ids(s)) do

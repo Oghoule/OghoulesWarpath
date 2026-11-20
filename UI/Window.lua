@@ -445,7 +445,8 @@ function CreateUI()
     -- bouton « - » en haut a droite : passer en mode compact
     local function miniBtn(parent, label, tipKey)
         local b = CreateFrame("Button", nil, parent); b:SetSize(16, 14)
-        b.fs = FS(b, 12, COL.gold, FONT, "CENTER"); b.fs:SetPoint("CENTER"); b.fs:SetText(label)
+        b.fs = FS(b, 12, COL.gold, FONT, "CENTER"); b.fs:SetPoint("CENTER")
+        b.fs:SetText(Glyph(b, label, COL.gold) and "" or label)   -- v1.42 : signe dessine, bien centre
         local h = Tex(b, COL.accent, 0.12, "HIGHLIGHT"); h:SetAllPoints()
         b:SetScript("OnClick", function() ToggleMini() end)
         b:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T(tipKey), 1, 1, 1, true); Tip():Show() end)
@@ -785,7 +786,7 @@ wpTicker:SetScript("OnUpdate", function(_, dt)
     wpElapsed = wpElapsed + (dt or 0)
     if wpElapsed < 1 then return end
     wpElapsed = 0
-    if DB then pcall(LearnGates) end
+    if DB then pcall(LearnGates); pcall(TrailTick) end
     if not (DB and DB.wp and desiredWP) then return end
     if not (C_Map and C_Map.HasUserWaypoint) or C_Map.HasUserWaypoint() then return end
     if UnitOnTaxi and UnitOnTaxi("player") then return end

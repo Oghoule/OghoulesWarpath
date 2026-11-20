@@ -656,7 +656,7 @@ local function CreateOptions()
         local pg = pages[7]
         local h = SmallHeader(pg, "tabAuto"); h:SetPoint("TOPLEFT", 0, 0)
         local y = -18
-        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "autoFly", "autoFly" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "smartArrowOpt", "smartArrow" } }) do
+        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "autoFly", "autoFly" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "smartArrowOpt", "smartArrow" }, { "trailOpt", "trailAsk" } }) do
             local field = o[2]
             local r = CheckRow(pg, CW, o[1], function() return DB[field] ~= false end, function(v) DB[field] = v; Refresh(true) end)
             r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
