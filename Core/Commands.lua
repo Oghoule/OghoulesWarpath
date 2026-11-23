@@ -275,6 +275,8 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.45", fr = "Données de Questie mises à jour (QuestieDB 1.1.4) : niveaux requis plus bas pour quelques quêtes (Durotar, Silverpine, Thousand Needles), Valuable Vantages (Hillsbrad) avec ses 3 points à visiter. Zephras Isle : la chaîne Skyborne reste complète.",
+      en = "Questie data updated (QuestieDB 1.1.4): lower required levels for a few quests (Durotar, Silverpine, Thousand Needles), Valuable Vantages (Hillsbrad) with its 3 points to visit. Zephras Isle: the Skyborne chain stays complete." },
     { v = "1.44", fr = "Badlands : niveau 49 conseillé (au lieu de 50) ; Hierophant Theodora Mulvadania est indiquée « 30 m au sud de l'auberge ». Données Questie à jour partout : Palah Thunderhoof (Mulgore) au bon endroit, quelques objets de quête au sol mieux placés, et 3 quêtes de plus dans la liste des quêtes proposées que le guide ne prend pas.",
       en = "Badlands: level 49 recommended (instead of 50); Hierophant Theodora Mulvadania is marked \"30 m south of the inn\". Questie data up to date everywhere: Palah Thunderhoof (Mulgore) in the right place, a few ground quest objects better placed, and 3 more quests in the list of nearby quests the guide skips." },
     { v = "1.43", fr = "Fenêtre du guide : la petite flèche du bloc destination tourne maintenant vers l'endroit où aller, comme la grande flèche (même si la grande est coupée dans les options). Son intérieur rougit doucement quand tu vas dans la bonne direction.",

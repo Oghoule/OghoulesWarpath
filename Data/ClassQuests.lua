@@ -21,7 +21,6 @@ ns.ClassQuests = {
     HUNTER = {
         { 10, "Taming the Beast", { 6081, 6089, 94050 }, 10 },
         { 10, "Taming the Beast", { 94007 }, 10 },
-        { 40, "Terror of the Desert Skies", { 78830 }, 40 },
         { 50, "The Hunter's Charm", { 8232 }, 52 },
     },
     ROGUE = {
@@ -30,12 +29,12 @@ ns.ClassQuests = {
         { 16, "Fenwick Thatros", { 1999 }, 20 },
         { 16, "Zando'zan", { 2381 }, 18 },
         { 20, "The Shattered Salute", { 2480 }, 20 },
-        { 23, "The Horn of Xelthos", { 78676, 78699 }, 35 },
+        { 23, "The Horn of Xelthos", { 78699 }, 35 },
         { 24, "The Manor, Ravenholdt", { 96779 }, 24 },
         { 24, "The Manor, Ravenholdt", { 96781 }, 36 },
         { 24, "The Manor, Ravenholdt", { 96786 }, 36 },
         { 45, "Fool Me Twice", { 80411 }, 50 },
-        { 50, "A Simple Request", { 8236 }, 52 },
+        { 50, "Sealed Azure Bag", { 8236 }, 52 },
     },
     PRIEST = {
         { 10, "Hex of Weakness", { 5652, 5654, 5655, 5656, 5657 }, 10 },
@@ -67,8 +66,8 @@ ns.ClassQuests = {
         { 30, "Tome of the Cabal", { 1795 }, 30 },
         { 31, "Components for the Enchanted Gold Bloodrobe", { 4785 }, 37 },
         { 31, "Components for the Enchanted Gold Bloodrobe", { 4786 }, 38 },
-        { 35, "Knowledge of the Orb of Orahil", { 4964 }, 40 },
-        { 35, "Knowledge of the Orb of Orahil", { 4975 }, 40 },
+        { 35, "Fragments of the Orb of Orahil", { 4964 }, 40 },
+        { 35, "Fragments of the Orb of Orahil", { 4975 }, 40 },
         { 40, "Summon Felsteed", { 4490 }, 40 },
         { 50, "An Imp's Request", { 8422 }, 52 },
         { 50, "What Niby Commands", { 7603 }, 55 },
@@ -79,6 +78,7 @@ ns.ClassQuests = {
         { 14, "Lessons Anew", { 6130 }, 14 },
         { 16, "A Lesson to Learn", { 31 }, 16 },
         { 20, "The Great Cat Spirit", { 98362 }, 20 },
+        { 20, "The Great Windborne Cat Spirit", { 98404 }, 20 },
         { 50, "Bloodpetal Poison", { 9053 }, 52 },
     },
 }

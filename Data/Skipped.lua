@@ -15,7 +15,6 @@ ns.Skipped = {
   },
   [1420] = {
     { 8, 38.2, 56.8, 8589934770, 1, "A Rogue's Deal" },
-    { 97176, 22.1, 44.7, 8589934770, 0, "Exorcising Terrordale" },
     { 97178, 22.1, 44.7, 8589934770, 0, "Ott of Tarren Mill" },
     { 97558, 65.4, 60.1, 8589934770, 6, "Hides for the Forsaken" },
   },

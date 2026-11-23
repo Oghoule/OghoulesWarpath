@@ -49,10 +49,8 @@ ns.ClassTrainers = {
   },
   PALADIN = {
     { 1420, 31.0, 66.2, "Aramis Hammerhand" },
-    { 1420, 60.2, 52.7, "Shari Stilwell" },
-    { 1456, 25.4, 14.7, "Alodan the Hopeful" },
+    { 1456, 25.4, 14.6, "Alodan the Hopeful" },
     { 1420, 22.0, 47.2, "Hilda the Breaker" },
-    { 1458, 47.5, 15.0, "Garen Largo" },
   },
   PRIEST = {
     { 1420, 31.1, 66.0, "Dark Cleric Duesten" },
@@ -80,6 +78,7 @@ ns.ClassTrainers = {
     { 1458, 83.9, 72.1, "Carolyn Ward" },
     { 1458, 85.2, 71.6, "Miles Dexter" },
     { 1458, 84.9, 73.5, "Gregory Charles" },
+    { 1420, 32.7, 65.7, "Clarence Gillian" },
   },
   SHAMAN = {
     { 1435, 48.2, 57.9, "Haromm" },
@@ -125,6 +124,8 @@ ns.ClassTrainers = {
     { 1458, 46.9, 15.2, "Christoph Walker" },
     { 1458, 48.3, 16.0, "Angela Curthas" },
     { 1458, 47.4, 17.3, "Baltus Fowler" },
+    { 1458, 47.5, 15.0, "Garen Largo" },
+    { 1454, 79.9, 30.7, "Gruga Bloodblade" },
   },
   WEAPON = {
     { 1454, 81.5, 19.6, "Hanashi" },
