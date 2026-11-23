@@ -93,7 +93,7 @@ ns.ClassTrainers = {
     { 1454, 38.8, 36.4, "Kardris Dreamseeker" },
     { 1454, 37.8, 36.5, "Sian'tsu" },
     { 1454, 38.7, 35.9, "Sagorne Creststrider" },
-    { 1412, 31.9, 22.5, "Palah Thunderhoof" },
+    { 1412, 33.6, 22.4, "Palah Thunderhoof" },
   },
   WARLOCK = {
     { 1435, 48.6, 55.6, "Kartosh" },

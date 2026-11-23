@@ -7,6 +7,7 @@ ns.Skipped = {
   [1413] = {
     { 865, 62.4, 37.6, 0, 13, "Raptor Horns" },
     { 896, 63.4, 38.5, 0, 13, "Miner's Fortune" },
+    { 959, 63.1, 37.6, 0, 14, "Trouble at the Docks" },
     { 1069, 62.4, 37.6, 0, 15, "Deepmoss Spider Eggs" },
     { 1130, 44.9, 59.1, 8589934770, 20, "Melor Sends Word" },
     { 1145, 51.1, 29.6, 8589934770, 29, "The Swarm Grows" },
@@ -14,6 +15,8 @@ ns.Skipped = {
   },
   [1420] = {
     { 8, 38.2, 56.8, 8589934770, 1, "A Rogue's Deal" },
+    { 97176, 22.1, 44.7, 8589934770, 0, "Exorcising Terrordale" },
+    { 97178, 22.1, 44.7, 8589934770, 0, "Ott of Tarren Mill" },
     { 97558, 65.4, 60.1, 8589934770, 6, "Hides for the Forsaken" },
   },
   [1421] = {

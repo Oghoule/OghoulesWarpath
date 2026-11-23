@@ -275,6 +275,8 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.44", fr = "Badlands : niveau 49 conseillé (au lieu de 50) ; Hierophant Theodora Mulvadania est indiquée « 30 m au sud de l'auberge ». Données Questie à jour partout : Palah Thunderhoof (Mulgore) au bon endroit, quelques objets de quête au sol mieux placés, et 3 quêtes de plus dans la liste des quêtes proposées que le guide ne prend pas.",
+      en = "Badlands: level 49 recommended (instead of 50); Hierophant Theodora Mulvadania is marked \"30 m south of the inn\". Questie data up to date everywhere: Palah Thunderhoof (Mulgore) in the right place, a few ground quest objects better placed, and 3 more quests in the list of nearby quests the guide skips." },
     { v = "1.43", fr = "Fenêtre du guide : la petite flèche du bloc destination tourne maintenant vers l'endroit où aller, comme la grande flèche (même si la grande est coupée dans les options). Son intérieur rougit doucement quand tu vas dans la bonne direction.",
       en = "Guide window: the small arrow in the destination block now turns toward where you need to go, like the big arrow (even if the big one is turned off in the options). Its inside softly turns red when you're heading the right way." },
     { v = "1.43", fr = "Fenêtre des quêtes de classe, de métier et des chaînes plus claire : un titre qui dit de quoi il s'agit (« Quêtes de classe »), le même nom que dans les options, la durée, l'XP et les monstres sur des lignes séparées, et des chances d'obtenir les objets faciles à lire (« environ 1 fois sur 3 »).",

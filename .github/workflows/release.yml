@@ -13,7 +13,7 @@ jobs:
           path: OghoulesWarpath
       - name: Create zip
         run: |
-          rm -rf OghoulesWarpath/.git OghoulesWarpath/.github
+          rm -rf OghoulesWarpath/.git OghoulesWarpath/.github OghoulesWarpath/.gitignore OghoulesWarpath/.gitattributes
           zip -r OghoulesWarpath.zip OghoulesWarpath
       - name: Upload zip to release
         env:
