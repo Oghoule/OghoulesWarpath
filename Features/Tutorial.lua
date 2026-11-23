@@ -22,22 +22,23 @@ end
 
 local PAGES = {
     { welcome = true, text = "tutoWelcome" },                                   -- accueil (carte centree, sans trou)
+    -- v1.43 (demande de l'auteur) : de haut en bas, comme la fenetre (le trou descend sans sauter)
     { head = "tutoWinHead", text = "tutoWin", target = function() return Shown(Win()) end },
-    { head = "tutoDestHead", text = "tutoDest", target = function() local w = Win(); return Shown(w and w.dest) end },
+    { head = "tutoHeadHead", text = "tutoHead", header = true, target = function() return Shown(Win()) end },
+    -- type + titre, destination, objectifs : l'un sous l'autre dans la fenetre, donc une seule page
     { head = "tutoStepHead", text = "tutoStep", target = function()
         local w = Win(); if not w then return {} end
-        local t = Shown(w.kindRow, w.qtitle, w.text)
+        local t = Shown(w.kindRow, w.qtitle, w.dest, w.text)
         for _, row in ipairs(rawget(w, "obj") or {}) do if row:IsVisible() then t[#t + 1] = row end end
         return t
     end },
-    { head = "tutoBtnHead", text = "tutoBtn", target = function() local w = Win(); return Shown(w and w.btnRow) end },
     { head = "tutoNextHead", text = "tutoNextUp", target = function()
         local w = Win(); if not w then return {} end
         local t = Shown(w.nextRule)
         for _, b in ipairs(rawget(w, "up") or {}) do if b:IsVisible() then t[#t + 1] = b end end
         return t
     end },
-    { head = "tutoHeadHead", text = "tutoHead", header = true, target = function() return Shown(Win()) end },
+    { head = "tutoBtnHead", text = "tutoBtn", target = function() local w = Win(); return Shown(w and w.btnRow) end },
     -- v1.43 (demande de l'auteur) : la fleche = la partie la plus importante, juste apres la fenetre.
     -- Vue ici = l'astuce « fleche » ne viendra pas (elle sert de rattrapage si la fleche n'etait pas a l'ecran).
     { key = "arrow", head = "tutoArrowHead", text = "tutoArrow", target = function() return Shown(_G.WarpathArrow) end },

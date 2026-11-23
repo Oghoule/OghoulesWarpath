@@ -132,6 +132,44 @@ do
         pin:Show()
     end
 
+    -- v1.43 (demande de l'auteur) : la petite fleche du bloc destination (fenetre du guide) tourne comme la
+    -- grande, meme si la grande est coupee dans les options. Fixe (vers le haut) sans direction : instance,
+    -- autre carte, pas de destination, arrive. L'icone IcoNav pointe vers le haut comme Media/Arrow.
+    -- Interieur (Media/IcoNavFill, meme forme) : rouge discret en fondu quand on vise juste (< 12 degres,
+    -- comme le losange de la grande fleche), sous le contour.
+    local fill, fillA = nil, 0
+    local FILL_MAX, FILL_SPEED = 0.65, 2.5 -- opacite au maximum ; vitesse du fondu (par seconde)
+    local function UpdateDestIcon(el)
+        local ic = f and rawget(f, "dest") and f.dest.arrow
+        if not (ic and ic.SetRotation) then return end
+        if not fill then
+            fill = ic:GetParent():CreateTexture(nil, "ARTWORK", nil, -1)
+            fill:SetAllPoints(ic)
+            fill:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\IcoNavFill")
+            fill:SetVertexColor(COL.red[1], COL.red[2], COL.red[3])
+            fill:SetAlpha(0)
+        end
+        local ang, aim = 0, false
+        local facing = GetPlayerFacing and GetPlayerFacing()
+        if distTarget and type(facing) == "number" and not (IsInInstance and IsInInstance()) then
+            local me = PlayerWP()
+            local w = WP(distTarget[1], distTarget[2], distTarget[3])
+            if me and w and me[3] == w[3] then
+                local dx, dy = w[1] - me[1], w[2] - me[2]
+                if dx * dx + dy * dy >= ARRIVE * ARRIVE then
+                    ang = math.atan2(dy, dx) - facing
+                    ang = (ang + math.pi) % (2 * math.pi) - math.pi
+                    aim = math.abs(ang) < ON_COURSE
+                end
+            end
+        end
+        ic:SetRotation(ang); fill:SetRotation(ang)
+        local target = aim and FILL_MAX or 0
+        local step = FILL_SPEED * FILL_MAX * (el or 0.04)
+        if fillA < target then fillA = math.min(target, fillA + step) elseif fillA > target then fillA = math.max(target, fillA - step) end
+        fill:SetAlpha(fillA)
+    end
+
     local ticker = CreateFrame("Frame")
     local acc = 0
     ticker:SetScript("OnUpdate", function(_, el)
@@ -141,6 +179,7 @@ do
         local ok = pcall(Update)
         if not ok and frame then frame:Hide() end
         if not pcall(UpdatePin) and pin then pin:Hide() end
+        pcall(UpdateDestIcon, 0.04)
     end)
 
     ns.Arrow = { Reset = function() DB.arrowPos = nil; if frame then frame:ClearAllPoints(); frame:SetPoint("TOP", UIParent, "TOP", 0, -140) end end }

@@ -335,19 +335,39 @@ AskChain = function(q, withSelf, kind)
     local names = {}
     for _, id in ipairs(order) do names[#names + 1] = EST[id].n end
     local est = Estimate(order, true)
-    local kt, measured = KillTime()
-    local pace = measured and T("paceMeasured", math.floor(kt + 0.5), DB.ktN or 0) or T("paceClass", math.floor(kt + 0.5))
-    local txt = T(kind == "prof" and "profAsk" or (withSelf and "classAsk" or "chainAsk"), e.n, T(withSelf and "classList" or "chainList", #order, table.concat(names, ", ")),
-        math.max(1, math.floor(est.secs / 60 + 0.5)), FormatNum(est.xp), FormatNum(est.qxp), FormatNum(est.mxp),
-        FormatNum(est.perHour), est.kills, pace)
-        .. (est.dropKills > 0 and ("\n" .. T("dropNote", est.dropKills)) or "")
-    for _, dr in ipairs(est.drops) do
-        local pct = math.floor(dr.rate * 100 + 0.5)
-        if dr.how == "unique" then txt = txt .. "\n- " .. T("dropUnique", dr.name)
-        elseif dr.how == "measured" then txt = txt .. "\n- " .. T("dropMeasured", dr.name, pct, dr.k)
-        elseif dr.how == "questie" then txt = txt .. "\n- " .. T("dropQuestie", dr.name, pct)
-        else txt = txt .. "\n- " .. T("dropAssumed", dr.name, pct, dr.k or 0) end
+    -- v1.43 : fenetre lisible (titre, sous-titre, chiffres arrondis avec libelles, objets, etapes en gris)
+    -- Quete de classe : meme nom que dans Options > Classe (la 1re quete de la chaine), la finale en sous-titre
+    local label = e.n
+    if withSelf and kind ~= "prof" then
+        for _, c in ipairs(ClassQuestList()) do if c.q == q then label = c.name; break end end
     end
+    local function round(n) n = n or 0; if n >= 1000 then n = math.floor(n / 100 + 0.5) * 100 end; return FormatNum(n) end
+    local G, S, F = "|cffcdbb8e", "|cffb5aa98", "|cff8c7f62"   -- or, doux, discret (HEX de Skin.lua)
+    local lines = {}
+    local function add(s) lines[#lines + 1] = s end
+    add(G .. Upper(withSelf and label or T("chainUnlock", e.n)) .. "|r")
+    if not withSelf then add(S .. T("chainSubBefore", #order) .. "|r")
+    elseif label ~= e.n then add(S .. T("chainSubEnds", #order, e.n) .. "|r")
+    else add(S .. T("chainSubN", #order) .. "|r") end
+    add("")
+    add(G .. T("chainTime") .. "|r  ~" .. math.max(1, math.floor(est.secs / 60 + 0.5)) .. " min")
+    add(G .. T("chainXP") .. "|r  ~" .. round(est.xp) .. "  " .. S .. T("chainPerHour", round(est.perHour)) .. "|r")
+    if est.kills > 0 then
+        add(G .. T("chainMobs") .. "|r  " .. (est.dropKills > 0 and T("chainKillsDrop", est.kills, est.dropKills) or T("chainKills", est.kills)))
+    end
+    if #est.drops > 0 then
+        add(""); add(G .. T("chainItems") .. "|r")
+        for _, dr in ipairs(est.drops) do
+            local r = dr.rate or 0
+            local how
+            if dr.how == "unique" then how = T("dropSure")
+            elseif r >= 0.6 or r <= 0 then how = T("dropOften")
+            else how = T("dropOneIn", math.floor(1 / r + 0.5)) end
+            add(" • " .. dr.name .. " " .. S .. "— " .. how .. "|r")
+        end
+    end
+    add(""); add(F .. T("chainSteps") .. " " .. table.concat(names, " › ") .. "|r")
+    local txt = table.concat(lines, "\n")
     chainAskQ, chainAskSelf = q, withSelf
     StaticPopupDialogs["WARPATH_CHAIN"] = StaticPopupDialogs["WARPATH_CHAIN"] or {
         text = "%s", button1 = "OK", button2 = "Non", timeout = 0, whileDead = true, hideOnEscape = true,
@@ -355,6 +375,8 @@ AskChain = function(q, withSelf, kind)
     }
     local d = StaticPopupDialogs["WARPATH_CHAIN"]
     d.button1, d.button2 = T("chainGo"), T("chainNo")
+    -- titre de la fenetre selon le type : quetes de classe, metiers ou chaine ordinaire
+    d.headKey = (kind == "prof" and "popProfQuest") or (withSelf and "popClass") or "popChain"
     ns.Trace("popup WARPATH_CHAIN"); Popup("WARPATH_CHAIN", txt)
 end
 

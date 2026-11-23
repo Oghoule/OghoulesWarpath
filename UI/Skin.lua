@@ -1242,7 +1242,7 @@ do
         if txt and text:find("%%s") then text = text:format(txt) end
         dlg.text:SetText(text)
         -- v1.41 : titre propre a chaque question (« DONJON SUGGÉRÉ »...) au lieu de « OGHOULE'S WARPATH » partout
-        local hk = POPUP_HEAD[name]
+        local hk = d.headKey or POPUP_HEAD[name]   -- v1.43 : une question peut choisir son titre (classe, métiers)
         dlg.head:SetText(Caps(hk and T(hk) or "Oghoule's Warpath"))
         local labels = { d.button1, d.button2, d.button3 }
         for i, b in ipairs(dlg.buttons) do b:SetText(labels[i] or ""); b:SetShown(labels[i] ~= nil) end
