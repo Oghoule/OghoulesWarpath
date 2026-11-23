@@ -208,6 +208,8 @@ SlashCmdList["WARPATH"] = function(msg)
         for k, c in ipairs(list) do
             say(string.format("  %d. %s%s (%s)|r%s", k, c.done and "|cff8c7f62" or "|cffcdbb8e", c.name, c.lvl2 > c.lvl and (c.lvl .. "-" .. c.lvl2) or tostring(c.lvl), c.done and (" - " .. T("classDone")) or ""))
         end
+    elseif cmd == "tuto" or cmd == "tutorial" or cmd == "visite" or cmd == "tour" then
+        ShowTutorial(true)
     elseif cmd == "news" or cmd == "nouveautes" or cmd == "quoi" then
         if not ShowNews(true) then say(T("newsNone")) end
     elseif cmd == "chronique" or cmd == "chronicle" or cmd == "chron" then
@@ -273,6 +275,8 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.43", fr = "Nouvelle visite guidée : en quelques pages, elle te montre chaque partie de la fenêtre du guide, puis la flèche. Elle t'est proposée à la bienvenue, et tu peux la revoir quand tu veux avec /warpath tuto ou dans les options (Affichage). L'aide « ? » rappelle aussi où trouver les options. Et la première fois que la flèche, la fenêtre de ciblage ou le bouton de pierre de foyer apparaissent, une petite bulle t'explique à quoi ils servent.",
+      en = "New guided tour: in a few pages, it shows you each part of the guide window, then the arrow. It is offered at the welcome, and you can replay it any time with /warpath tuto or in the options (Display). The \"?\" help also reminds you where to find the options. And the first time the arrow, the targeting window or the hearthstone button appears, a small bubble explains what it does." },
     { v = "1.43", fr = "Données de Questie mises à jour (QuestieDB 1.1.3) : positions de PNJ, XP et prérequis des quêtes. Vorsha the Lasher : la flèche et le ciblage montrent maintenant Vorsha. Mont Hyjal : Stemming the Demon Tide retirée du guide (réservée à l'Alliance).",
       en = "Questie data updated (QuestieDB 1.1.3): NPC positions, quest XP and prerequisites. Vorsha the Lasher: the arrow and targeting now show Vorsha. Mount Hyjal: Stemming the Demon Tide removed from the guide (Alliance only)." },
     { v = "1.43", fr = "Vols : l'addon ne te fait plus marcher longtemps en croyant qu'un vol est impossible. Un point de vol découvert est maintenant relié tout de suite à tes autres points du continent, et une ancienne carte des vols ne bloque plus un vol vers un point appris depuis.",
@@ -470,13 +474,34 @@ function ShowWelcome()
         return
     end
     if not DB or DB.welcomed or not StaticPopup_Show then return end
-    StaticPopupDialogs["WARPATH_WELCOME"] = {
-        text = T("welcome", WarpathName()), button1 = T("welcomeOpts"), button2 = T("welcomeGo"),
-        OnAccept = function() DB.welcomed = true; if WarpathDropDB then WarpathDropDB._seenVer = VERSION end; SlashCmdList.WARPATH("options") end,
-        OnCancel = function() DB.welcomed = true; if WarpathDropDB then WarpathDropDB._seenVer = VERSION end end,
+    -- v1.43 : bienvenue en 2 temps. 1) visite ou non ; 2) options / c'est parti (texte complet sans visite,
+    -- version courte apres la visite). Le choix du 1er temps suffit a ne plus redemander la bienvenue.
+    local function welcomed()
+        DB.welcomed = true
+        if WarpathDropDB then WarpathDropDB._seenVer = VERSION end
+    end
+    local function last(key)
+        return {
+            text = key, button1 = T("welcomeOpts"), button2 = T("welcomeGo"),
+            OnAccept = function() SlashCmdList.WARPATH("options") end,
+            timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+        }
+    end
+    StaticPopupDialogs["WARPATH_WELCOME"] = last(T("welcome", WarpathName()))
+    StaticPopupDialogs["WARPATH_WELCOME_DONE"] = last(T("tutoDone"))
+    StaticPopupDialogs["WARPATH_WELCOME_ASK"] = {
+        text = T("welcomeAsk", WarpathName()), button1 = T("welcomeTour"), button2 = T("welcomeNoTour"),
+        OnAccept = function()
+            welcomed()
+            ShowTutorial(true, function() Popup("WARPATH_WELCOME_DONE") end)
+        end,
+        OnCancel = function(_, _, reason)
+            welcomed(); DB.tutoSeen = true
+            if reason == "clicked" then Popup("WARPATH_WELCOME") end   -- Echap = on ferme tout
+        end,
         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     }
-    ns.Trace("popup WARPATH_WELCOME"); Popup("WARPATH_WELCOME")
+    ns.Trace("popup WARPATH_WELCOME_ASK"); Popup("WARPATH_WELCOME_ASK")
 end
 
 -- Fenetre de signalement : decris ce qui s'est passe, puis Envoyer (= /warpath bug <texte>)

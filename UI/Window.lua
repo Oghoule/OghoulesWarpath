@@ -490,13 +490,21 @@ function CreateUI()
     if f.helpOver.fs.SetWordWrap then f.helpOver.fs:SetWordWrap(true) end
     if f.helpOver.fs.SetSpacing then f.helpOver.fs:SetSpacing(5) end
     f.helpOver:SetScript("OnClick", function(self) self:Hide() end)
+    -- v1.43 : les options aussi (ou les trouver + un bouton pour les ouvrir)
+    f.helpOver.opts = FlatButton(f.helpOver, INNER, 24, function()
+        f.helpOver:Hide()
+        if SlashCmdList and SlashCmdList.WARPATH then SlashCmdList.WARPATH("options") end
+    end)
+    f.helpOver.opts:SetPoint("BOTTOM", f.helpOver, "BOTTOM", 0, 12)
+    if f.helpOver.opts.fs then f.helpOver.opts.fs:SetTextColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
     f.helpOver:Hide()
     f.helpBtn:SetScript("OnClick", function()
         if f.helpOver:IsShown() then f.helpOver:Hide(); return end
         f.helpOver.head:SetText(Caps(T("helpHead")))
         local L = {}
-        for k = 1, 8 do L[#L + 1] = "|cffccba8f" .. T("helpK" .. k) .. "|r  " .. T("helpV" .. k) end
+        for k = 1, 10 do L[#L + 1] = "|cffccba8f" .. T("helpK" .. k) .. "|r  " .. T("helpV" .. k) end
         f.helpOver.fs:SetText(table.concat(L, "\n"))
+        f.helpOver.opts:SetLabel(Caps(T("helpOpts")))
         f.helpOver:Show()
     end)
     f.helpBtn:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("helpHead")); Tip():Show() end)

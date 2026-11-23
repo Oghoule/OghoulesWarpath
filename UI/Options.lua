@@ -627,6 +627,15 @@ local function CreateOptions()
         rp:SetPoint("TOPLEFT", 0, y)
         Loc(function() rp:SetLabel(Caps(T("resetPos"))) end)
         if rp.fs.SetFont then rp.fs:SetFont(FONT, 9, "") end
+        y = y - 34
+        -- v1.43 : revoir la visite guidee (ferme les options pour laisser voir la fenetre du guide)
+        local tv = FlatButton(pg, 300, 28, function()
+            if opt then opt:Hide() end
+            SlashCmdList.WARPATH("tuto")
+        end)
+        tv:SetPoint("TOPLEFT", 0, y)
+        Loc(function() tv:SetLabel(Caps(T("tutoReplay"))) end)
+        if tv.fs.SetFont then tv.fs:SetFont(FONT, 9, "") end
         y = y - 44
         -- MESSAGES : chat (tous / importants / aucun ; erreurs et commandes toujours), conseils, rappel d'entraineur
         sec("secMessages")

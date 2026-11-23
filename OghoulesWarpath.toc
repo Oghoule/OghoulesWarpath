@@ -47,6 +47,7 @@ Features\Chronicle.lua
 Features\PvP.lua
 Features\Profs.lua
 Features\Quartermaster.lua
+Features\Tutorial.lua
 Core\Commands.lua
 Core\Events.lua
 UI\Options.lua
