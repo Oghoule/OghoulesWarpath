@@ -227,8 +227,24 @@ do
         return { kind = "use", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoHearth", tint = COL.accent, text = T("hsUse", h.name or "?", mins, math.floor(len / 60 + 0.5)) }
     end
 
+    -- quete de l'etape ratee (escorte, delai) : la reprendre chez le donneur
+    local function FailAdvice(i)
+        local s = steps and steps[i]
+        if not s or not (C_QuestLog and C_QuestLog.IsFailed) then return nil end
+        for _, id in ipairs(Ids(s)) do
+            if logById[id] ~= nil and C_QuestLog.IsFailed(id) then
+                return { kind = "failed", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoAccept", tint = COL.red,
+                         text = T("questFailed", QuestTitle(id) or QName(s) or ("#" .. id)) }
+            end
+        end
+        return nil
+    end
+
     -- appele par l'affichage ; resultat garde quelques secondes (calcul de trajets)
     function Advice(i, g)
+        -- pas de cache : l'echec doit s'afficher tout de suite
+        local okF, fail = pcall(FailAdvice, i)
+        if okF and fail then return fail end
         local here = PlayerWP()
         local cd = HearthCD()
         local key = i .. ":" .. (here and (math.floor(here[1] / 40) .. ":" .. math.floor(here[2] / 40)) or "") .. ":"

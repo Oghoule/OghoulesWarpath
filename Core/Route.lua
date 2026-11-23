@@ -8,9 +8,26 @@ if setfenv then setfenv(1, _ENV) end
 ------------------------------------------------------------------
 desiredWP = nil -- waypoint voulu par le guide (on le remet si le jeu l'efface a l'arrivee)
 
+-- Repere du jeu jamais touche en combat : poser/effacer le repere fait redessiner les epingles de la
+-- carte par le code du jeu « au nom » de Warpath, et SetPassThroughButtons est alors bloque (rapport du
+-- 2026-11-23, 50 blocages pendant des escortes). On attend la fin du combat.
+local nativePending = false
+local function InFight() return InCombatLockdown and InCombatLockdown() end
+do
+    local fr = CreateFrame("Frame")
+    fr:RegisterEvent("PLAYER_REGEN_ENABLED")
+    fr:SetScript("OnEvent", function()
+        if not nativePending then return end
+        nativePending = false
+        if desiredWP then PlaceNative(desiredWP)
+        elseif C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
+    end)
+end
+
 function ClearWaypoint()
     desiredWP = nil
-    if C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
+    if InFight() then nativePending = true
+    elseif C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
     if tomtomWP and TomTom and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, tomtomWP) end
     tomtomWP = nil
 end
@@ -38,6 +55,7 @@ end
 
 function PlaceNative(w)
     if not (C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates) then return end
+    if InFight() then nativePending = true; return end -- pose a la fin du combat (voir plus haut)
     -- repere du jeu decoche (avec la fleche Warpath) : pas de point jaune ni d'icone du jeu sur la minicarte
     if DB.ownArrow ~= false and DB.gameWP == false then
         pcall(function()
