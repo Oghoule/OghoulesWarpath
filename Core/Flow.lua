@@ -257,11 +257,18 @@ end
 -- passe aux remises. Seulement si tu es deja entre : le ramassage des quetes (partout) n'est pas touche.
 -- Si tu y retournes, le journal revient tout seul (OnInstanceChange).
 DG_LEFT_DIST = 300
+-- v1.45 : resurrection a l'ange (vivant, au cimetiere a > 300 m de l'entree) : ce n'est pas une sortie.
+-- Apres une mort, on attend 30 min ou ton retour dans le donjon avant de fermer le journal tout seul.
+local DG_DEATH_GRACE = 1800
+local dgDeathAt = nil
 function CheckDungeonLeft()
     if not (DB and steps and IS_DUNGEON[DB.guide]) then return end
     if not (DB.dgIn and DB.dgIn[DB.guide]) or (DB.dgOut and DB.dgOut[DB.guide]) then return end
-    if IsInInstance and IsInInstance() then return end
-    if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then return end
+    if IsInInstance and IsInInstance() then dgDeathAt = nil; return end
+    local now = GetTime and GetTime() or 0
+    if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then dgDeathAt = now; return end
+    if dgDeathAt and now - dgDeathAt < DG_DEATH_GRACE then return end
+    dgDeathAt = nil
     local s
     for j = 1, #steps do if steps[j].t == "go" then s = steps[j]; break end end   -- etape d'entree du donjon
     if not (s and s.m and s.x) then return end

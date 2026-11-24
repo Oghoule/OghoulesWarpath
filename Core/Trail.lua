@@ -249,9 +249,12 @@ function TrailPoint(s, me)
                     local dA = Dist(me[1], me[2], A[1], A[2])
                     if dA < 500 and dA + 15 < Dist(me[1], me[2], g[1], g[2]) then aim = 1 end
                 end
-            elseif on and alongTrail(pts, bi, me) > 80 then
+            elseif on and alongTrail(pts, bi, me) > 80 and g and g[3] == me[3]
+                   and Dist(A[1], A[2], g[1], g[2]) + 30 < Dist(me[1], me[2], g[1], g[2]) then
                 -- le bout de ce chemin ne sert pas a l'etape : on ressort par ou on est entre
                 -- (seulement si tu es bien engage dessus : passer pres de l'entree ne detourne pas la fleche)
+                -- v1.45 : et seulement si l'entree te rapproche de l'objectif. Avant : arrive a Zoram'gar par
+                -- le chemin d'Astranaar, la fleche voulait te faire refaire tout le chemin pour aller a BFD (au nord)
                 for k = bi, 1, -1 do aim = k; if Dist(me[1], me[2], pts[k][1], pts[k][2]) >= AIM then break end end
             end
             if aim then

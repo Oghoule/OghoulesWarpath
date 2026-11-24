@@ -346,10 +346,12 @@ function LearnFlightHere()
 end
 
 -- Meilleur vol entre deux points du meme continent (ou nil s'il ne fait pas gagner assez de temps).
-function BestFlight(a, b, known)
+-- v1.45 : prev = vol deja conseille ; on le garde tant qu'il fait encore gagner du temps, meme sous les seuils,
+-- pour que le conseil ne change pas d'avis en chemin (il est maintenant recalcule pendant la marche).
+function BestFlight(a, b, known, prev)
     if not (a and b) or a[3] ~= b[3] then return nil end
     local walk = Walk(a, b)
-    local best, bestCost
+    local best, bestCost, prevPlan, prevCost
     for _, A in ipairs(known) do
         if A.w[3] == a[3] then
             local toA = Walk(a, A.w)
@@ -358,11 +360,19 @@ function BestFlight(a, b, known)
                     local c = toA + Dist(A.w[1], A.w[2], B.w[1], B.w[2]) * FLY_FACTOR + FLY_OVERHEAD
                         + Walk(B.w, b)
                     if not bestCost or c < bestCost then best, bestCost = { from = A.node, to = B.node }, c end
+                    if prev and prev.from and prev.to and A.node.key == prev.from.key and B.node.key == prev.to.key then
+                        prevPlan, prevCost = { from = A.node, to = B.node }, c
+                    end
                 end
             end
         end
     end
-    if best and bestCost < walk * 0.85 and walk - bestCost > 200 then return best, bestCost end
+    if best and bestCost < walk * 0.85 and walk - bestCost > 200 then
+        -- le vol deja conseille reste s'il est presque aussi bon (a 5 % pres)
+        if prevPlan and prevCost <= bestCost * 1.05 then return prevPlan, prevCost end
+        return best, bestCost
+    end
+    if prevPlan and prevCost < walk then return prevPlan, prevCost end
     return nil, walk
 end
 

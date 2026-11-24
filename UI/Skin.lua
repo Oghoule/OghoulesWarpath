@@ -578,13 +578,16 @@ function RefreshInner(forceWP)
         local tr = (not peek) and TransportFor(g) or nil
         -- vol conseille pour la prochaine etape du trajet (vers le transport, ou vers l'objectif)
         local fl
+        local prevFl = flightPlan
         flightPlan = nil
         if not peek and DB.useFlights ~= false and not (UnitOnTaxi and UnitOnTaxi("player")) then
             local here = PlayerWP()
             local leg = tr and WP(tr.from[1], tr.from[2], tr.from[3]) or (g.m and g.x and WP(g.m, g.x, g.y))
             if here and leg then
-                fl = BestFlight(here, leg, KnownFlights())
-                if fl then flightPlan = fl end
+                -- le vol deja conseille n'est garde que pour la meme destination (v1.45)
+                local legKey = math.floor(leg[1]) .. ":" .. math.floor(leg[2])
+                fl = BestFlight(here, leg, KnownFlights(), (prevFl and prevFl.dest == legKey) and prevFl or nil)
+                if fl then fl.dest = legKey; flightPlan = fl end
             end
         end
         -- texte complet (journal de debug et tests)
@@ -599,7 +602,9 @@ function RefreshInner(forceWP)
         local kc = PCOL[s.t] or "cdbb8e"
         local nq = (s.quest and type(s.id) == "table") and #s.id or 1
         kc = "cdbb8e"
-        f.kind:SetText("|cff" .. kc .. Caps(T(s.t)) .. "|r" .. (nq > 1 and ("  |cff8c7f62·|r  |cff" .. kc .. Caps(T("nQuests", nq)) .. "|r") or "")
+        -- v1.45 : entree d'un donjon : « Aller a Blackfathom Deeps » plutot que « Aller » seul
+        local kindTxt = (s.t == "go" and IS_DUNGEON[DB.guide] and zone ~= "") and T("goDg", zone) or T(s.t)
+        f.kind:SetText("|cff" .. kc .. Caps(kindTxt) .. "|r" .. (nq > 1 and ("  |cff8c7f62·|r  |cff" .. kc .. Caps(T("nQuests", nq)) .. "|r") or "")
             .. (s.optional and ("   |cff8c7f62" .. T("optional") .. "|r") or "")
             .. (st == "done" and ("  " .. CHECK .. " |cff9cc7a8" .. T("stepDone") .. "|r")
                 or st == "skip" and ("   |cff8c7f62" .. T("skipped") .. "|r")
@@ -1026,6 +1031,41 @@ function Shine(fr, delay)
         band:SetPoint("LEFT", self, "LEFT", -90 + (w + 90) * k, 0)
         if k >= 1 then self:SetScript("OnUpdate", nil); band:Hide() end
     end)
+end
+
+-- v1.45 (demande de l'auteur) : contour dore « a ton niveau » autour d'une ligne des options (zones, donjons,
+-- quetes de classe et de metier). Filet fin + losange en haut et en bas, pulsation lente (2,5 s, 45 % -> 90 %).
+-- Un seul OnUpdate pour tous les contours ; il ne touche que ceux qui sont affiches.
+do
+    local GLOW = { 0.88, 0.74, 0.43 }
+    local glows, driver = {}, nil
+    function GoldFrame(parent)
+        local g = CreateFrame("Frame", nil, parent)
+        g:SetPoint("TOPLEFT", -1, 1); g:SetPoint("BOTTOMRIGHT", 1, -1)
+        g:SetFrameLevel((parent:GetFrameLevel() or 1) + 2)
+        local function line(p1, p2, horiz)
+            local t = Tex(g, GLOW, 1, "OVERLAY")
+            if horiz then t:SetHeight(1) else t:SetWidth(1) end
+            t:SetPoint(p1); t:SetPoint(p2)
+        end
+        line("TOPLEFT", "TOPRIGHT", true); line("BOTTOMLEFT", "BOTTOMRIGHT", true)
+        line("TOPLEFT", "BOTTOMLEFT"); line("TOPRIGHT", "BOTTOMRIGHT")
+        local top = Diamond(g, 5, GLOW); top:SetPoint("CENTER", g, "TOP", 0, 0)
+        local bot = Diamond(g, 5, GLOW); bot:SetPoint("CENTER", g, "BOTTOM", 0, 0)
+        g:Hide()
+        function g:SetOn(v) self:SetShown(v and true or false) end
+        glows[#glows + 1] = g
+        if not driver then
+            driver = CreateFrame("Frame")
+            local t = 0
+            driver:SetScript("OnUpdate", function(_, el)
+                t = t + (el or 0)
+                local a = 0.675 + 0.225 * math.sin(t * 2 * math.pi / 2.5)
+                for _, x in ipairs(glows) do if x:IsVisible() then x:SetAlpha(a) end end
+            end)
+        end
+        return g
+    end
 end
 
 do

@@ -71,8 +71,12 @@ local function ChoiceRow(parent, w, onClick)
     b:SetChecked(false)
     b:SetScript("OnClick", onClick)
     b:SetScript("OnEnter", function(self)
-        if not self.tipKey then return end
-        E.Tip():SetOwner(self, "ANCHOR_RIGHT"); E.Tip():AddLine(T("stLow")); E.Tip():AddLine(T(self.tipKey), 1, 1, 1, true); E.Tip():Show()
+        local glow = self.glow and self.glow:IsShown()
+        if not self.tipKey and not glow then return end
+        E.Tip():SetOwner(self, "ANCHOR_RIGHT")
+        if self.tipKey then E.Tip():AddLine(T("stLow")); E.Tip():AddLine(T(self.tipKey), 1, 1, 1, true) end
+        if glow then E.Tip():AddLine(T("atLevel"), 0.88, 0.74, 0.43) end
+        E.Tip():Show()
     end)
     b:SetScript("OnLeave", function() E.Tip():Hide() end)
     return b
@@ -103,6 +107,19 @@ local function CheckRow(parent, w, key, get, set)
     optRows[#optRows + 1] = function() b:SetChecked(get()) end
     b:SetChecked(get())
     return b
+end
+
+-- v1.45 : contour dore « a ton niveau » sur un bouton de liste, avec l'infobulle (ajoutee au survol existant)
+local function GlowRow(b)
+    local g = K.GoldFrame(b)
+    if b.HookScript then
+        b:HookScript("OnEnter", function(self)
+            if not g:IsShown() then return end
+            E.Tip():SetOwner(self, "ANCHOR_RIGHT"); E.Tip():AddLine(T("atLevel"), 0.88, 0.74, 0.43); E.Tip():Show()
+        end)
+        b:HookScript("OnLeave", function() E.Tip():Hide() end)
+    end
+    return g
 end
 
 local function SmallHeader(parent, key)
@@ -251,14 +268,16 @@ local function CreateOptions()
         pages[k] = pg
     end
 
-    -- 1. Campagne : zone a faire / zone suivante / langue
+    -- 1. Campagne : une seule liste de zones sur deux colonnes, puis la langue
+    -- v1.45 (demande de l'auteur) : colonne « zone suivante » retiree (doublon de la question de fin de zone ;
+    -- DB.nextGuide sert encore au bouton « Rester » de cette question). Zones finies et trop basses masquees
+    -- par defaut (case en bas, DB.zonesAll) : la liste tient sur une page au lieu de trois.
     do
         local pg = pages[1]
         local colW = math.floor((CW - 24) / 2)
         local h1 = SmallHeader(pg, "chapters"); h1:SetPoint("TOPLEFT", 0, 0)
-        local h2 = SmallHeader(pg, "nextZone"); h2:SetPoint("TOPLEFT", colW + 24, 0)
         local y = -16
-        local auto = ChoiceRow(pg, colW, function()
+        local auto = ChoiceRow(pg, CW, function()
             DB.manual = nil
             local k = AutoPick()
             if k then SetGuide(k) end
@@ -271,66 +290,75 @@ local function CreateOptions()
             local g = DB.guide
             auto.status:SetText((not DB.manual and g and Guides[g] and not IS_DUNGEON[g]) and ZoneName(g) or "")
         end
-        local nauto = ChoiceRow(pg, colW, function() DB.nextGuide = nil; RefreshOptions() end)
-        nauto:SetPoint("TOPLEFT", colW + 24, y)
-        optRows[#optRows + 1] = function() nauto:SetChecked(DB.nextGuide == nil); nauto.label:SetText(T("auto")) end
         y = y - ROW_H
-        -- liste paginee (il y a maintenant plus de 30 zones)
-        local PER = 11
-        local list = {}
-        for _, key in ipairs(MAIN_ORDER) do if Guides[key] then list[#list + 1] = key end end
-        local pages = math.max(1, math.ceil(#list / PER))
-        local page
-        local cur, nxt = {}, {}
+        local ROWS = 12
+        local PER = ROWS * 2
+        local all = {}
+        for _, key in ipairs(MAIN_ORDER) do if Guides[key] then all[#all + 1] = key end end
+        local list, hidden, page, npages = {}, 0, 1, 1
+        local function hide(key)
+            local st = GuideState(key)
+            return (st == "done" or st == "low") and key ~= DB.guide
+        end
+        local function build()
+            list, hidden = {}, 0
+            for _, key in ipairs(all) do
+                if DB.zonesAll or not hide(key) then list[#list + 1] = key else hidden = hidden + 1 end
+            end
+            npages = math.max(1, math.ceil(#list / PER))
+            if page > npages then page = npages end
+        end
+        local slots = {}
         for k = 1, PER do
-            local slotY = y - (k - 1) * ROW_H
+            local col, row = math.floor((k - 1) / ROWS), (k - 1) % ROWS
             local b = ChoiceRow(pg, colW, function(self)
                 if not self.key then return end
                 DB.manual = true
                 SetGuide(self.key)
                 RefreshOptions()
             end)
-            b:SetPoint("TOPLEFT", 0, slotY)
-            local nb = ChoiceRow(pg, colW, function(self)
-                if not self.key then return end
-                DB.nextGuide = self.key
-                RefreshOptions()
-            end)
-            nb:SetPoint("TOPLEFT", colW + 24, slotY)
-            cur[k], nxt[k] = b, nb
+            b:SetPoint("TOPLEFT", col * (colW + 24), y - row * ROW_H)
+            b.glow = K.GoldFrame(b)   -- zone a ton niveau
+            slots[k] = b
         end
-        y = y - PER * ROW_H - 4
-        local pageLbl = FS(pg, 9, COL.gold, FONT, "CENTER"); pageLbl:SetWidth(120)
-        pageLbl:SetPoint("TOP", pg, "TOP", 0, y - 7)
+        y = y - ROWS * ROW_H - 6
+        -- case « afficher aussi les zones finies et trop basses » (a gauche), pages (a droite, si besoin)
+        local showAll = CheckRow(pg, colW + 60, "zonesAll", function() return DB.zonesAll and true or false end,
+            function(v) DB.zonesAll = v or nil; RefreshOptions() end)
+        showAll:SetPoint("TOPLEFT", 0, y)
+        local pageLbl = FS(pg, 9, COL.gold, FONT, "CENTER"); pageLbl:SetWidth(90)
+        pageLbl:SetPoint("TOPRIGHT", pg, "TOPRIGHT", -40, y - 7)
         local prevB = FlatButton(pg, 28, 22, function() page = math.max(1, page - 1); RefreshOptions() end)
         prevB:SetPoint("TOPRIGHT", pageLbl, "TOPLEFT", -6, 5); prevB:SetLabel("<")
-        local nextB = FlatButton(pg, 28, 22, function() page = math.min(pages, page + 1); RefreshOptions() end)
+        local nextB = FlatButton(pg, 28, 22, function() page = math.min(npages, page + 1); RefreshOptions() end)
         nextB:SetPoint("TOPLEFT", pageLbl, "TOPRIGHT", 6, 5); nextB:SetLabel(">")
         showHooks[#showHooks + 1] = function()
-            page = 1
+            build(); page = 1
             for i, key in ipairs(list) do if key == DB.guide then page = math.ceil(i / PER) end end
         end
-        page = 1
         optRows[#optRows + 1] = function()
-            pageLbl:SetText(Caps(T("pageLbl", page, pages)))
+            build()
+            local paged = npages > 1
+            pageLbl:SetShown(paged); prevB:SetShown(paged); nextB:SetShown(paged)
+            pageLbl:SetText(Caps(T("pageLbl", page, npages)))
+            showAll.label:SetText(T("zonesAll", hidden))
+            showAll:SetShown(DB.zonesAll or hidden > 0)
+            local me = UnitLevel and UnitLevel("player") or 0
             for k = 1, PER do
                 local key = list[(page - 1) * PER + k]
-                local b, nb = cur[k], nxt[k]
-                b.key, nb.key = key, key
-                b:SetShown(key ~= nil); nb:SetShown(key ~= nil)
+                local b = slots[k]
+                b.key = key
+                b:SetShown(key ~= nil)
+                b.glow:SetOn(false)
                 if key then
                     local lo, hi = GuideRange(key)
+                    local st = GuideState(key)
+                    b.glow:SetOn(me >= lo and me <= hi and st ~= "done" and st ~= "low")
                     b:SetChecked(DB.manual and DB.guide == key)
                     b.label:SetText(ZoneName(key))
-                    local st = GuideState(key)
-                    local txt = (st == "done" and ("|cff9cc7a8" .. Caps(T("stDone")) .. "|r"))
-                        or (st == "low" and ("|cff8c7f62" .. Caps(T("stLow")) .. "|r")) or (lo .. " - " .. hi)
-                    b.status:SetText(txt)
+                    b.status:SetText((st == "done" and ("|cff9cc7a8" .. Caps(T("stDone")) .. "|r"))
+                        or (st == "low" and ("|cff8c7f62" .. Caps(T("stLow")) .. "|r")) or (lo .. " - " .. hi))
                     b.tipKey = (st == "low") and "stLowTip" or nil
-                    nb:SetChecked(DB.nextGuide == key)
-                    nb.label:SetText(ZoneName(key))
-                    nb.status:SetText(st == "low" and ("|cff8c7f62" .. Caps(T("stLow")) .. "|r") or (lo .. " - " .. hi))
-                    nb.tipKey = b.tipKey
                 end
             end
         end
@@ -364,9 +392,12 @@ local function CreateOptions()
                 -- v1.42 : le nom s'arrete avant les niveaux (coupe en « ... » si trop long)
                 b.fs:SetPoint("RIGHT", lv, "LEFT", -6, 0); b.fs:SetJustifyH("LEFT")
                 if b.fs.SetWordWrap then b.fs:SetWordWrap(false) end
+                b.glow = K.GoldFrame(b)   -- v1.45 : donjon a ton niveau, avec des quetes a faire
                 optRows[#optRows + 1] = function()
                     local me = UnitLevel and UnitLevel("player") or 0
                     local inRange = me >= d.min and me <= d.max
+                    local okL, left = pcall(E.DungeonLeft, d.key)
+                    b.glow:SetOn(inRange and okL and (left or 0) > 0)
                     local ideal = DungeonIdeal and DungeonIdeal(d.key)
                     lv:SetText((inRange and "|cffcdbb8e" or "") .. d.min .. "-" .. d.max .. (inRange and "|r" or "")
                         .. (ideal and ("  |cff8c7f62·|r " .. ((me >= ideal and inRange) and "|cffcdbb8e" or "") .. ideal .. ((me >= ideal and inRange) and "|r" or "")) or ""))
@@ -380,6 +411,7 @@ local function CreateOptions()
                     E.Tip():AddLine(T("dTip", d.min, d.max), 1, 1, 1, true)
                     local ideal = DungeonIdeal and DungeonIdeal(d.key)
                     if ideal then E.Tip():AddLine(T("dIdeal", ideal), 0.84, 0.72, 0.4, true) end
+                    if b.glow:IsShown() then E.Tip():AddLine(T("atLevel"), 0.88, 0.74, 0.43) end
                     E.Tip():Show()
                 end)
                 b:SetScript("OnLeave", function() E.Tip():Hide() end)
@@ -405,6 +437,7 @@ local function CreateOptions()
             b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 12, 0)
             if b.fs.SetFont then b.fs:SetFont(FONT, 11, "") end
             b.lv = FS(b, 9, COL.gold, FONT, "RIGHT"); b.lv:SetPoint("RIGHT", -12, 0)
+            b.glow = GlowRow(b)   -- v1.45 : quete de classe que tu peux commencer maintenant
             rows[k] = b
         end
         local none = FS(pg, 11, COL.soft, FONT, "LEFT"); none:SetWidth(CW); none:SetPoint("TOPLEFT", 0, -22)
@@ -423,9 +456,10 @@ local function CreateOptions()
                     local col = c.done and COL.gold or (me >= c.lvl and COL.white or COL.soft)
                     if b.fs.SetTextColor then b.fs:SetTextColor(col[1], col[2], col[3]) end
                     b.lv:SetText(c.done and T("classDone") or (c.lvl2 > c.lvl and T("classLvls", c.lvl, c.lvl2) or T("classLvl", c.lvl)))
+                    b.glow:SetOn(not c.done and me >= c.lvl)
                     b:Show()
                 else
-                    b.q = nil; b:Hide()
+                    b.q = nil; b.glow:SetOn(false); b:Hide()
                 end
             end
         end
@@ -456,6 +490,7 @@ local function CreateOptions()
             b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 12, 0)
             if b.fs.SetFont then b.fs:SetFont(FONT, 11, "") end
             b.lv = FS(b, 9, COL.gold, FONT, "RIGHT"); b.lv:SetPoint("RIGHT", -12, 0)
+            b.glow = GlowRow(b)   -- v1.45 : quete de metier que tu peux faire maintenant
             rows[k] = b
         end
         optRows[#optRows + 1] = function()
@@ -477,9 +512,10 @@ local function CreateOptions()
                     local col = (me >= c.r and c.rank) and COL.white or COL.soft
                     if b.fs.SetTextColor then b.fs:SetTextColor(col[1], col[2], col[3]) end
                     b.lv:SetText(T("profLvl", c.r, c.m))
+                    b.glow:SetOn((me >= c.r and c.rank) and true or false)
                     b:Show()
                 else
-                    b.q = nil; b:Hide()
+                    b.q = nil; b.glow:SetOn(false); b:Hide()
                 end
             end
         end
@@ -672,7 +708,7 @@ local function CreateOptions()
         local pg = pages[7]
         local h = SmallHeader(pg, "tabAuto"); h:SetPoint("TOPLEFT", 0, 0)
         local y = -18
-        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "autoFly", "autoFly" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "smartArrowOpt", "smartArrow" }, { "trailOpt", "trailAsk" } }) do
+        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "smartArrowOpt", "smartArrow" }, { "trailOpt", "trailAsk" } }) do
             local field = o[2]
             local r = CheckRow(pg, CW, o[1], function() return DB[field] ~= false end, function(v) DB[field] = v; Refresh(true) end)
             r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H

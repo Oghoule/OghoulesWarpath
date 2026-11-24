@@ -4,7 +4,7 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 
 ------------------------------------------------------------------
--- Confort : quetes automatiques, vol automatique, suivi du leveling, rappel d'entraineur,
+-- Confort : quetes automatiques, duree des vols, suivi du leveling, rappel d'entraineur,
 -- bouton d'objet de quete, compte a rebours de vol.  (Maj enfoncee = rien d'automatique)
 ------------------------------------------------------------------
 do

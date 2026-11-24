@@ -75,8 +75,11 @@ do
         local p = P(); if not p then return end
         local m, x, y = here(); if not m then return end
         local en = recentEnemy(30) or {}
-        if lastKill and now() - lastKill.t < 3 and lastKill.nm == (en.nm or "?") then return end
-        lastKill = { t = now(), nm = en.nm or "?" }
+        -- v1.45 : 2e signal parfois > 3 s apres (Idont x2 le 2026-11-23, meme combat) : meme nom dans le
+        -- meme combat ou a moins de 60 s = la meme victoire
+        local nm = en.nm or "?"
+        if lastKill and lastKill.nm == nm and (now() - lastKill.t < 60 or (fightStart and lastKill.fs == fightStart)) then return end
+        lastKill = { t = now(), nm = nm, fs = fightStart }
         local e = { m = m, x = x, y = y, z = zoneName(m), when = stamp(), me = UnitLevel("player"),
                     lvl = en.lvl, cl = en.cl, ct = en.ct, rc = en.rc, nm = en.nm }
         table.insert(p.k, e); trim(p.k)

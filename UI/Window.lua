@@ -684,7 +684,7 @@ ns.E = {
     T = T, Title = Title, Lang = Lang, say = say, Refresh = Refresh, SetGuide = SetGuide,
     StartDungeon = StartDungeon, StopDungeon = StopDungeon, ClearWaypoint = ClearWaypoint,
     AutoPick = AutoPick, AllDone = AllDone,
-    ClassQuestList = function() return ClassQuestList() end, PlaceWaypointAgain = function() if steps and current and steps[current] then pcall(SetWaypoint, steps[current]) end end, StyleGet = function() return StyleGet() end,
+    ClassQuestList = function() return ClassQuestList() end, DungeonLeft = function(k) return DungeonLeft(k) end,PlaceWaypointAgain = function() if steps and current and steps[current] then pcall(SetWaypoint, steps[current]) end end, StyleGet = function() return StyleGet() end,
     ApplyPreset = function(n) local ok, err = pcall(ApplyPreset, n); if not ok then say(T("errInternal", tostring(err)), "error") end end, StyleChanged = function() styleCache = nil; local ok, err = pcall(Advance); if not ok then say(T("errInternal", tostring(err)), "error") end; Refresh(true) end, AskClass = function(q) AskChain(q, true) end, ChronShow = function(k) ChronShow(k) end, BugWindow = function() BugWindow() end,
     Guides = Guides, ICON = ICON, VERSION = VERSION, CHECK = CHECK,
     MAIN_ORDER = MAIN_ORDER, IS_DUNGEON = IS_DUNGEON, DUNGEONS = DUNGEONS, MINLVL = MINLVL, MAXLVL = MAXLVL,
@@ -705,7 +705,7 @@ ns.E = {
     Kit = { COL = COL, FONT = FONT, DISPLAY = DISPLAY, Caps = Caps, Upper = Upper, Spaced = Spaced, FS = FS, Tex = Tex,
             Diamond = Diamond, Divider = Divider, TitledRule = TitledRule, FlatButton = FlatButton,
             Border = Border, SectionHead = SectionHead, Chip = Chip, DiamondCheck = DiamondCheck,
-            HeadButton = HeadButton, ScaleGrip = ScaleGrip },
+            HeadButton = HeadButton, ScaleGrip = ScaleGrip, GoldFrame = GoldFrame },
 }
 ns.UI = ns.UI or {}
 
@@ -738,7 +738,6 @@ function OnTaxiOpened()
             if kind == "CURRENT" then here = key; ns.Comfort.SetTaxiFrom(name) end
             if kind == "REACHABLE" then reach[key] = true end
         end
-        if flightPlan and key == flightPlan.to.key and kind == "REACHABLE" then target = i end
     end
     if here then
         DB.fpLinks[here] = reach
@@ -748,6 +747,16 @@ function OnTaxiOpened()
         DB.fpLinksKnown = DB.fpLinksKnown or {}
         DB.fpLinksKnown[here] = snap
         lastWP = nil
+    end
+    -- v1.45 : on recalcule le vol conseille APRES avoir lu la carte (points et liaisons a jour), puis on surligne.
+    -- Avant : le surlignage (et le vol automatique) suivait l'ancien conseil, calcule sans les points que la carte
+    -- venait de montrer (Ratchet -> Brackenwall au lieu de Camp Taurajo pour RFK, 2026-11-23).
+    Refresh(true)
+    if flightPlan then
+        for i = 1, NumTaxiNodes() do
+            local kind = TaxiNodeGetType and TaxiNodeGetType(i)
+            if kind == "REACHABLE" and NodeKeyFor(TaxiNodeName and TaxiNodeName(i)) == flightPlan.to.key then target = i; break end
+        end
     end
     if target then
         local btn = _G["TaxiButton" .. target]
@@ -774,22 +783,8 @@ function OnTaxiOpened()
             taxiGlow:Show()
         end
         say(T("flyTo", flightPlan.to.name))
-        if DB.autoFly ~= false and not (IsShiftKeyDown and IsShiftKeyDown()) and TakeTaxiNode then
-            local node = target
-            -- v1.41 : le jeu veut que le trajet soit calcule avant de decoller (c'est ce que fait le survol du point a
-            -- la souris) ; sans ca, un vol avec escale donnait « There is no direct path » (Ratchet -> Thunder Bluff)
-            local function go()
-                if GetNumRoutes then pcall(GetNumRoutes, node) end
-                ns.Trace("TakeTaxiNode"); TakeTaxiNode(node)
-            end
-            if C_Timer and C_Timer.After then C_Timer.After(0.4, function()
-                -- carte des vols encore ouverte seulement (fermee entre-temps = le joueur a change d'avis, ou Maj)
-                local open = (TaxiFrame and TaxiFrame:IsShown()) or (not TaxiFrame and TaxiNodeName and TaxiNodeName(node))
-                if open and not (IsShiftKeyDown and IsShiftKeyDown()) then go() end
-            end) else go() end
-        end
+        -- v1.45 (demande de l'auteur) : plus de vol automatique, le carre vert suffit et evite les vols par erreur
     end
-    Refresh(true)
 end
 
 function OnTaxiClosed()
@@ -800,6 +795,24 @@ end
 -- La fleche reste en place : si le jeu efface le waypoint a l'arrivee (ex. au maitre de vol),
 -- on le remet des que tu t'en eloignes un peu, tant que le guide en a encore besoin.
 ------------------------------------------------------------------
+-- v1.45 : le vol conseille n'etait recalcule qu'aux evenements (quete, zone, carte des vols), jamais en marchant :
+-- arrive pres d'un maitre de vol, le conseil restait celui calcule plus loin. Toutes les 5 s, si tu as fait 100 m
+-- depuis le dernier calcul (hors combat, hors vol), on rafraichit ; la fleche ne bouge que si le vol conseille change.
+local flyCheck = { t = 0, pos = nil }
+local function FlightRecheck()
+    if not DB or DB.useFlights == false or peek then return end
+    if (UnitOnTaxi and UnitOnTaxi("player")) or (InCombatLockdown and InCombatLockdown()) then return end
+    local now = GetTime and GetTime() or 0
+    if now - flyCheck.t < 5 then return end
+    flyCheck.t = now
+    local me = PlayerWP()
+    if not me then return end
+    local p = flyCheck.pos
+    if p and p[3] == me[3] and Dist(p[1], p[2], me[1], me[2]) < 100 then return end
+    flyCheck.pos = me
+    if p then Refresh() end
+end
+
 wpTicker = CreateFrame("Frame")
 wpElapsed = 0
 distElapsed = 0
@@ -809,7 +822,7 @@ wpTicker:SetScript("OnUpdate", function(_, dt)
     wpElapsed = wpElapsed + (dt or 0)
     if wpElapsed < 1 then return end
     wpElapsed = 0
-    if DB then pcall(LearnGates); pcall(TrailTick) end
+    if DB then pcall(LearnGates); pcall(TrailTick); pcall(FlightRecheck) end
     if not (DB and DB.wp and desiredWP) then return end
     if not (C_Map and C_Map.HasUserWaypoint) or C_Map.HasUserWaypoint() then return end
     if UnitOnTaxi and UnitOnTaxi("player") then return end

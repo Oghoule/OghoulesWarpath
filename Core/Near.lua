@@ -556,6 +556,7 @@ end
 -- Villes fermees (Orgrimmar, Thunder Bluff, Undercity) : on y entre et on en sort par la porte,
 -- pas a vol d'oiseau a travers les murs (v1.39). Les portes sont dans D.GATES (Data.lua).
 local WALLED = { [1454] = true, [1456] = true, [1458] = true }
+local gateFly = { key = nil, t = 0, fly = false }
 function CityGatePoint(s, me)
     if not (s and s.m and s.x) then return nil end
     local zMe, zTo = ZoneOf(me[4]), ZoneOf(s.m)
@@ -563,6 +564,18 @@ function CityGatePoint(s, me)
     local city = WALLED[zTo] and zTo or (WALLED[zMe] and zMe) or nil
     if not city then return nil end
     local other = (city == zTo) and zMe or zTo
+    -- v1.45 : un vol fait gagner du temps (ex. Thunder Bluff -> Ratchet) : pas de porte, la fleche et le conseil
+    -- de vol visent l'objectif. Avant : la porte (l'ascenseur) passait avant, et le vol n'etait jamais propose.
+    if DB.useFlights ~= false and BestFlight and KnownFlights and not (UnitOnTaxi and UnitOnTaxi("player")) then
+        local now = GetTime and GetTime() or 0
+        local key = s.m .. ":" .. s.x .. ":" .. s.y .. ":" .. math.floor(me[1] / 30) .. ":" .. math.floor(me[2] / 30)
+        if not (gateFly.key == key and now - gateFly.t < 5) then
+            local g = WP(s.m, s.x, s.y)
+            local ok, fl = pcall(BestFlight, me, g, KnownFlights())
+            gateFly.key, gateFly.t, gateFly.fly = key, now, (ok and fl) and true or false
+        end
+        if gateFly.fly then return nil end
+    end
     local best, bd
     for _, g in ipairs(D.GATES or {}) do
         local z1, z2 = g.z[1], g.z[2]
@@ -655,7 +668,21 @@ function StepPoint(s)
             return { m = here.m, x = here.x, y = here.y, name = T("caveIn"), kind = "enter" }
         end
     end
-    return objPoint(s, me) or MobZonePoint(s, me)
+    return objPoint(s, me) or MobZonePoint(s, me) or DungeonDoorPoint(s)
+end
+-- v1.45 : etape de l'interieur du donjon (sans position) alors que tu es dehors, donjon pas quitte
+-- (mort, course en fantome : le corps est dans l'instance, le jeu ne le situe pas) : l'entree du donjon
+function DungeonDoorPoint(s)
+    if not (DB and steps and IS_DUNGEON and IS_DUNGEON[DB.guide]) or (s and s.m and s.x) then return nil end
+    if not (DB.dgIn and DB.dgIn[DB.guide]) or (DB.dgOut and DB.dgOut[DB.guide]) then return nil end
+    if IsInInstance and IsInInstance() then return nil end
+    for j = 1, #steps do
+        local g = steps[j]
+        if g.t == "go" and g.m and g.x then
+            local name = Title and Guides and Title(Guides[DB.guide]) or ""
+            return { m = g.m, x = g.x, y = g.y, name = T("dgBack", name), kind = "dgdoor" }
+        end
+    end
 end
 function StepPointKey(s)
     local p = StepPoint(s)
