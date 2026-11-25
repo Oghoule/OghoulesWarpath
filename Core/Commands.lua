@@ -34,7 +34,7 @@ SlashCmdList["WARPATH"] = function(msg)
         Ignore()
     elseif cmd == "unskip" then
         if arg == "all" or arg == "tout" then
-            wipe(DB.ignored); wipe(DB.seen); say(T("unskipAll"))
+            wipe(DB.ignored); wipe(DB.seen); DB.lvlWait = nil; say(T("unskipAll"))
         elseif tonumber(arg) then
             DB.ignored[tonumber(arg)] = nil; say(T("unskipOne", arg))
         else
@@ -244,7 +244,7 @@ SlashCmdList["WARPATH"] = function(msg)
         for _ in pairs(WarpathDropDB._from or {}) do np = np + 1 end
         say(T("shareState", ns.ShareOn() and T("shareOn") or T("shareOff"), np))
     elseif cmd == "reset" then
-        wipe(DB.ignored); wipe(DB.seen); wipe(DB.done); DB.manual = nil
+        wipe(DB.ignored); wipe(DB.seen); wipe(DB.done); DB.manual = nil; DB.lvlWait = nil
         local k = AutoPick()
         if k then SetGuide(k) end
         say(T("resetDone"))
@@ -295,6 +295,8 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.49", fr = "Guide plus malin : il ne t'interrompt plus en pleine chasse pour aller voir ton entraîneur (il attend ta prochaine quête au camp) et ne te ramène plus de loin vers lui ; il ne saute plus les quêtes d'un camp quand il te fait d'abord rendre une autre quête du même camp ; une quête devenue disponible à ton nouveau niveau ne te fait plus revenir en arrière (proposée quand tu repasses près du PNJ, sauf si elle ouvre une suite) ; la flèche va d'abord au chef quand une étape demande de le tuer (ex. Chief Sharptusk Thornmantle). Fenêtre de ciblage et bouton d'objet : plus d'action bloquée si un combat commence pendant que tu les déplaces.",
+      en = "Smarter guide: it no longer interrupts your hunting to send you to your trainer (it waits for your next quest at camp) and no longer drags you back to them from far away; it no longer skips a camp's quests when it has you turn in another quest of the same camp first; a quest your new level just unlocked no longer drags you back (offered when you pass by the NPC again, unless it opens a follow-up); the arrow goes to the boss first when a step asks you to kill one (e.g. Chief Sharptusk Thornmantle). Targeting window and item button: no more blocked action if combat starts while you are moving them." },
     { v = "1.48", fr = "Bouton d'objet de quête déplaçable : Maj + glisser pour le placer où tu veux (hors combat), Maj + clic droit pour le recoller à côté du guide. Avec Maj, un clic n'utilise pas l'objet.",
       en = "Movable quest item button: Shift + drag to put it where you like (out of combat), Shift + right-click to dock it back next to the guide. With Shift, a click does not use the item." },
     { v = "1.48", fr = "Saccades toutes les 3-4 secondes corrigées (trouvées grâce à /warpath perf chez un joueur) : avec beaucoup de points de vol connus, le conseil de pierre de foyer refaisait des milliers de calculs de trajet toutes les 3 secondes. Les trajets sont maintenant calculés bien plus vite, et ce conseil n'est revu qu'après 30 m de marche (au plus toutes les 10 s).",

@@ -18,7 +18,7 @@ local ADDON, ns = ...
 -- Environnement prive partage par tous les fichiers du moteur (Core, Route, Estimate, Skin, Flow, Window,
 -- Comfort, Commands, Events) : leurs variables communes y vivent, les vraies globales du jeu restent dans _G.
 local DECL = {}
-for n in ("ChainSteps WeaveSteps WovenReport Weave Unweave WovenCleanup ALL_NEEDED PerfOn PerfStart PerfMark PerfMem advicePos RetargetLight lightCtx TrailTick TrailPoint TrailCmd TrailBreak FarmSpot FmtDur PassageKey PassageFor PassageCmd FollowUpAccepts HearthButton MobZonePoint CaveDiag MapBar MAPBAR ChipScale InlineIcon STEP_TINT SetObjRows FIXED_H DiamondCheck Border SectionHead Chip STEP_ICON SetHeader SplitPlace HEAD_H OpenStepQuest ListBlock AcceptGroup LiveObjectives TraitTrees OnTheWay TrainDetour BackToNow MySpec ForgetCave DeathTip IsCaveStep CaveTrack StepPoint StepPointKey DungeonDoorPoint DungeonName DungeonQuests DungeonBadge DungeonAskLine DungeonSheetOpen DungeonSheetDefault DungeonSheetHide BugWindow NearestTrainer TrainReminder CheckWeaponMaster TurninGroup baseCurrent nearKind Actionable NearPick NearTick LevelWaitLines HubNotes ThenLine InDgInstance DungeonKeyForInstance OnInstanceChange DungeonInstanceMatches DungeonLore DL DungeonLogActive DungeonLogList DungeonLogHide DungeonLogRender Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow ChronPreview autoGoBusy CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText DungeonIdeal ShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome ShowTutorial StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain LearnFlightHere SetErrand ClearErrand ErrandPoint CityGatePoint UpdateMini ToggleMini ShowGuide MINI_W MINI_PAD QM_CITIES QM_MAXLVL QMCity QMCandidates QMStart QMCurrent QMQuit QMSkip QMPoint QMRenderPick QMOpen QMClosePick QMGo QMRenderTour QMPanelState QMShowPanel CheckQuartermaster DG_LEFT_DIST CheckDungeonLeft HearthPlace adviceArgs adviceT CityCaveFor CityCavePoint POPUP_HEAD MIN_H inCommand Toast FadeIn FadeOut Shine GoldFrame SKIP_ICON SetSkip HeadButton Glyph ScaleGrip OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
+for n in ("heldNear heldPrev HOLD_R NearNpc QuestUnlocks ChainSteps WeaveSteps WovenReport Weave Unweave WovenCleanup ALL_NEEDED PerfOn PerfStart PerfMark PerfMem advicePos RetargetLight lightCtx TrailTick TrailPoint TrailCmd TrailBreak FarmSpot FmtDur PassageKey PassageFor PassageCmd FollowUpAccepts HearthButton MobZonePoint CaveDiag MapBar MAPBAR ChipScale InlineIcon STEP_TINT SetObjRows FIXED_H DiamondCheck Border SectionHead Chip STEP_ICON SetHeader SplitPlace HEAD_H OpenStepQuest ListBlock AcceptGroup LiveObjectives TraitTrees OnTheWay TrainDetour BackToNow MySpec ForgetCave DeathTip IsCaveStep CaveTrack StepPoint StepPointKey DungeonDoorPoint DungeonName DungeonQuests DungeonBadge DungeonAskLine DungeonSheetOpen DungeonSheetDefault DungeonSheetHide BugWindow NearestTrainer TrainReminder CheckWeaponMaster TurninGroup baseCurrent nearKind Actionable NearPick NearTick LevelWaitLines HubNotes ThenLine InDgInstance DungeonKeyForInstance OnInstanceChange DungeonInstanceMatches DungeonLore DL DungeonLogActive DungeonLogList DungeonLogHide DungeonLogRender Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow ChronPreview autoGoBusy CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText DungeonIdeal ShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome ShowTutorial StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain LearnFlightHere SetErrand ClearErrand ErrandPoint CityGatePoint UpdateMini ToggleMini ShowGuide MINI_W MINI_PAD QM_CITIES QM_MAXLVL QMCity QMCandidates QMStart QMCurrent QMQuit QMSkip QMPoint QMRenderPick QMOpen QMClosePick QMGo QMRenderTour QMPanelState QMShowPanel CheckQuartermaster DG_LEFT_DIST CheckDungeonLeft HearthPlace adviceArgs adviceT CityCaveFor CityCavePoint POPUP_HEAD MIN_H inCommand Toast FadeIn FadeOut Shine GoldFrame SKIP_ICON SetSkip HeadButton Glyph ScaleGrip OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
 local assigned = {}
 local env = setmetatable({}, {
     __index = function(_, k) if DECL[k] and assigned[k] then return nil end return _G[k] end,
@@ -329,6 +329,24 @@ end
 pendingAccept = {}
 computingOther = false  -- vrai pendant qu'on evalue un AUTRE guide (options, choix auto)
 blockedBy = {}          -- index d'etape -> quetes prerequises manquantes (etape sautee pour ca)
+-- v1.49 : prises laissees derriere toi (voir StepDone) : index -> true si tu es pres de leur PNJ.
+-- NearTick refait le calcul quand tu t'en approches ou t'en eloignes.
+heldNear, heldPrev = {}, {}
+HOLD_R = 80             -- metres : meme camp (comme HUB_R dans Near.lua)
+function NearNpc(s, wasNear)
+    if computingOther or not (s and s.m and s.x and PlayerWP and WP) then return false end
+    local me = PlayerWP(); if not me then return false end
+    local g = WP(s.m, s.x, s.y)
+    if not (g and g[3] == me[3]) then return false end
+    -- un peu plus large pour sortir que pour entrer : pas de va-et-vient a la limite
+    return Dist(me[1], me[2], g[1], g[2]) < (wasNear and HOLD_R + 20 or HOLD_R)
+end
+-- deux etapes au meme camp (PNJ a moins de HOLD_R l'un de l'autre, meme continent)
+local function SameCamp(a, b)
+    if not (a and b and a.m and a.x and b.m and b.x and WP) then return false end
+    local p, q = WP(a.m, a.x, a.y), WP(b.m, b.x, b.y)
+    return p and q and p[3] == q[3] and Dist(p[1], p[2], q[1], q[2]) < HOLD_R or false
+end
 
 function StepDone(i, anchor)
     local s = steps[i]
@@ -348,8 +366,21 @@ function StepDone(i, anchor)
         -- v1.47 : etape d'une chaine integree (woven) : choisie par toi, traitee comme dans le guide « chain »
         -- (ni ancre, ni quete grise, ni style de jeu)
         local chainLike = DB.guide == "chain" or s.woven
-        local skip = (i < anchor and not s.woven) or (IsGrey(s) and not chainLike) or (s.optional and DB.seen[SeenKey(i)])
-            or ((s.req or 0) > (UnitLevel("player") or 60) and not chainLike) -- niveau requis pas atteint : impossible a prendre
+        local lvlOk = (s.req or 0) <= (UnitLevel("player") or 60) or chainLike
+        -- v1.49 : prise laissee derriere toi -- avant l'ancre (le guide t'a fait rendre une quete plus loin
+        -- d'abord), ou niveau requis atteint seulement apres l'avoir depassee (DB.lvlWait, voir Compute).
+        -- Elle reste proposee tant que tu es pres de son PNJ (meme camp), mais le guide ne te fait plus
+        -- revenir en arriere pour elle. Donjons et chaines : comportement d'avant.
+        local waitLvl = lvlOk and not s.woven and DB.lvlWait and DB.lvlWait[SeenKey(i)] and true or false
+        local passed = (i < anchor and not s.woven) or waitLvl
+        local near = false
+        if passed and not s.optional and not IS_DUNGEON[DB.guide] and DB.guide ~= "chain"   -- optionnelle : comme avant
+            and (waitLvl or SameCamp(s, steps[anchor])) then   -- avant l'ancre : seulement le camp de l'ancre
+            near = NearNpc(s, heldPrev[i])
+            if not computingOther then heldNear[i] = near end
+        end
+        local skip = (passed and not near) or (IsGrey(s) and not chainLike) or (s.optional and DB.seen[SeenKey(i)])
+            or not lvlOk -- niveau requis pas atteint : impossible a prendre
             or (StyleSkip and not s.woven and StyleSkip(i, s))
             -- v1.45 : quete d'appel (bc = quete visee) : le jeu ne la propose plus si la quete visee est
             -- dans ton journal ou deja rendue (Tsunaman sans Trouble in the Deeps, 2026-11-23)
@@ -531,6 +562,7 @@ function Compute()
     if not computingOther then wipe(blockedBy) end
     local n = #steps
     local anchor = FindAnchor()
+    if not computingOther then heldPrev, heldNear = heldNear, {} end
     for i = 1, n do
         if Applies(steps[i]) then doneCache[i] = StepDone(i, anchor) else doneCache[i] = "skip" end
     end
@@ -568,6 +600,36 @@ function Compute()
     current = n + 1
     for i = 1, n do
         if not doneCache[i] then current = i; break end
+    end
+    -- v1.49 : prises depassees faute de niveau pendant que tu avancais dans la zone. Quand le niveau arrive,
+    -- elles ne te font pas revenir en arriere (StepDone) : proposees seulement en repassant pres de leur PNJ.
+    -- Pas si tu n'as encore rien fait dans le guide (zone ouverte trop tot), ni avant une etape "Monte au
+    -- niveau X" (la, le guide veut justement que tu reviennes les prendre), ni pour une quete qui en
+    -- debloque une autre (QuestUnlocks : sinon toute la suite serait perdue).
+    if not computingOther and not IS_DUNGEON[DB.guide] and DB.guide ~= "chain" and current <= n
+        and steps[current].t ~= "level" then
+        local first
+        for i = 1, current - 1 do
+            local s = steps[i]
+            if (s.t == "accept" or s.t == "do" or s.t == "turnin") and doneCache[i] == "done" and s.id and Applies(s) and not s.woven then
+                local real = false
+                for _, id in ipairs(Ids(s)) do if not DB.ignored[id] then real = true end end
+                if real then first = i; break end
+            end
+        end
+        local lvl = UnitLevel("player") or 60
+        for i = current - 1, (first or current) + 1, -1 do
+            local s = steps[i]
+            if s.t == "level" then break end
+            if s.t == "accept" and not s.woven and (s.req or 0) > lvl and doneCache[i] == "skip" and Applies(s) then
+                local key = SeenKey(i)
+                if not (DB.lvlWait and DB.lvlWait[key]) then
+                    local unlocks = false
+                    for _, id in ipairs(Ids(s)) do if QuestUnlocks and QuestUnlocks(id) then unlocks = true end end
+                    if not unlocks then DB.lvlWait = DB.lvlWait or {}; DB.lvlWait[key] = true end
+                end
+            end
+        end
     end
     dynOrder = nil
     if not computingOther and IS_DUNGEON_SET and IS_DUNGEON_SET[DB.guide] and OptimizeFn then

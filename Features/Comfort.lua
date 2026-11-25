@@ -145,14 +145,23 @@ local function UpdateItemButton()
         -- a cote du guide. Maj + clic n'utilise pas l'objet (pour ne pas gaspiller son temps de recharge).
         itemBtn:SetAttribute("shift-type*", "")
         itemBtn:SetMovable(true); itemBtn:SetClampedToScreen(true); itemBtn:RegisterForDrag("LeftButton")
-        itemBtn:SetScript("OnDragStart", function(self)
-            if IsShiftKeyDown() and not DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving() end
-        end)
-        itemBtn:SetScript("OnDragStop", function(self)
-            self:StopMovingOrSizing()
-            local point, _, rel, x, y = self:GetPoint(1)
+        -- v1.49 : en combat, le jeu bloque StopMovingOrSizing (bouton securise) ; un deplacement en cours est
+        -- donc termine juste avant le verrou du combat (PLAYER_REGEN_DISABLED, encore permis a ce moment)
+        local moving = false
+        local function EndMove()
+            if not moving then return end
+            moving = false
+            itemBtn:StopMovingOrSizing()
+            local point, _, rel, x, y = itemBtn:GetPoint(1)
             if point then DB.itemPos = { point, rel or point, math.floor(x + 0.5), math.floor(y + 0.5) } end
+        end
+        itemBtn:SetScript("OnDragStart", function(self)
+            if IsShiftKeyDown() and not DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving(); moving = true end
         end)
+        itemBtn:SetScript("OnDragStop", function() if not (InCombatLockdown and InCombatLockdown()) then EndMove() end end)
+        local combatEv = CreateFrame("Frame")
+        combatEv:RegisterEvent("PLAYER_REGEN_DISABLED")
+        combatEv:SetScript("OnEvent", function() pcall(EndMove) end)
         itemBtn:HookScript("OnMouseUp", function(_, btn)
             if btn == "RightButton" and IsShiftKeyDown() and DB.itemPos and not (InCombatLockdown and InCombatLockdown()) then
                 DB.itemPos = nil; itemWanted = nil; UpdateItemButton()
@@ -317,6 +326,13 @@ local function LowRate(gd, id)
     end
     gd.rate[key] = res
     return res
+end
+
+-- v1.49 : la quete en debloque une autre (dans ce guide ou un guide suivant) : jamais mise de cote
+function QuestUnlocks(id)
+    if not (DB and steps and id) then return false end
+    local ok, gd = pcall(GuideData)
+    return ok and gd and gd.needed[id] and true or false
 end
 
 local function InGroup() return (IsInGroup and IsInGroup()) or ((GetNumGroupMembers and GetNumGroupMembers() or 0) > 0) end
