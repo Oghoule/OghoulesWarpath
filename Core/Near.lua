@@ -716,7 +716,7 @@ function StepPoint(s)
             return { m = here.m, x = here.x, y = here.y, name = T("caveIn"), kind = "enter" }
         end
     end
-    -- v1.49 : trajet a pied pre-calcule (Legs.lua) : contourne montagnes et falaises par les points qui comptent.
+    -- v1.50 : trajet a pied pre-calcule (Legs.lua) : contourne montagnes et falaises par les points qui comptent.
     -- Etape "faire" : seulement en route (loin de la zone), sur place les regles de la zone de chasse decident.
     local lp = LegPoint(s, me)
     if lp then
