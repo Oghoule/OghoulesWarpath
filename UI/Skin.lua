@@ -423,10 +423,17 @@ function UpdateDistance()
     if CheckDungeonLeft then pcall(CheckDungeonLeft) end
     -- v1.41 : conseil (pierre de foyer...) recalcule quand tu te deplaces : avant, il restait celui de l'endroit
     -- ou la fenetre avait ete mise a jour (ex. « retour a Sun Rock » alors que tu y etais deja arrive a pied)
-    if adviceArgs and Advice and GetTime and GetTime() - (adviceT or 0) > 3 then
-        adviceT = GetTime()
-        local ok, adv = pcall(Advice, adviceArgs[1], adviceArgs[2])
-        if ok and (adv and adv.text) ~= (currentAdvice and currentAdvice.text) then Refresh() end
+    -- v1.47 : seulement apres 30 m parcourus, au plus toutes les 10 s (avant : toutes les 3 s, meme immobile ;
+    -- chez un joueur a 18 points de vol, chaque calcul prenait jusqu'a 178 ms = saccade toutes les 3-4 s)
+    if adviceArgs and Advice and GetTime and GetTime() - (adviceT or 0) > 10 then
+        local here = PlayerWP()
+        local p = advicePos
+        local still = here and p and p[3] == here[3] and Dist(p[1], p[2], here[1], here[2]) < 30
+        if not still or GetTime() - (adviceT or 0) > 60 then   -- immobile : une fois par minute (recharge de la pierre)
+            adviceT, advicePos = GetTime(), here
+            local ok, adv = pcall(Advice, adviceArgs[1], adviceArgs[2])
+            if ok and (adv and adv.text) ~= (currentAdvice and currentAdvice.text) then Refresh() end
+        end
     end
     local me = PlayerWP()
     local w = distTarget and WP(distTarget[1], distTarget[2], distTarget[3])

@@ -227,17 +227,25 @@ end
 ------------------------------------------------------------------
 GATES = D.GATES or {}
 WIND, UNKNOWN = 1.15, 1.35          -- detours d'un chemin reel / zone sans passage connu
+-- v1.47 : la zone d'une carte ne change pas : on la retient (Walk l'appelait deux fois par calcul, des milliers
+-- de fois par seconde chez un joueur a 18 points de vol ; mesure /warpath perf du 2026-11-25)
+local zoneCache = {}
 function ZoneOf(m)
     if not m then return nil end
+    local z = zoneCache[m]
+    if z then return z end
+    local sure = false   -- vrai seulement si le jeu a repondu pour toute la chaine (pas au chargement)
     if C_Map and C_Map.GetMapInfo then
         local cur, guard = m, 0
+        sure = true
         while cur and cur > 0 and guard < 6 do
             local info = C_Map.GetMapInfo(cur)
-            if not info then break end
-            if (info.mapType or 3) <= 3 then return cur end
+            if not info then sure = false; break end
+            if (info.mapType or 3) <= 3 then zoneCache[m] = cur; return cur end
             cur, guard = info.parentMapID, guard + 1
         end
     end
+    if sure then zoneCache[m] = m end
     return m
 end
 
@@ -265,11 +273,13 @@ function Walk(a, b)
     local d = Dist(a[1], a[2], b[1], b[2])
     local za, zb = ZoneOf(a[4]), ZoneOf(b[4])
     if not za or not zb or za == zb then return d * WIND end
-    local nodes = {}
-    for _, g in ipairs(GateNodes()) do if g[3] == a[3] then nodes[#nodes + 1] = g end end
+    local gates = GateNodes()                -- (avant la cle : vide walkCache si les passages ont change)
     local ck = za .. ">" .. zb .. ":" .. math.floor(a[1] / 50) .. ":" .. math.floor(a[2] / 50) .. ":"
         .. math.floor(b[1] / 50) .. ":" .. math.floor(b[2] / 50)
     if walkCache[ck] then return walkCache[ck] end
+    -- v1.47 : la liste des passages n'est preparee qu'en cas de calcul (avant : a chaque appel, meme en cache)
+    local nodes = {}
+    for _, g in ipairs(gates) do if g[3] == a[3] then nodes[#nodes + 1] = g end end
     local dist, done, best = {}, {}, nil
     for k, g in ipairs(nodes) do
         if g.z1 == za or g.z2 == za then dist[k] = Dist(a[1], a[2], g[1], g[2]) * WIND + g.c end
@@ -379,13 +389,17 @@ function BestFlight(a, b, known, prev)
     if not (a and b) or a[3] ~= b[3] then return nil end
     local walk = Walk(a, b)
     local best, bestCost, prevPlan, prevCost
+    -- v1.47 : marche de chaque point de vol vers l'objectif calculee une seule fois (avant : pour chaque paire,
+    -- 18 x 18 = 324 fois chez un joueur a 18 points ; 178 646 Walk en une minute, saccades de 170 ms)
+    local fromB = {}
+    for k, B in ipairs(known) do if B.w[3] == a[3] then fromB[k] = Walk(B.w, b) end end
     for _, A in ipairs(known) do
         if A.w[3] == a[3] then
             local toA = Walk(a, A.w)
-            for _, B in ipairs(known) do
-                if B ~= A and B.w[3] == a[3] and CanFly(A.node.key, B.node.key) then
+            for k, B in ipairs(known) do
+                if B ~= A and fromB[k] and CanFly(A.node.key, B.node.key) then
                     local c = toA + Dist(A.w[1], A.w[2], B.w[1], B.w[2]) * FLY_FACTOR + FLY_OVERHEAD
-                        + Walk(B.w, b)
+                        + fromB[k]
                     if not bestCost or c < bestCost then best, bestCost = { from = A.node, to = B.node }, c end
                     if prev and prev.from and prev.to and A.node.key == prev.from.key and B.node.key == prev.to.key then
                         prevPlan, prevCost = { from = A.node, to = B.node }, c
