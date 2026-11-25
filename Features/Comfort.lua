@@ -141,8 +141,28 @@ local function UpdateItemButton()
         itemBtn.icon = itemBtn:CreateTexture(nil, "ARTWORK"); itemBtn.icon:SetAllPoints()
         local hl = itemBtn:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.15)
         if itemBtn.RegisterForClicks then itemBtn:RegisterForClicks("AnyUp", "AnyDown") end
+        -- Maj + glisser : deplacer le bouton (hors combat, fenetre non verrouillee) ; Maj + clic droit : le recoller
+        -- a cote du guide. Maj + clic n'utilise pas l'objet (pour ne pas gaspiller son temps de recharge).
+        itemBtn:SetAttribute("shift-type*", "")
+        itemBtn:SetMovable(true); itemBtn:SetClampedToScreen(true); itemBtn:RegisterForDrag("LeftButton")
+        itemBtn:SetScript("OnDragStart", function(self)
+            if IsShiftKeyDown() and not DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving() end
+        end)
+        itemBtn:SetScript("OnDragStop", function(self)
+            self:StopMovingOrSizing()
+            local point, _, rel, x, y = self:GetPoint(1)
+            if point then DB.itemPos = { point, rel or point, math.floor(x + 0.5), math.floor(y + 0.5) } end
+        end)
+        itemBtn:HookScript("OnMouseUp", function(_, btn)
+            if btn == "RightButton" and IsShiftKeyDown() and DB.itemPos and not (InCombatLockdown and InCombatLockdown()) then
+                DB.itemPos = nil; itemWanted = nil; UpdateItemButton()
+            end
+        end)
         itemBtn:SetScript("OnEnter", function(self)
-            if itemWanted then Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():SetItemByID(itemWanted); Tip():Show() end
+            if itemWanted then
+                Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():SetItemByID(itemWanted)
+                Tip():AddLine(T(DB.itemPos and "itemMoved" or "itemMove"), 0.55, 0.5, 0.4, true); Tip():Show()
+            end
         end)
         itemBtn:SetScript("OnLeave", function() Tip():Hide() end)
     end
@@ -153,7 +173,9 @@ local function UpdateItemButton()
         local l, t = f:GetLeft(), f:GetTop()
         local sc = (f:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
         local r = f:GetRight()
-        if l and t and l * sc >= 50 then itemBtn:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", l * sc - 6, t * sc - 16)
+        local p = DB.itemPos
+        if p then itemBtn:SetPoint(p[1], UIParent, p[2], p[3], p[4])
+        elseif l and t and l * sc >= 50 then itemBtn:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", l * sc - 6, t * sc - 16)
         elseif r and t then itemBtn:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", r * sc + 6, t * sc - 16)   -- fenetre collee a gauche : a droite
         else itemBtn:SetPoint("CENTER", UIParent, "CENTER", -300, 0) end
         ns.Trace("bouton d'objet (objet)"); itemBtn:SetAttribute("item", "item:" .. it)
