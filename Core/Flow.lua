@@ -18,6 +18,7 @@ end
 function Advance()
     if not DB or not steps then return end
     Compute()
+    pcall(WovenCleanup)
     pcall(ns.Drops.Refresh, logById, EST)
     Refresh()
     pcall(SuggestDungeonForLevel)
@@ -81,6 +82,12 @@ SetGuide = function(key, quiet)
     DB.guide = key
     G = Guides[key]
     steps = G.steps
+    -- v1.47 : chaines de classe integrees au guide (copie du guide, Data/Guides.lua n'est jamais modifie)
+    local ok, woven, outside = pcall(WeaveSteps, G, key)
+    if ok then
+        if woven then steps = woven end
+        if outside then pcall(WovenReport, outside) end
+    end
     peek, lastWP, focus = nil, nil, nil
     AnalyzeChains()
     if not quiet then say(T("guideSet", Title(G))) end
@@ -352,7 +359,7 @@ AskChain = function(q, withSelf, kind)
     -- Quete de classe : meme nom que dans Options > Classe (la 1re quete de la chaine), la finale en sous-titre
     local label = e.n
     if withSelf and kind ~= "prof" then
-        for _, c in ipairs(ClassQuestList()) do if c.q == q then label = c.name; break end end
+        for _, c in ipairs(ClassQuestList()) do if c.q == q then label = c.label or c.name; break end end
     end
     local function round(n) n = n or 0; if n >= 1000 then n = math.floor(n / 100 + 0.5) * 100 end; return FormatNum(n) end
     local G, S, F = "|cffcdbb8e", "|cffb5aa98", "|cff8c7f62"   -- or, doux, discret (HEX de Skin.lua)
@@ -388,6 +395,16 @@ AskChain = function(q, withSelf, kind)
     }
     local d = StaticPopupDialogs["WARPATH_CHAIN"]
     d.button1, d.button2 = T("chainGo"), T("chainNo")
+    -- v1.47 : 3e bouton pour une quete de classe : l'integrer au guide de zone (ou l'en retirer)
+    if withSelf and kind ~= "prof" then
+        d.button3 = T((DB.woven and DB.woven[q]) and "wovenBtnOff" or "wovenBtn")
+    else
+        d.button3 = nil
+    end
+    d.OnAlt = function()
+        if not chainAskQ then return end
+        if DB.woven and DB.woven[chainAskQ] then Unweave(chainAskQ) else Weave(chainAskQ) end
+    end
     -- titre de la fenetre selon le type : quetes de classe, metiers ou chaine ordinaire
     d.headKey = (kind == "prof" and "popProfQuest") or (withSelf and "popClass") or "popChain"
     ns.Trace("popup WARPATH_CHAIN"); Popup("WARPATH_CHAIN", txt)
@@ -401,6 +418,141 @@ StartChain = function(q, withSelf)
     Guides.chain = g
     say(T(withSelf and "classStartMsg" or "chainStartMsg", EST[q].n, #g.steps))
     SetGuide("chain", true)
+end
+
+-- v1.47 : INTEGRER une chaine de classe au guide de zone (au lieu du detour « chain »).
+-- Les etapes de la chaine qui tombent sur une carte du guide sont glissees juste apres l'etape du guide
+-- la plus proche (meme carte), sans jamais revenir avant l'etape precedente de la chaine (l'ordre
+-- Prendre > Faire > Rendre reste vrai) ni avant l'ancre du guide (ce que tu as deja fait).
+-- Les autres attendent le guide de leur zone (le guide est retisse a chaque SetGuide). Etapes marquees
+-- woven = quete visee : elles ne servent jamais d'ancre et ne sont pas sautees par l'ancre (Core.lua).
+local function wovenDist(a, b)
+    local dx, dy = (a.x or 0) - (b.x or 0), (a.y or 0) - (b.y or 0)
+    return math.sqrt(dx * dx + dy * dy)
+end
+
+function WeaveSteps(g, key)
+    local base = g and g.steps
+    if not (DB and DB.woven and next(DB.woven) and base) or key == "chain" or IS_DUNGEON[key] then return nil end
+    -- ancre du guide sans les ajouts (borne basse : on n'insere rien dans ce que tu as deja fait)
+    local saved = steps
+    steps = base
+    local okA, floor = pcall(FindAnchor)
+    steps = saved
+    floor = okA and floor or 0
+    local have, maps = {}, {}
+    for _, s in ipairs(base) do
+        if Applies(s) then
+            if s.m then maps[s.m] = true end
+            if s.t == "accept" or s.t == "do" or s.t == "turnin" then
+                for _, id in ipairs(Ids(s)) do have[s.t .. ":" .. id] = true end
+            end
+        end
+    end
+    local after, outside, any = {}, {}, false
+    for q in pairs(DB.woven) do
+        local list = ChainSteps(q, true)
+        local pos = floor
+        for _, cs in ipairs(list or {}) do
+            if not have[cs.t .. ":" .. cs.id] then
+                if cs.m and maps[cs.m] then
+                    -- etape du guide la plus proche (meme carte) a partir de pos ; a distance presque egale
+                    -- (meme camp), la premiere : on ne repousse pas la quete a un passage plus tardif
+                    local best
+                    for j = math.max(pos, 1), #base do
+                        local b = base[j]
+                        if b.m == cs.m and b.x and Applies(b) then
+                            local d = wovenDist(b, cs)
+                            if not best or d < best then best = d end
+                        end
+                    end
+                    local at = pos
+                    if best then
+                        for j = math.max(pos, 1), #base do
+                            local b = base[j]
+                            if b.m == cs.m and b.x and Applies(b) and wovenDist(b, cs) <= best + 2 then at = j; break end
+                        end
+                    end
+                    local row = {}
+                    for k, v in pairs(cs) do row[k] = v end
+                    row.woven = q
+                    row.zone = base[at] and base[at].zone or nil
+                    after[at] = after[at] or {}
+                    table.insert(after[at], row)
+                    pos = at
+                    any = true
+                elseif not Rendue(cs.id) then
+                    outside[q] = outside[q] or { n = 0, maps = {} }
+                    local o = outside[q]
+                    o.n = o.n + 1
+                    if cs.m then o.maps[cs.m] = true end
+                end
+            end
+        end
+    end
+    if not any then return nil, outside end
+    local out = {}
+    for _, r in ipairs(after[0] or {}) do out[#out + 1] = r end
+    for j, s in ipairs(base) do
+        out[#out + 1] = s
+        for _, r in ipairs(after[j] or {}) do out[#out + 1] = r end
+    end
+    return out, outside
+end
+
+-- Message : etapes d'une chaine integree qui se passent hors de ce guide
+function WovenReport(outside)
+    for q, o in pairs(outside or {}) do
+        if o.n > 0 and EST[q] then
+            local names = {}
+            for m in pairs(o.maps) do
+                local nm = MAPNAME[m]
+                if not nm and C_Map and C_Map.GetMapInfo then
+                    local okI, info = pcall(C_Map.GetMapInfo, m)
+                    nm = okI and info and info.name or nil
+                end
+                if nm then names[#names + 1] = nm end
+            end
+            say(T("wovenOutside", EST[q].n, o.n, #names > 0 and table.concat(names, ", ") or "?"))
+        end
+    end
+end
+
+function Weave(q)
+    if not (q and EST[q]) then return end
+    if not ChainSteps(q, true) then say(T("chainNone", EST[q].n)); return end
+    DB.woven = DB.woven or {}
+    DB.woven[q] = true
+    say(T("wovenStart", EST[q].n))
+    local inLog = 0
+    for _ in pairs(logById or {}) do inLog = inLog + 1 end
+    if inLog >= 35 then say(T("wovenLogFull", inLog)) end
+    -- depuis le detour « chain » : on revient au guide de zone, avec la chaine dedans
+    local key = DB.guide
+    if key == "chain" then
+        key = DB.chainBack
+        DB.chainBack, DB.chainQ, DB.chainSelf = nil, nil, nil
+        Guides.chain = nil
+    end
+    if key and Guides[key] then SetGuide(key, true) end
+end
+
+function Unweave(q)
+    if not (DB and DB.woven) then return end
+    if q then DB.woven[q] = nil else wipe(DB.woven) end
+    if q then say(T("wovenStop", EST[q] and EST[q].n or tostring(q))) else say(T("wovenStopAll")) end
+    if DB.guide and Guides[DB.guide] then SetGuide(DB.guide, true) end
+end
+
+-- Chaine integree terminee (quete visee rendue) : on la retire, le guide se nettoie au prochain chargement
+function WovenCleanup()
+    if not (DB and DB.woven) then return end
+    for q in pairs(DB.woven) do
+        if Rendue(q) then
+            DB.woven[q] = nil
+            say(T("wovenDone", EST[q] and EST[q].n or tostring(q)))
+        end
+    end
 end
 
 -- v1.46 : nom du donjon dans la langue de l'addon (« en » de Data.lua, sinon « Scarlet Monastery: Graveyard »)
@@ -526,15 +678,50 @@ CheckDungeonsFn = CheckDungeons
 
 -- Quetes de classe importantes (ClassQuests.lua) : la variante de ta race, si elle n'est pas deja faite
 function ClassQuestList()
-    local out = {}
+    local out, byName = {}, {}
+    -- v1.47 : entre variantes d'une meme ligne, celle qui commence sur ton continent d'abord
+    local myCont
+    if C_Map and C_Map.GetBestMapForUnit then
+        local okm, m = pcall(C_Map.GetBestMapForUnit, "player")
+        if okm and m then local okc, c = pcall(Continent, m); myCont = okc and c or nil end
+    end
     for _, r in ipairs((ns.ClassQuests or {})[myClass] or {}) do
-        local pick, done = nil, false
+        local pick, done, doneId, here = nil, false, nil, nil
         for _, id in ipairs(r[3]) do
             if EST[id] and QAvailable(id) then
-                if Rendue(id) then done = true elseif not pick then pick = id end
+                if Rendue(id) then done = true; doneId = doneId or id
+                else
+                    pick = pick or id
+                    if myCont and not here then
+                        local order = ChainFor(id, true)
+                        local first = order and order[1] and EST[order[1]]
+                        local okc, c = pcall(Continent, first and first.s and first.s[1])
+                        if okc and c == myCont then here = id end
+                    end
+                end
             end
         end
-        if pick or done then out[#out + 1] = { lvl = r[1], lvl2 = r[4] or r[1], name = r[2], q = pick, done = done } end
+        pick = here or pick
+        if pick or done then
+            local c = { lvl = r[1], lvl2 = r[4] or r[1], name = r[2], label = r[2], q = pick, done = done, endId = doneId or pick }
+            out[#out + 1] = c
+            byName[r[2]] = byName[r[2]] or {}
+            table.insert(byName[r[2]], c)
+        end
+    end
+    -- v1.47 : meme nom sur plusieurs lignes = quetes differentes (Path of Defense : Forged Steel dans les Barrens,
+    -- Heirloom Weapon a Tirisfal) : on nomme la fin de chaque chaine, et une fois une version faite, les autres
+    -- (alt) restent dans la liste mais ne sont plus proposees d'office. name reste la cle de DB.cqAsked.
+    for nm, list in pairs(byName) do
+        if #list > 1 then
+            local anyDone = false
+            for _, c in ipairs(list) do if c.done then anyDone = true end end
+            for _, c in ipairs(list) do
+                local e = c.endId and EST[c.endId]
+                if e and e.n ~= nm then c.label = nm .. " › " .. e.n end
+                c.alt = anyDone and not c.done or nil
+            end
+        end
     end
     return out
 end
@@ -546,7 +733,7 @@ function CheckClassQuests()
     DB.cqAsked = DB.cqAsked or {}
     local lvl = UnitLevel("player") or 1
     for _, c in ipairs(ClassQuestList()) do
-        if c.q and not c.done and lvl >= c.lvl and lvl <= c.lvl + 8 and not DB.cqAsked[c.name] and logById[c.q] == nil then
+        if c.q and not c.done and not c.alt and lvl >= c.lvl and lvl <= c.lvl + 8 and not DB.cqAsked[c.name] and logById[c.q] == nil then
             local order = ChainFor(c.q, true)
             if order and #order > 0 then
                 DB.cqAsked[c.name] = true

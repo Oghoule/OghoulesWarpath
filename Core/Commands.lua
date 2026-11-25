@@ -85,6 +85,8 @@ SlashCmdList["WARPATH"] = function(msg)
         else say(T("unknownGuide", arg)); ListGuides() end
     elseif cmd == "options" or cmd == "config" or cmd == "o" then
         ns.UI.ToggleOptions()
+    elseif cmd == "perf" then
+        PerfStart(tonumber(arg))   -- v1.47 : mesure des performances (60 s par defaut)
     elseif cmd == "fleche" or cmd == "flèche" or cmd == "arrow" or cmd == "apparence" or cmd == "appearance" then
         ns.UI.OpenOptionsTab(6)   -- v1.46 : onglet Apparence (fenetre, fleche, cartes)
     elseif cmd == "lang" or cmd == "langue" or cmd == "language" then
@@ -211,8 +213,16 @@ SlashCmdList["WARPATH"] = function(msg)
         if n and list[n] and list[n].q and not list[n].done then AskChain(list[n].q, true); return end
         if #list == 0 then say(T("classNone")); return end
         for k, c in ipairs(list) do
-            say(string.format("  %d. %s%s (%s)|r%s", k, c.done and "|cff8c7f62" or "|cffcdbb8e", c.name, c.lvl2 > c.lvl and (c.lvl .. "-" .. c.lvl2) or tostring(c.lvl), c.done and (" - " .. T("classDone")) or ""))
+            say(string.format("  %d. %s%s (%s)|r%s", k, (c.done or c.alt) and "|cff8c7f62" or "|cffcdbb8e", c.label or c.name, c.lvl2 > c.lvl and (c.lvl .. "-" .. c.lvl2) or tostring(c.lvl), c.done and (" - " .. T("classDone")) or c.alt and (" - " .. T("classAlt")) or ""))
         end
+    elseif cmd == "tisser" or cmd == "weave" then
+        -- v1.47 : /warpath tisser <id> integre une chaine de classe au guide ; « off » les retire toutes
+        if arg == "off" then Unweave(nil); return end
+        local q = tonumber(arg)
+        if q then Weave(q); return end
+        local n = 0
+        for wq in pairs(DB.woven or {}) do n = n + 1; say("  " .. wq .. " " .. (EST[wq] and EST[wq].n or "?")) end
+        if n == 0 then say(T("wovenNone")) end
     elseif cmd == "tuto" or cmd == "tutorial" or cmd == "visite" or cmd == "tour" then
         ShowTutorial(true)
     elseif cmd == "news" or cmd == "nouveautes" or cmd == "quoi" then
@@ -285,6 +295,16 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.47", fr = "Saccades corrigées (vraie cause trouvée avec /warpath perf) : la flèche demandait ta position plusieurs fois par image et chaque demande créait des objets jetables, environ 900 Ko par seconde ; le jeu devait les nettoyer régulièrement, d'où une petite saccade toutes les 2 secondes environ sur certains PC. La position est maintenant calculée une fois par image, sans objets inutiles.",
+      en = "Stutter fixed (real cause found with /warpath perf): the arrow asked for your position several times per frame and each request created throwaway objects, about 900 KB per second; the game had to clean them up regularly, hence a small hitch about every 2 seconds on some PCs. Your position is now computed once per frame, without needless objects." },
+    { v = "1.47", fr = "Options > Classe plus claire : les quêtes de classe qui portent le même nom disent maintenant où elles mènent (ex. « Path of Defense › Forged Steel » et « Path of Defense › Heirloom Weapon »). Une fois une version faite, les autres restent dans la liste (« autre version ») mais ne te sont plus proposées d'office : fini le zeppelin pour Tirisfal après Forged Steel. Les vraies variantes d'une même quête (Call of Fire, Creature of the Void, Orbe d'Orahil) n'ont plus qu'une ligne.",
+      en = "Clearer Options > Class: class quests with the same name now say where they lead (e.g. \"Path of Defense › Forged Steel\" and \"Path of Defense › Heirloom Weapon\"). Once one version is done, the others stay in the list (\"other version\") but are no longer offered on their own: no more zeppelin to Tirisfal after Forged Steel. True variants of one quest (Call of Fire, Creature of the Void, Orb of Orahil) now have a single line." },
+    { v = "1.47", fr = "Saccades : nouvelle commande /warpath perf. Elle mesure pendant 60 s ce que fait l'addon (temps de chaque partie, saccades, repère du jeu, mémoire) et garde le résultat dans ta sauvegarde : envoie-le à l'auteur si le jeu saccade avec Warpath.",
+      en = "Stutter: new /warpath perf command. It measures for 60 s what the addon does (time of each part, hitches, game waypoint, memory) and keeps the result in your save: send it to the author if the game stutters with Warpath." },
+    { v = "1.47", fr = "Quêtes de classe intégrées au guide : la fenêtre qui propose une quête de classe a un nouveau bouton « Intégrer au guide ». Au lieu de quitter ton guide pour un détour, les étapes de la chaîne apparaissent dans ton guide de zone, près des bons PNJ (étiquette CLASSE). Les étapes situées ailleurs apparaissent dans le guide de leur zone. Pour l'enlever : rouvre la quête dans Options > Classe, « Retirer du guide ».",
+      en = "Class quests in your guide: the window that suggests a class quest has a new \"Add to guide\" button. Instead of leaving your guide for a detour, the chain's steps show up in your zone guide, next to the right NPCs (CLASS tag). Steps elsewhere show up in their own zone's guide. To remove it: reopen the quest in Options > Class, \"Remove from guide\"." },
+    { v = "1.47",fr = "Vol automatique de retour, en option : Options > Itinéraire, « Prendre le vol conseillé automatiquement » (décochée par défaut). À l'ouverture de la carte des vols, le vol conseillé part tout seul ; garde Maj enfoncée pour choisir toi-même. Sur la carte des vols, le carré vert laisse place à un losange doré Warpath qui pulse, avec l'étiquette « Vol conseillé ». Flèche : quand tu changes sa taille (Ctrl + molette ou options), elle grandit autour de son centre au lieu de se décaler.",
+      en = "Automatic flight is back, as an option: Options > Route, \"Take the suggested flight automatically\" (off by default). When you open the flight map, the suggested flight takes off by itself; hold Shift to choose yourself. On the flight map, the green square makes way for a pulsing gold Warpath diamond, labeled \"Suggested flight\". Arrow: when you change its size (Ctrl + mouse wheel or options), it grows around its center instead of shifting." },
     { v = "1.46", fr = "Options plus simples à trouver : un nouvel onglet Apparence regroupe la fenêtre, la flèche et les cartes (affichage, taille, position), avec la même ligne de réglage de taille pour la fenêtre et la flèche. La flèche s'affiche en aperçu pendant que tu la règles. Itinéraire garde les trajets, les vols et le ciblage ; Automatisation devient Comportement, avec les messages et les extras. Sur la flèche : Ctrl + molette pour sa taille, clic droit pour un petit menu. Nouvel engrenage dans l'en-tête du guide et /warpath fleche : ouvrent l'onglet Apparence.",
       en = "Options easier to find: a new Appearance tab groups the window, the arrow and the maps (display, size, position), with the same size control for the window and the arrow. The arrow shows as a preview while you adjust it. Route keeps routes, flights and targeting; Automation becomes Behavior, with messages and extras. On the arrow: Ctrl + mouse wheel for its size, right-click for a small menu. New gear in the guide header and /warpath arrow: open the Appearance tab." },
     { v = "1.46", fr = "Objectif plus visible sur les cartes : un losange doré qui pulse le montre sur la carte du monde (le point jaune du jeu reste), et l'icône de la minicarte est plus grosse et pulse aussi. Pour le couper : Options > Apparence, « Repère animé sur les cartes ».",

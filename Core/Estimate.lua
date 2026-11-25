@@ -252,10 +252,10 @@ function ChainFor(q, withSelf)
     return order
 end
 
-function BuildChainGuide(q, withSelf)
+-- Etapes Prendre / Faire / Rendre d'une chaine (utilisees par le guide « chain » et par l'integration au guide)
+function ChainSteps(q, withSelf)
     local order = ChainFor(q, withSelf)
-    local target = EST[q]
-    if not order or #order == 0 or not target then return nil end
+    if not order or #order == 0 or not EST[q] then return nil end
     local list = {}
     local function at(row, p) if p then row.m, row.x, row.y = p[1], p[2], p[3] end; return row end
     local notes = D.CHAINNOTES or {}
@@ -283,6 +283,13 @@ function BuildChainGuide(q, withSelf)
         end
         list[#list + 1] = at({ t = "turnin", id = id, quest = e.n, lvl = e.l, text = "Rends la quete.", en = "Turn in the quest." }, e.e)
     end
+    return list
+end
+
+function BuildChainGuide(q, withSelf)
+    local list = ChainSteps(q, withSelf)
+    local target = EST[q]
+    if not list or not target then return nil end
     if withSelf then return { title = "Classe : " .. target.n, title_en = "Class: " .. target.n, races = { myRace }, steps = list, side = true } end
     return { title = "Chaine : " .. target.n, title_en = "Chain: " .. target.n, races = { myRace }, steps = list, side = true }
 end

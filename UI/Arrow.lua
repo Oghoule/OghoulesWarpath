@@ -8,10 +8,33 @@ if setfenv then setfenv(1, _ENV) end
 do
     local frame, tex, gem, dist, last
     local ArrowMenu   -- (defini plus bas : menu du clic droit)
+
+    -- v1.47 (signale par l'auteur) : changer la taille gardait fixe le point d'ancrage de la fenetre (fleche + texte),
+    -- donc la fleche se decalait. Ici, le centre de la fleche (texture 64 x 64 en haut du cadre) reste au meme
+    -- endroit de l'ecran ; la nouvelle position est sauvee (DB.arrowPos, en TOPLEFT).
+    local function ApplyScale()
+        if not frame then return end
+        local s = DB.arrowScale or 1
+        local old = frame:GetEffectiveScale()
+        if math.abs((frame:GetScale() or 1) - s) < 0.001 then return end
+        local cx, cy = tex:GetCenter()
+        if not (cx and old and UIParent) then frame:SetScale(s); return end
+        local sx, sy = cx * old, cy * old                     -- centre de la fleche, en pixels d'ecran
+        frame:SetScale(s)
+        local new = frame:GetEffectiveScale()
+        local top = UIParent:GetTop() * UIParent:GetEffectiveScale()
+        local half = tex:GetWidth() / 2
+        local x, y = sx / new - half, (sy - top) / new + half    -- coin haut-gauche du cadre, en unites de la fleche
+        x, y = math.floor(x * 10 + 0.5) / 10, math.floor(y * 10 + 0.5) / 10
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
+        DB.arrowPos = { "TOPLEFT", x, y }
+    end
     local ON_COURSE = math.rad(12) -- losange rouge si on vise a moins de 12 degres
     local ARRIVE = 8          -- metres : en dessous, la fleche devient un losange "tu y es"
     local AREA_IN, AREA_OUT = 50, 250  -- zone de chasse : cachee des que tu y es (50 m), revient seulement au-dela de 250 m
     local inArea, areaKey = false, nil
+    local mode, lastD = nil, nil   -- v1.47 : etat affiche (« arrow », « here », « preview ») et distance ecrite
 
     local function Create()
         if frame then return end
@@ -19,6 +42,7 @@ do
         frame:SetSize(64, 84)
         frame:SetFrameStrata("MEDIUM")
         frame:SetClampedToScreen(true)
+        frame:SetScale(DB.arrowScale or 1)   -- v1.47 : l'echelle avant la position (decalages en unites de la fleche)
         local p = DB.arrowPos
         if p then frame:SetPoint(p[1], UIParent, p[1], p[2], p[3]) else frame:SetPoint("TOP", UIParent, "TOP", 0, -140) end
         tex = frame:CreateTexture(nil, "ARTWORK")
@@ -48,7 +72,7 @@ do
         frame:SetScript("OnMouseWheel", function(_, delta)
             if not (IsControlKeyDown and IsControlKeyDown()) then return end
             DB.arrowScale = math.max(0.6, math.min(1.6, math.floor(((DB.arrowScale or 1) + delta * 0.05) * 20 + 0.5) / 20))
-            frame:SetScale(DB.arrowScale)
+            ApplyScale()
             if ns.UI and ns.UI.RefreshOptions then pcall(ns.UI.RefreshOptions) end
         end)
         -- v1.46 : clic droit = petit menu (options de la fleche, replacer, masquer)
@@ -100,10 +124,14 @@ do
     local function Preview()
         if not (DB and DB.wp ~= false and DB.ownArrow ~= false) then return end
         Create()
-        tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\Arrow"); tex:SetRotation(0)
+        if mode ~= "preview" then
+            mode, lastD = "preview", nil
+            tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\Arrow")
+            dist:SetText(Caps(T("arrowPreview")))
+        end
+        tex:SetRotation(0)
         gem:SetRotation(0); gem:SetVertexColor(0.80, 0.14, 0.18); gem:Show()
-        dist:SetText(Caps(T("arrowPreview")))
-        frame:SetScale(DB.arrowScale or 1)
+        ApplyScale()
         frame:Show()
     end
 
@@ -128,18 +156,27 @@ do
             if d < AREA_IN then inArea = true elseif d > AREA_OUT then inArea = false end
             if inArea then frame:Hide(); return end
         else inArea = false end
+        -- v1.47 : image et texte changes seulement quand ils changent (avant : 25 fois par seconde, texte refait a
+        -- chaque fois ; mesure /warpath perf du 2026-11-25)
         if d < ARRIVE then
-            tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\ArrowHere"); tex:SetRotation(0); gem:Hide()
-            dist:SetText(Caps(T("arrowHere")))
+            if mode ~= "here" then
+                mode, lastD = "here", nil
+                tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\ArrowHere"); tex:SetRotation(0); gem:Hide()
+                dist:SetText(Caps(T("arrowHere")))
+            end
         else
-            tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\Arrow")
+            if mode ~= "arrow" then
+                mode, lastD = "arrow", nil
+                tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\Arrow"); gem:Show()
+            end
             local ang = math.atan2(dy, dx) - facing
             ang = (ang + math.pi) % (2 * math.pi) - math.pi      -- ramene entre -pi et pi
-            tex:SetRotation(ang); gem:SetRotation(ang); gem:Show()
+            tex:SetRotation(ang); gem:SetRotation(ang)
             if math.abs(ang) < ON_COURSE then gem:SetVertexColor(0.80, 0.14, 0.18) else gem:SetVertexColor(0.55, 0.55, 0.55) end
-            dist:SetText(Caps(T("dist", math.floor(d + 0.5))))
+            local di = math.floor(d + 0.5)
+            if di ~= lastD then lastD = di; dist:SetText(Caps(T("dist", di))) end
         end
-        frame:SetScale(DB.arrowScale or 1)
+        ApplyScale()
         frame:Show()
     end
 
@@ -282,12 +319,15 @@ do
         acc = acc + el
         if acc < 0.04 then return end
         acc = 0
+        local m0 = PerfOn and PerfMem and PerfMem()                     -- v1.47 : /warpath perf
+        local t0 = PerfOn and debugprofilestop and debugprofilestop()
         local ok = pcall(Update)
         if not ok and frame then frame:Hide() end
         if preview and not (frame and frame:IsShown()) then pcall(Preview) end
         if not pcall(UpdatePin) and pin then pin:Hide() end
         if not pcall(UpdateMapPin) and wpin then wpin:Hide() end
         pcall(UpdateDestIcon, 0.04)
+        if t0 and PerfMark then PerfMark("Fleche + cartes (25/s)", debugprofilestop() - t0, m0 and (PerfMem() - m0)) end
     end)
 
     ns.Arrow = {

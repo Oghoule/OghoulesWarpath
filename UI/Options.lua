@@ -438,7 +438,7 @@ local function CreateOptions()
                     local inRange = me >= d.min and me <= d.max
                     local okL, left = pcall(E.DungeonLeft, d.key)
                     b.glow:SetOn(inRange and okL and (left or 0) > 0)
-                    local ideal = DungeonIdeal and DungeonIdeal(d.key)
+                    local ideal = E.DungeonIdeal(d.key)
                     lv:SetText((inRange and "|cffcdbb8e" or "") .. d.min .. "-" .. d.max .. (inRange and "|r" or "")
                         .. (ideal and ("  |cff8c7f62·|r " .. ((me >= ideal and inRange) and "|cffcdbb8e" or "") .. ideal .. ((me >= ideal and inRange) and "|r" or "")) or ""))
                     local okB, take, later, lvlL = pcall(E.DungeonBadge or function() return 0, 0 end, d.key)
@@ -463,7 +463,7 @@ local function CreateOptions()
                     E.Tip():SetOwner(self, "ANCHOR_RIGHT")
                     E.Tip():AddLine(E.DungeonName(d))
                     E.Tip():AddLine(T("dTip", d.min, d.max), 1, 1, 1, true)
-                    local ideal = DungeonIdeal and DungeonIdeal(d.key)
+                    local ideal = E.DungeonIdeal(d.key)
                     if ideal then E.Tip():AddLine(T("dIdeal", ideal), 0.84, 0.72, 0.4, true) end
                     if b.glow:IsShown() then E.Tip():AddLine(T("atLevel"), 0.88, 0.74, 0.43) end
                     if (b.take or 0) > 0 then E.Tip():AddLine(T("dsBadgeTip", b.take), 0.84, 0.72, 0.4) end
@@ -509,11 +509,14 @@ local function CreateOptions()
                 local c = list[k]
                 if c then
                     b.q = (not c.done) and c.q or nil
-                    b.fs:SetText(c.name)
-                    local col = c.done and COL.gold or (me >= c.lvl and COL.white or COL.soft)
+                    b.fs:SetText(c.label or c.name)
+                    -- v1.47 : autre version d'une quete de classe deja faite (alt) : discrete, pas mise en avant
+                    local col = c.done and COL.gold or ((me >= c.lvl and not c.alt) and COL.white or COL.soft)
                     if b.fs.SetTextColor then b.fs:SetTextColor(col[1], col[2], col[3]) end
-                    b.lv:SetText(c.done and T("classDone") or (c.lvl2 > c.lvl and T("classLvls", c.lvl, c.lvl2) or T("classLvl", c.lvl)))
-                    b.glow:SetOn(not c.done and me >= c.lvl)
+                    -- v1.47 : chaine integree au guide (un clic rouvre la question, avec « Retirer du guide »)
+                    local woven = (not c.done) and c.q and DB.woven and DB.woven[c.q]
+                    b.lv:SetText(c.done and T("classDone") or woven and Caps(T("wovenTag")) or c.alt and T("classAlt") or (c.lvl2 > c.lvl and T("classLvls", c.lvl, c.lvl2) or T("classLvl", c.lvl)))
+                    b.glow:SetOn(not c.done and not c.alt and me >= c.lvl)
                     b:Show()
                 else
                     b.q = nil; b.glow:SetOn(false); b:Hide()
@@ -630,6 +633,7 @@ local function CreateOptions()
         sec("secTrips")
         row(CheckRow(pg, CW, "useFlights", function() return DB.useFlights ~= false end,
             function(v) DB.useFlights = v; E.ResetWP(); Refresh(true) end))
+        row(CheckRow(pg, CW, "flyAuto", function() return DB.flyAuto == true end, function(v) DB.flyAuto = v and true or false end))
         row(CheckRow(pg, CW, "hearthTips", function() return DB.hearthTips ~= false end,
             function(v) DB.hearthTips = v; Refresh(true) end))
         local BW2 = math.floor((CW - 12) / 2)

@@ -112,18 +112,27 @@ end
 ------------------------------------------------------------------
 KALIMDOR, EK, CONT_FALLBACK, TRANSPORTS = D.KALIMDOR, D.EK, D.CONT_FALLBACK, D.TRANSPORTS
 
+-- v1.47 : le continent d'une carte ne change pas : on le retient (avant, chaque appel creait une fiche de carte
+-- par niveau, des dizaines de fois par seconde via PlayerWP ; mesure /warpath perf du 2026-11-25)
+local contCache = {}
 function Continent(mapID)
     if not mapID then return nil end
+    local c = contCache[mapID]
+    if c ~= nil then return c or nil end
+    local sure = false   -- vrai seulement si le jeu a repondu pour toute la chaine (pas au chargement, ni dans les tests)
     if C_Map and C_Map.GetMapInfo then
         local m, guard = mapID, 0
+        sure = true
         while m and m > 0 and guard < 10 do
             local info = C_Map.GetMapInfo(m)
-            if not info then break end
-            if info.mapType == 2 then return m end      -- Enum.UIMapType.Continent
+            if not info then sure = false; break end
+            if info.mapType == 2 then contCache[mapID] = m; return m end      -- Enum.UIMapType.Continent
             m, guard = info.parentMapID, guard + 1
         end
     end
-    return CONT_FALLBACK[mapID]
+    c = CONT_FALLBACK[mapID]
+    if sure then contCache[mapID] = c or false end
+    return c
 end
 
 function WorldPos(mapID, x, y)
@@ -132,15 +141,23 @@ function WorldPos(mapID, x, y)
     if ok and v then return v.x, v.y end
 end
 
+-- v1.47 : ta position est calculee une seule fois par image (GetTime ne change pas pendant une image) : la fleche,
+-- l'icone de la minicarte, la petite fleche et la distance la demandaient chacune (mesure /warpath perf du 2026-11-25)
+-- (pas en simulation : l'horloge des tests reste fixe pendant qu'ils deplacent le joueur)
+local ppT, ppM, ppX, ppY
 function PlayerPos()
+    local now = not WARPATH_TEST and GetTime and GetTime()
+    if now and now == ppT then return ppM, ppX, ppY end
+    ppT, ppM, ppX, ppY = now, nil, nil, nil
     if not (C_Map and C_Map.GetBestMapForUnit) then return nil end
     local m = C_Map.GetBestMapForUnit("player")
     if not m then return nil end
+    ppM = m
     local okp, p = pcall(ns.MapAPI.PlayerPos, m, "player")
     if not okp then p = nil end
     if p then
         local x, y = p:GetXY()
-        if x and (x > 0 or y > 0) then return m, x * 100, y * 100 end
+        if x and (x > 0 or y > 0) then ppX, ppY = x * 100, y * 100; return m, ppX, ppY end
     end
     return m
 end
@@ -191,11 +208,17 @@ end
 FLIGHTS = D.FLIGHTS
 FLY_FACTOR, FLY_OVERHEAD = 0.3, 150   -- un vol ~3x plus rapide qu'a pied, + temps de decollage/atterrissage
 
+-- (meme cache par image ; une nouvelle table a chaque image, jamais modifiee ensuite : certains la gardent, ex. FlightRecheck)
+local pwT, pwV
 function PlayerWP()
+    local now = not WARPATH_TEST and GetTime and GetTime()
+    if now and now == pwT then return pwV end
+    pwT, pwV = now, nil
     local pm, px, py = PlayerPos()
     if not (pm and px) then return nil end
     local wx, wy = WorldPos(pm, px, py)
-    return wx and { wx, wy, Continent(pm), pm } or nil
+    pwV = wx and { wx, wy, Continent(pm), pm } or nil
+    return pwV
 end
 
 ------------------------------------------------------------------

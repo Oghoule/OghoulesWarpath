@@ -18,7 +18,7 @@ local ADDON, ns = ...
 -- Environnement prive partage par tous les fichiers du moteur (Core, Route, Estimate, Skin, Flow, Window,
 -- Comfort, Commands, Events) : leurs variables communes y vivent, les vraies globales du jeu restent dans _G.
 local DECL = {}
-for n in ("ALL_NEEDED RetargetLight lightCtx TrailTickTrailPoint TrailCmd TrailBreak FarmSpot FmtDur PassageKey PassageFor PassageCmd FollowUpAccepts HearthButton MobZonePoint CaveDiag MapBar MAPBAR ChipScale InlineIcon STEP_TINT SetObjRows FIXED_H DiamondCheck Border SectionHead Chip STEP_ICON SetHeader SplitPlace HEAD_H OpenStepQuest ListBlock AcceptGroup LiveObjectives TraitTrees OnTheWay TrainDetour BackToNow MySpec ForgetCave DeathTip IsCaveStep CaveTrack StepPoint StepPointKey DungeonDoorPoint DungeonName DungeonQuests DungeonBadge DungeonAskLine DungeonSheetOpen DungeonSheetDefault DungeonSheetHide BugWindow NearestTrainer TrainReminder CheckWeaponMaster TurninGroup baseCurrent nearKind Actionable NearPick NearTick LevelWaitLines HubNotes ThenLine InDgInstance DungeonKeyForInstance OnInstanceChange DungeonInstanceMatches DungeonLore DL DungeonLogActive DungeonLogList DungeonLogHide DungeonLogRender Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow ChronPreview autoGoBusy CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText DungeonIdealShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome ShowTutorial StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain LearnFlightHere SetErrand ClearErrand ErrandPoint CityGatePoint UpdateMini ToggleMini ShowGuide MINI_W MINI_PAD QM_CITIES QM_MAXLVL QMCity QMCandidates QMStart QMCurrent QMQuit QMSkip QMPoint QMRenderPick QMOpen QMClosePick QMGo QMRenderTour QMPanelState QMShowPanel CheckQuartermaster DG_LEFT_DIST CheckDungeonLeft HearthPlace adviceArgs adviceT CityCaveFor CityCavePoint POPUP_HEAD MIN_H inCommand Toast FadeIn FadeOut Shine GoldFrame SKIP_ICON SetSkip HeadButton Glyph ScaleGrip OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
+for n in ("ChainSteps WeaveSteps WovenReport Weave Unweave WovenCleanup ALL_NEEDED PerfOn PerfStart PerfMark PerfMemRetargetLight lightCtx TrailTick TrailPoint TrailCmd TrailBreak FarmSpot FmtDur PassageKey PassageFor PassageCmd FollowUpAccepts HearthButton MobZonePoint CaveDiag MapBar MAPBAR ChipScale InlineIcon STEP_TINT SetObjRows FIXED_H DiamondCheck Border SectionHead Chip STEP_ICON SetHeader SplitPlace HEAD_H OpenStepQuest ListBlock AcceptGroup LiveObjectives TraitTrees OnTheWay TrainDetour BackToNow MySpec ForgetCave DeathTip IsCaveStep CaveTrack StepPoint StepPointKey DungeonDoorPoint DungeonName DungeonQuests DungeonBadge DungeonAskLine DungeonSheetOpen DungeonSheetDefault DungeonSheetHide BugWindow NearestTrainer TrainReminder CheckWeaponMaster TurninGroup baseCurrent nearKind Actionable NearPick NearTick LevelWaitLines HubNotes ThenLine InDgInstance DungeonKeyForInstance OnInstanceChange DungeonInstanceMatches DungeonLore DL DungeonLogActive DungeonLogList DungeonLogHide DungeonLogRender Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow ChronPreview autoGoBusy CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText DungeonIdeal ShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome ShowTutorial StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain LearnFlightHere SetErrand ClearErrand ErrandPoint CityGatePoint UpdateMini ToggleMini ShowGuide MINI_W MINI_PAD QM_CITIES QM_MAXLVL QMCity QMCandidates QMStart QMCurrent QMQuit QMSkip QMPoint QMRenderPick QMOpen QMClosePick QMGo QMRenderTour QMPanelState QMShowPanel CheckQuartermaster DG_LEFT_DIST CheckDungeonLeft HearthPlace adviceArgs adviceT CityCaveFor CityCavePoint POPUP_HEAD MIN_H inCommand Toast FadeIn FadeOut Shine GoldFrame SKIP_ICON SetSkip HeadButton Glyph ScaleGrip OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
 local assigned = {}
 local env = setmetatable({}, {
     __index = function(_, k) if DECL[k] and assigned[k] then return nil end return _G[k] end,
@@ -49,7 +49,7 @@ do
             -- securite : l'automatisation qui vient d'agir est coupee pour ne plus jamais declencher le blocage
             local lt = ns.lastTrace
             local OFF = { AcceptQuest = "autoQuest", CompleteQuest = "autoQuest", GetQuestReward = "autoQuest",
-                          Gossip = "autoQuest", ["bouton d'objet (creation)"] = "itemBtn", ["bouton d'objet (objet)"] = "itemBtn" }
+                          Gossip = "autoQuest", TakeTaxiNode = "flyAuto", ["bouton d'objet (creation)"] = "itemBtn", ["bouton d'objet (objet)"] = "itemBtn" }
             if lt and GetTime and GetTime() - lt[2] < 2 and OFF[lt[1]] and WarpathCharDB then
                 WarpathCharDB[OFF[lt[1]]] = false
                 m = m .. "  ->  " .. lt[1] .. " : fonction interdite par Forever, désactivée automatiquement (Options)"
@@ -88,7 +88,12 @@ ns.MapAPI = {
     end,
     WorldFromMap = function(mapID, x, y)
         if not (C_Map and C_Map.GetWorldPosFromMapPos and CreateVector2D) then return nil end
-        return C_Map.GetWorldPosFromMapPos(mapID, CreateVector2D(x, y))
+        -- v1.47 : un seul vecteur reutilise (CreateVector2D recopie toutes les fonctions du mixin : ~2 Ko a chaque
+        -- appel, des dizaines de fois par seconde ; mesure /warpath perf du 2026-11-25)
+        local v = ns.MapAPI.vec
+        if not v then v = CreateVector2D(x, y); ns.MapAPI.vec = v
+        elseif v.SetXY then v:SetXY(x, y) else v.x, v.y = x, y end
+        return C_Map.GetWorldPosFromMapPos(mapID, v)
     end,
 }
 local _ENV = env
@@ -114,7 +119,7 @@ CHAIN, MAXLVL, DUNGEONS, IS_DUNGEON = D.CHAIN, D.MAXLVL, D.DUNGEONS, D.IS_DUNGEO
 IS_DUNGEON_SET = IS_DUNGEON
 
 ICON = "Interface\\AddOns\\OghoulesWarpath\\Media\\Warpath64"
-VERSION = "1.46"
+VERSION = "1.47"
 MINLVL, MAIN_ORDER = D.MINLVL, D.MAIN_ORDER
 -- v1.41 (audit) : coche de l'addon (case cochee doree, comme les objectifs) au lieu de la coche verte du jeu
 CHECK = "|TInterface\\AddOns\\OghoulesWarpath\\Media\\BoxDone:12:12|t"
@@ -340,9 +345,12 @@ function StepDone(i, anchor)
             end
             return "skip"                                -- regle 4
         end
-        local skip = (i < anchor) or (IsGrey(s) and DB.guide ~= "chain") or (s.optional and DB.seen[SeenKey(i)])
-            or ((s.req or 0) > (UnitLevel("player") or 60) and DB.guide ~= "chain") -- niveau requis pas atteint : impossible a prendre
-            or (StyleSkip and StyleSkip(i, s))
+        -- v1.47 : etape d'une chaine integree (woven) : choisie par toi, traitee comme dans le guide « chain »
+        -- (ni ancre, ni quete grise, ni style de jeu)
+        local chainLike = DB.guide == "chain" or s.woven
+        local skip = (i < anchor and not s.woven) or (IsGrey(s) and not chainLike) or (s.optional and DB.seen[SeenKey(i)])
+            or ((s.req or 0) > (UnitLevel("player") or 60) and not chainLike) -- niveau requis pas atteint : impossible a prendre
+            or (StyleSkip and not s.woven and StyleSkip(i, s))
             -- v1.45 : quete d'appel (bc = quete visee) : le jeu ne la propose plus si la quete visee est
             -- dans ton journal ou deja rendue (Tsunaman sans Trouble in the Deeps, 2026-11-23)
             or (s.bc and (logById[s.bc] ~= nil or Rendue(s.bc)))
@@ -395,7 +403,8 @@ end
 function FindAnchor()
     local total, done, anchor = 0, 0, 0
     for i, s in ipairs(steps) do
-        if s.t == "turnin" and Applies(s) then
+        -- v1.47 : les « Rendre » d'une chaine integree ne comptent pas (rendue tot, elle ferait tout sauter)
+        if s.t == "turnin" and Applies(s) and not s.woven then
             total = total + 1
             local isDone = false
             for _, id in ipairs(Ids(s)) do

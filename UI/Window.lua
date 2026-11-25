@@ -733,6 +733,7 @@ ns.E = {
     AskProf = function(q) AskChain(q, true, "prof") end,
     -- v1.46 : fiche de donjon (Features/DungeonSheet.lua, charge apres ce fichier)
     DungeonName = function(d) return DungeonName(d) end,
+    DungeonIdeal = function(k) return DungeonIdeal and DungeonIdeal(k) end,   -- v1.47 : n'est plus dans _G (DECL)
     DungeonSheetOpen = function(k) return DungeonSheetOpen and DungeonSheetOpen(k) end,
     DungeonBadge = function(k) if DungeonBadge then return DungeonBadge(k) end; return 0, 0 end,
     Kit = { COL = COL, FONT = FONT, DISPLAY = DISPLAY, Caps = Caps, Upper = Upper, Spaced = Spaced, FS = FS, Tex = Tex,
@@ -794,21 +795,29 @@ function OnTaxiOpened()
     if target then
         local btn = _G["TaxiButton" .. target]
         if btn then
+            -- v1.47 (demande de l'auteur) : style Warpath au lieu du carre vert : losange dore autour du point,
+            -- halo en losange qui grandit et s'efface (comme le repere de la carte du monde), etiquette en capitales
             if not taxiGlow then
+                local G = "Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\Gem"
                 taxiGlow = CreateFrame("Frame", nil, UIParent)
-                taxiGlow:SetSize(44, 44)
-                local t = taxiGlow:CreateTexture(nil, "OVERLAY")
-                t:SetAllPoints()
-                t:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-                t:SetBlendMode("ADD")
-                t:SetVertexColor(0.2, 1, 0.3)
-                taxiGlow.tex = t
+                taxiGlow:SetSize(30, 30)
+                taxiGlow:EnableMouse(false)
+                -- melange additif : le losange eclaire le point du vol sans le cacher
+                local halo = taxiGlow:CreateTexture(nil, "ARTWORK"); halo:SetPoint("CENTER"); halo:SetTexture(G)
+                local gem = taxiGlow:CreateTexture(nil, "OVERLAY"); gem:SetAllPoints(); gem:SetTexture(G)
+                if halo.SetBlendMode then halo:SetBlendMode("ADD"); gem:SetBlendMode("ADD") end
+                gem:SetAlpha(0.6)
+                taxiGlow.lbl = FS(taxiGlow, 10, COL.gold, FONT, "CENTER")
+                taxiGlow.lbl:SetPoint("TOP", taxiGlow, "BOTTOM", 0, -2)
                 local elapsed = 0
-                taxiGlow:SetScript("OnUpdate", function(self, dt)
-                    elapsed = elapsed + (dt or 0)
-                    self.tex:SetAlpha(0.55 + 0.45 * math.sin(elapsed * 5))
+                taxiGlow:SetScript("OnUpdate", function(_, dt)
+                    elapsed = (elapsed + (dt or 0)) % 1.6
+                    local ph = elapsed / 1.6
+                    local s = 30 * (1 + ph * 1.2)
+                    halo:SetSize(s, s); halo:SetAlpha(0.8 * (1 - ph))
                 end)
             end
+            taxiGlow.lbl:SetText(Caps(T("flyAdvised")))
             taxiGlow:SetParent(btn)
             taxiGlow:ClearAllPoints()
             taxiGlow:SetPoint("CENTER", btn, "CENTER")
@@ -816,7 +825,21 @@ function OnTaxiOpened()
             taxiGlow:Show()
         end
         say(T("flyTo", flightPlan.to.name))
-        -- v1.45 (demande de l'auteur) : plus de vol automatique, le carre vert suffit et evite les vols par erreur
+        -- v1.45 : vol automatique retire (vol conseille faux, Ratchet -> Brackenwall). v1.47 (demande de l'auteur) :
+        -- de retour en option a cocher (DB.flyAuto, decochee par defaut, nouvelle cle : l'ancienne autoFly etait
+        -- cochee par defaut). Il suit le conseil recalcule ci-dessus. Garde-fous de la v1.41 : 0,4 s, carte encore
+        -- ouverte, Maj = non, trajet calcule avant de decoller (vols avec escale) ; un blocage coupe l'option (Core.lua).
+        if DB.flyAuto == true and not (IsShiftKeyDown and IsShiftKeyDown()) and TakeTaxiNode then
+            local node = target
+            local function go()
+                if GetNumRoutes then pcall(GetNumRoutes, node) end
+                ns.Trace("TakeTaxiNode"); TakeTaxiNode(node)
+            end
+            if C_Timer and C_Timer.After then C_Timer.After(0.4, function()
+                local open = (TaxiFrame and TaxiFrame:IsShown()) or (not TaxiFrame and TaxiNodeName and TaxiNodeName(node))
+                if open and DB.flyAuto == true and not (IsShiftKeyDown and IsShiftKeyDown()) then go() end
+            end) else go() end
+        end
     end
 end
 
@@ -855,7 +878,10 @@ wpTicker:SetScript("OnUpdate", function(_, dt)
     wpElapsed = wpElapsed + (dt or 0)
     if wpElapsed < 1 then return end
     wpElapsed = 0
+    local m0 = PerfOn and PerfMem and PerfMem()                     -- v1.47 : /warpath perf
+    local t0 = PerfOn and debugprofilestop and debugprofilestop()
     if DB then pcall(LearnGates); pcall(TrailTick); pcall(FlightRecheck) end
+    if t0 and PerfMark then PerfMark("Seconde : passages, fil, vols", debugprofilestop() - t0, m0 and (PerfMem() - m0)) end
     if not (DB and DB.wp and desiredWP) then return end
     if not (C_Map and C_Map.HasUserWaypoint) or C_Map.HasUserWaypoint() then return end
     if UnitOnTaxi and UnitOnTaxi("player") then return end

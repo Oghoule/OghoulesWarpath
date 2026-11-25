@@ -1,6 +1,6 @@
 Oghoule's Warpath - guide de leveling Horde 1-60 pour WoW Forever
 ==================================================================
-Version 1.46. Toutes les races Horde. Guides ecrits a la main de 1 a 60, optimises pour
+Version 1.47. Toutes les races Horde. Guides ecrits a la main de 1 a 60, optimises pour
 l'XP par heure, avec arrets en ville aux changements de zone.
 
 Installation
