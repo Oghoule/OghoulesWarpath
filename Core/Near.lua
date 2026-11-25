@@ -716,6 +716,13 @@ function StepPoint(s)
             return { m = here.m, x = here.x, y = here.y, name = T("caveIn"), kind = "enter" }
         end
     end
+    -- v1.49 : trajet a pied pre-calcule (Legs.lua) : contourne montagnes et falaises par les points qui comptent.
+    -- Etape "faire" : seulement en route (loin de la zone), sur place les regles de la zone de chasse decident.
+    local lp = LegPoint(s, me)
+    if lp then
+        local g = s.t == "do" and WP(s.m, s.x, s.y)
+        if not g or Dist(me[1], me[2], g[1], g[2]) > 150 then return lp end
+    end
     return objPoint(s, me) or bossPoint(s, me) or MobZonePoint(s, me) or DungeonDoorPoint(s)
 end
 -- v1.45 : etape de l'interieur du donjon (sans position) alors que tu es dehors, donjon pas quitte

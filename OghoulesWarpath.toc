@@ -3,7 +3,7 @@
 ## Notes: Horde leveling guide for WoW Forever: quests, routes, flights, dungeons. English / French.
 ## Notes-frFR: Guide de leveling Horde pour WoW Forever : quetes, itineraires, vols, donjons. Francais / anglais.
 ## Author: Oghoule
-## Version: 1.49
+## Version: 1.48
 ## IconTexture: Interface\AddOns\OghoulesWarpath\Media\Warpath64
 ## Category: Quests
 ## X-License: GPL-3.0
@@ -30,10 +30,12 @@ Data\MobZones.lua
 Data\Passages.lua
 Data\FarmSpots.lua
 Data\CavesData.lua
+Data\Legs.lua
 Core\Core.lua
 Core\Route.lua
 Core\Near.lua
 Core\Trail.lua
+Core\Legs.lua
 Core\Estimate.lua
 UI\Skin.lua
 Core\Flow.lua
