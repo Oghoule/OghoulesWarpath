@@ -338,5 +338,5 @@ function SuggestDungeonForLevel()
     if not best then return end
     DB.lvlAsked[key] = true
     asking = best
-    ns.Trace("popup WARPATH_DUNGEON"); Popup("WARPATH_DUNGEON", T("dAskXP", s.level, best.name, best.min, best.max) .. DungeonReqText(best.key))
+    ns.Trace("popup WARPATH_DUNGEON"); Popup("WARPATH_DUNGEON", T("dAskXP", s.level, DungeonName(best), best.min, best.max) .. ((DungeonAskLine and DungeonAskLine(best.key)) or DungeonReqText(best.key)))
 end

@@ -313,7 +313,11 @@ if StaticPopupDialogs then
             if b1 then b1:SetText(T("yes")) end
             if b2 then b2:SetText(T("no")) end
             if b3 then b3:SetText(T("later")) end
+            local b4 = self.button4
+            if b4 then b4:SetText(T("dsBtn")) end
         end,
+        button4 = "Voir les quêtes",
+        OnButton4 = function() if asking and DungeonSheetOpen then DungeonSheetOpen(asking.key) end end,
         OnAccept = function() if asking then StartDungeon(asking.key) end end,
         OnCancel = function(_, _, reason)
             if not asking then return end
@@ -324,6 +328,8 @@ if StaticPopupDialogs then
             if asking then DB.dAnswer[asking.key] = "later"; DB.dLater[asking.key] = math.max(UnitLevel("player") or 1, (select(3, DungeonReq(asking.key)) or 0) - 1) end
         end,
         OnHide = function()
+            -- v1.46 : la question se ferme (Oui, Non, Plus tard, Echap) : sa fiche de donjon aussi
+            if asking and DungeonSheetHide then pcall(DungeonSheetHide, asking.key) end
             asking = nil
             -- propose le donjon suivant (s'il y en a un a ton niveau)
             if C_Timer and C_Timer.After then C_Timer.After(0.5, CheckDungeonsFn) end
@@ -395,6 +401,14 @@ StartChain = function(q, withSelf)
     Guides.chain = g
     say(T(withSelf and "classStartMsg" or "chainStartMsg", EST[q].n, #g.steps))
     SetGuide("chain", true)
+end
+
+-- v1.46 : nom du donjon dans la langue de l'addon (« en » de Data.lua, sinon « Scarlet Monastery: Graveyard »)
+function DungeonName(d)
+    if type(d) == "string" then d = IS_DUNGEON[d] end
+    if not d then return "?" end
+    if Lang and Lang() == "en" then return d.en or (d.name:gsub(" : ", ": ")) end
+    return d.name
 end
 
 -- Quetes de donjon restantes pour toi : seules les quetes deja rendues comptent comme faites (une quete dans ton journal reste a faire)
@@ -502,7 +516,7 @@ function CheckDungeons()
         local later = ans == "later" and (DB.dLater[d.key] or 0) < lvl
         if Guides[d.key] and lvl >= d.min and lvl <= d.max and (ans == nil or later) and not DungeonDone(d.key) and DungeonOpen(d.key) then
             asking = d
-            ns.Trace("popup WARPATH_DUNGEON"); Popup("WARPATH_DUNGEON", T("dAsk", lvl, d.name, d.min, d.max) .. DungeonReqText(d.key))
+            ns.Trace("popup WARPATH_DUNGEON"); Popup("WARPATH_DUNGEON", T("dAsk", lvl, DungeonName(d), d.min, d.max) .. ((DungeonAskLine and DungeonAskLine(d.key)) or DungeonReqText(d.key)))
             return
         end
     end
@@ -548,7 +562,7 @@ function ListDungeons()
     local LBL = { yes = T("ansYes"), no = T("ansNo"), later = T("ansLater") }
     for _, d in ipairs(DUNGEONS) do
         local ok = lvl >= d.min and lvl <= d.max
-        say(string.format("  %s%s - %s (%d-%d)%s%s|r", ok and "|cff9cc7a8" or "|cff8c7f62", d.key, d.name, d.min, d.max,
+        say(string.format("  %s%s - %s (%d-%d)%s%s|r", ok and "|cff9cc7a8" or "|cff8c7f62", d.key, DungeonName(d), d.min, d.max,
             ok and T("yourLevel") or "", DB.dAnswer[d.key] and (" [" .. LBL[DB.dAnswer[d.key]] .. "]") or "")
             .. (function() local l, t = DungeonLeft(d.key); return t > 0 and T("dQuests", t - l, t) or "" end)()
             .. (function() local n, now, need = DungeonReq(d.key); return (ok and need > 0) and T("dReqList", need) or "" end)())

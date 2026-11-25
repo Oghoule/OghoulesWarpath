@@ -85,6 +85,8 @@ SlashCmdList["WARPATH"] = function(msg)
         else say(T("unknownGuide", arg)); ListGuides() end
     elseif cmd == "options" or cmd == "config" or cmd == "o" then
         ns.UI.ToggleOptions()
+    elseif cmd == "fleche" or cmd == "flèche" or cmd == "arrow" or cmd == "apparence" or cmd == "appearance" then
+        ns.UI.OpenOptionsTab(6)   -- v1.46 : onglet Apparence (fenetre, fleche, cartes)
     elseif cmd == "lang" or cmd == "langue" or cmd == "language" then
         local l = arg:lower()
         if l == "fr" or l == "en" then ns.UI.SetLang(l) else ns.UI.SetLang(Lang() == "fr" and "en" or "fr") end
@@ -96,6 +98,9 @@ SlashCmdList["WARPATH"] = function(msg)
         local a = arg:lower()
         if a == "" then ListDungeons()
         elseif a == "stop" then StopDungeon()
+        elseif a == "fiche" or a == "sheet" or a == "quetes" or a == "quests" or a:match("^fiche ") or a:match("^sheet ") or a:match("^quests ") then
+            local k = a:match("^%S+%s+(%S+)")
+            if not ((k and DungeonSheetOpen and DungeonSheetOpen(k)) or (not k and DungeonSheetDefault and DungeonSheetDefault())) then say(T("dsNone")) end
         elseif a == "reset" then wipe(DB.dAnswer); wipe(DB.dLater); say(T("dReset")); CheckDungeons()
         elseif IS_DUNGEON[a] then StartDungeon(a)
         else say(T("unknownDungeon", arg)); ListDungeons() end
@@ -198,7 +203,7 @@ SlashCmdList["WARPATH"] = function(msg)
         local nC = 0; for _, v in pairs(own) do if type(v) == "table" then nC = nC + 1 end end
         local nB = 0; for _ in pairs(ns.BakedCaves or {}) do nB = nB + 1 end
         local wm = 0; for _ in pairs((ns.ClassTrainers or {}).WEAPON or {}) do wm = wm + 1 end
-        say("Objet de l'étape : " .. tostring(ns.Comfort and ns.Comfort.ItemDiag and select(2, pcall(ns.Comfort.ItemDiag))))
+        say((Lang() == "en" and "Step item: " or "Objet de l'étape : ") ..tostring(ns.Comfort and ns.Comfort.ItemDiag and select(2, pcall(ns.Comfort.ItemDiag))))
         say(T("diagData", nC, nB, wm, (GetLocale and GetLocale()) or "?", Lang()))
     elseif cmd == "classe" or cmd == "class" then
         local list = ClassQuestList()
@@ -253,15 +258,20 @@ do
 end
 
 _G.BINDING_HEADER_WARPATH = "Oghoule's Warpath"
-_G.BINDING_NAME_WARPATH_OK = "Valider / passer l'étape"
-_G.BINDING_NAME_WARPATH_PREV = "Voir l'étape précédente"
-_G.BINDING_NAME_WARPATH_NEXT = "Voir l'étape suivante"
-_G.BINDING_NAME_WARPATH_TOGGLE = "Afficher / cacher le guide"
-_G.BINDING_NAME_WARPATH_OPTIONS = "Ouvrir les options"
-_G.BINDING_NAME_WARPATH_NOW = "Revenir à l'étape actuelle"
-_G.BINDING_NAME_WARPATH_MINI = "Mode compact / normal"
-_G["BINDING_NAME_CLICK WarpathTarget1:LeftButton"] = "Cibler la 1re cible de l'étape"
-_G["BINDING_NAME_CLICK WarpathTarget2:LeftButton"] = "Cibler la 2e cible de l'étape"
+-- v1.46 : noms des raccourcis selon la langue du jeu (lus avant les sauvegardes, donc pas la langue de l'addon)
+do
+    local fr = (GetLocale and GetLocale() == "frFR")
+    local function B(f, e) return fr and f or e end
+    _G.BINDING_NAME_WARPATH_OK = B("Valider / passer l'étape", "Confirm / skip the step")
+    _G.BINDING_NAME_WARPATH_PREV = B("Voir l'étape précédente", "Show the previous step")
+    _G.BINDING_NAME_WARPATH_NEXT = B("Voir l'étape suivante", "Show the next step")
+    _G.BINDING_NAME_WARPATH_TOGGLE = B("Afficher / cacher le guide", "Show / hide the guide")
+    _G.BINDING_NAME_WARPATH_OPTIONS = B("Ouvrir les options", "Open the options")
+    _G.BINDING_NAME_WARPATH_NOW = B("Revenir à l'étape actuelle", "Back to the current step")
+    _G.BINDING_NAME_WARPATH_MINI = B("Mode compact / normal", "Compact / normal mode")
+    _G["BINDING_NAME_CLICK WarpathTarget1:LeftButton"] = B("Cibler la 1re cible de l'étape", "Target the step's 1st target")
+    _G["BINDING_NAME_CLICK WarpathTarget2:LeftButton"] = B("Cibler la 2e cible de l'étape", "Target the step's 2nd target")
+end
 _G.WarpathBinding = function(action)
     if action == "ok" then Ignore()
     elseif action == "prev" then Peek(-1)
@@ -275,6 +285,20 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.46", fr = "Options plus simples à trouver : un nouvel onglet Apparence regroupe la fenêtre, la flèche et les cartes (affichage, taille, position), avec la même ligne de réglage de taille pour la fenêtre et la flèche. La flèche s'affiche en aperçu pendant que tu la règles. Itinéraire garde les trajets, les vols et le ciblage ; Automatisation devient Comportement, avec les messages et les extras. Sur la flèche : Ctrl + molette pour sa taille, clic droit pour un petit menu. Nouvel engrenage dans l'en-tête du guide et /warpath fleche : ouvrent l'onglet Apparence.",
+      en = "Options easier to find: a new Appearance tab groups the window, the arrow and the maps (display, size, position), with the same size control for the window and the arrow. The arrow shows as a preview while you adjust it. Route keeps routes, flights and targeting; Automation becomes Behavior, with messages and extras. On the arrow: Ctrl + mouse wheel for its size, right-click for a small menu. New gear in the guide header and /warpath arrow: open the Appearance tab." },
+    { v = "1.46", fr = "Objectif plus visible sur les cartes : un losange doré qui pulse le montre sur la carte du monde (le point jaune du jeu reste), et l'icône de la minicarte est plus grosse et pulse aussi. Pour le couper : Options > Apparence, « Repère animé sur les cartes ».",
+      en = "Objective easier to see on the maps: a pulsing gold diamond shows it on the world map (the game's yellow dot stays), and the minimap icon is bigger and pulses too. To turn it off: Options > Appearance, \"Animated marker on the maps\"." },
+    { v = "1.46", fr = "Moins de saccades en marchant : quand la flèche suit un objet, un chemin ou l'entrée d'une grotte, elle se déplace sans reconstruire toute la fenêtre du guide. Avant, l'image pouvait sauter toutes les 2 secondes environ.",
+      en = "Less stutter while walking: when the arrow follows an item, a path or a cave entrance, it moves without rebuilding the whole guide window. Before, the picture could hitch about every 2 seconds." },
+    { v = "1.46", fr = "Fiche de donjon : clique un donjon dans Options > Donjons, ou « Voir les quêtes » quand l'addon te propose un donjon. Elle montre ses quêtes pour toi (à prendre, en cours, plus tard, faites), l'XP totale et le niveau que tu atteindras, avec une flèche vers chaque PNJ. « Prendre les quêtes » lance le guide du donjon. Les compteurs « ! 3 » (à prendre maintenant) et « +2 » en rouge (pas encore ton niveau) s'affichent dans la liste et dans la question. Aussi : /warpath donjon fiche. En anglais, les noms des donjons et des raccourcis clavier sont maintenant aussi en anglais (Dire Maul: East, Stratholme: Undead side…).",
+      en = "Dungeon sheet: click a dungeon in Options > Dungeons, or \"See quests\" when the addon suggests a dungeon. It shows its quests for you (to pick up, in progress, later, done), the total XP and the level you will reach, with an arrow to each NPC. \"Pick up quests\" starts the dungeon guide. The \"! 3\" (pick up now) and red \"+2\" (not your level yet) counters show in the list and in the question. Also: /warpath dungeon sheet. In English, dungeon names and key binding names are now in English too (Dire Maul: East, Stratholme: Undead side…)." },
+    { v = "1.46", fr = "Quêtes de classe et chaînes : le guide ne te propose plus une quête de la chaîne avant son tour quand tu passes près du PNJ qui la donne (paladin : The Debt ou Old Fire-Eye proposées trop tôt au Sepulcher). L'étape « Faire » liste maintenant les objets à rapporter, et A Moon-Kissed Blade dit dans quels donjons les trouver (Deadmines, Blackfathom Deeps, Shadowfang Keep).",
+      en = "Class quests and chains: the guide no longer offers a quest of the chain before its turn when you pass the NPC who gives it (paladin: The Debt or Old Fire-Eye offered too early at the Sepulcher). The \"Do\" step now lists the items to bring back, and A Moon-Kissed Blade tells you which dungeons have them (Deadmines, Blackfathom Deeps, Shadowfang Keep)." },
+    { v = "1.46", fr = "Fenêtre du guide : elle grandit maintenant vers le bas quand son contenu change, au lieu de déborder vers le haut sur la minicarte. Hillsbrad : l'étape du sang de lion rappelle de tuer aussi les ours croisés (Elixir of Suffering).",
+      en = "Guide window: it now grows downward when its content changes, instead of spilling upward over the minimap. Hillsbrad: the mountain lion blood step reminds you to kill the bears you meet too (Elixir of Suffering)." },
+    { v = "1.46", fr = "Avec la flèche Warpath, le repère du jeu n'est plus « suivi » : ça devrait faire disparaître les actions bloquées (SetPassThroughButtons) en combat pendant les escortes et les combats. Le point jaune reste sur la carte et la minicarte.",
+      en = "With the Warpath arrow, the game's waypoint is no longer \"tracked\": this should stop the blocked actions (SetPassThroughButtons) in combat during escorts and fights. The yellow dot stays on the map and minimap." },
     { v = "1.45", fr = "Vols : plus de vol automatique, le carré vert sur la carte des vols montre la destination conseillée. Ce conseil est recalculé après la lecture de la carte (avant, Ratchet pouvait t'envoyer à Brackenwall au lieu de Camp Taurajo pour RFK) et pendant que tu marches. Un vol déjà conseillé reste tant qu'il fait gagner du temps : le guide ne change plus d'avis en chemin.",
       en = "Flights: no more automatic flights; the green square on the flight map shows the suggested destination. This advice is now recalculated after the flight map is read (before, Ratchet could send you to Brackenwall instead of Camp Taurajo for RFK) and while you walk. A flight already suggested stays as long as it saves time: the guide no longer changes its mind on the way." },
     { v = "1.45", fr = "Ashenvale : l'escorte de Vorsha the Lasher passe avant les nagas (faite après, elle échoue), et pour Troll Charm le guide t'envoie directement dans la grotte Thistlefur Hold, où tout se fait d'un coup avant l'escorte de Ruul. Si la quête de l'étape échoue (escorte ratée), le guide te dit de l'abandonner et de la reprendre. Pour revenir à une étape passée : /warpath unskip. En combat, le repère du jeu sur la carte attend la fin du combat pour changer : fini les messages rouges « action bloquée (SetPassThroughButtons) ».",

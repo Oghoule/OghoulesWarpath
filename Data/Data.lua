@@ -12,11 +12,17 @@ D.CHAIN = {
 D.CHAIN.Undead = D.CHAIN.Scourge
 -- Skyborne cote Horde (nouvelle race de Forever) : Zephras Isle, puis le meme parcours que les autres
 D.CHAIN.Skyborne = { "zephras", "barrens", "stonetalon", "ashenvale", "sbarrens", "hillsbrad", "needles", "desolace", "dustwallow", "stv1", "arathi", "riverglades", "stv2", "dustwallow2", "feralas", "tanaris", "hinterlands", "searing", "azshara", "tanaris2", "ungoro", "felwood", "steppes", "wpl", "epl", "winterspring", "hyjal", "silithus" }
+-- Notes ecrites a la main pour l'etape « Faire » des chaines de quetes (guide « chain ») : { fr, en }
+D.CHAINNOTES = {
+    -- A Moon-Kissed Blade (paladin, Diplomatic Incident) : lieux confirmes par l'auteur le 2026-11-24
+    [95036] = { "Trois donjons : Whitestone Oak Lumber dans Deadmines (Westfall), la gemme Kor dans Blackfathom Deeps (cote ouest d'Ashenvale) et Enchanted Silver Ingot dans Shadowfang Keep (Silverpine).",
+                "Three dungeons: Whitestone Oak Lumber in the Deadmines (Westfall), the Kor gem in Blackfathom Deeps (west coast of Ashenvale) and the Enchanted Silver Ingot in Shadowfang Keep (Silverpine)." },
+}
 D.MAXLVL = { hyjal = 60, zephras = 12, mulgore = 11, durotar = 12, tirisfal = 11, silverpine = 16, barrens = 21,
              stonetalon = 25, ashenvale = 27, sbarrens = 28, hillsbrad = 30, needles = 33, desolace = 36,
              dustwallow = 39, stv1 = 41, arathi = 42, shendralas = 37, riverglades = 44, badlands = 45, swamp = 45, stv2 = 46, dustwallow2 = 47, tanaris = 47, feralas = 48, hinterlands = 50, stv3 = 49, searing = 48, tanaris2 = 50, azshara = 50, ungoro = 53, felwood = 51, steppes = 54, winterspring = 58, wpl = 56, epl = 58, winterspring2 = 60, silithus = 60 }
 
--- Donjons proposes (niveaux conseilles)
+-- Donjons proposes (niveaux conseilles). name = francais, en = anglais si different (sinon « : » colle, DungeonName)
 D.DUNGEONS = {
     { key = "rfc", name = "Ragefire Chasm", min = 13, max = 18 },
     { key = "rol", name = "Ruins of Lordaeron", min = 19, max = 25 },
@@ -34,17 +40,17 @@ D.DUNGEONS = {
     { key = "rfd", name = "Razorfen Downs", min = 35, max = 42 },
     { key = "uld", name = "Uldaman", min = 37, max = 45 },
     { key = "zf", name = "Zul'Farrak", min = 43, max = 50 },
-    { key = "mara_out", name = "Maraudon : ailes orange et violette", min = 41, max = 48 },
-    { key = "mara_in", name = "Maraudon : intérieur", min = 45, max = 52 },
+    { key = "mara_out", name = "Maraudon : ailes orange et violette", en = "Maraudon: Orange and Purple Wings", min = 41, max = 48 },
+    { key = "mara_in", name = "Maraudon : intérieur", en = "Maraudon: Inner", min = 45, max = 52 },
     { key = "st", name = "Sunken Temple", min = 47, max = 55 },
     { key = "brd", name = "Blackrock Depths", min = 52, max = 60 },
-    { key = "dm_e", name = "Dire Maul : est", min = 54, max = 58 },
+    { key = "dm_e", name = "Dire Maul : est", en = "Dire Maul: East", min = 54, max = 58 },
     { key = "lbrs", name = "Lower Blackrock Spire", min = 55, max = 60 },
-    { key = "dm_w", name = "Dire Maul : ouest", min = 56, max = 60 },
-    { key = "ubrs", name = "Upper Blackrock Spire (groupe de 10)", min = 58, max = 60 },
+    { key = "dm_w", name = "Dire Maul : ouest", en = "Dire Maul: West", min = 56, max = 60 },
+    { key = "ubrs", name = "Upper Blackrock Spire (groupe de 10)", en = "Upper Blackrock Spire (10-player group)", min = 58, max = 60 },
     { key = "scholo", name = "Scholomance", min = 57, max = 60 },
-    { key = "strat_live", name = "Stratholme : côté écarlate", min = 57, max = 60 },
-    { key = "strat_ud", name = "Stratholme : côté mort-vivant", min = 58, max = 60 },
+    { key = "strat_live", name = "Stratholme : côté écarlate", en = "Stratholme: Scarlet side", min = 57, max = 60 },
+    { key = "strat_ud", name = "Stratholme : côté mort-vivant", en = "Stratholme: Undead side", min = 58, max = 60 },
 }
 D.IS_DUNGEON = {}
 for _, d in ipairs(D.DUNGEONS) do D.IS_DUNGEON[d.key] = d end

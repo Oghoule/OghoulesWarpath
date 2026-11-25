@@ -6,11 +6,29 @@ if setfenv then setfenv(1, _ENV) end
 ------------------------------------------------------------------
 -- Fenetre (sous la minimap par defaut)
 ------------------------------------------------------------------
+-- v1.46 (rapport du 2026-11-24) : position toujours sauvee par le HAUT de la fenetre (coin haut-gauche ou
+-- haut-droit selon le cote de l'ecran), pour qu'elle grandisse vers le bas. Avant : le jeu gardait le point
+-- le plus proche au lacher (ex. « RIGHT »), et la fenetre grandissait aussi vers le haut, sur la minicarte.
+local function SaveWinPos()
+    if not f then return end
+    local l, r, t = f:GetLeft(), f:GetRight(), f:GetTop()
+    if l and r and t then
+        local sw = (UIParent:GetWidth() or 0) * (UIParent:GetEffectiveScale() or 1) / (f:GetEffectiveScale() or 1)
+        local left = (l + r) / 2 < sw / 2
+        f:ClearAllPoints()
+        f:SetPoint(left and "TOPLEFT" or "TOPRIGHT", UIParent, "BOTTOMLEFT", left and l or r, t)
+    end
+    local p, _, rp, x, y = f:GetPoint()
+    DB.wpos = { p, rp, x, y }
+end
+
 function CreateUI()
     f = CreateFrame("Frame", "WarpathFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
     f:SetSize(W, 200)
     if DB.wpos then
         f:SetPoint(DB.wpos[1], UIParent, DB.wpos[2], DB.wpos[3], DB.wpos[4])
+        -- ancienne position (milieu, bas…) : convertie une fois en position par le haut
+        if not tostring(DB.wpos[1]):find("^TOP") then pcall(SaveWinPos) end
     elseif Minimap then
         f:SetPoint("TOPRIGHT", Minimap, "BOTTOMRIGHT", 12, -36)
     else
@@ -64,8 +82,7 @@ function CreateUI()
     end)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        local p, _, rp, x, y = self:GetPoint()
-        DB.wpos = { p, rp, x, y }
+        SaveWinPos()
         if HearthPlace then pcall(HearthPlace) end
     end)
 
@@ -202,7 +219,7 @@ function CreateUI()
     end)
     f.qhit:SetScript("OnMouseUp", function(_, btn)
         if f.StopMovingOrSizing then f:StopMovingOrSizing() end
-        local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
+        SaveWinPos()
         local cx, cy = GetCursorPosition()
         local d = f.qdown and math.abs(cx - (f.qdown[1] or cx)) + math.abs(cy - (f.qdown[2] or cy)) or 0
         if btn == "LeftButton" and d < 4 and OpenStepQuest then OpenStepQuest() end
@@ -439,7 +456,7 @@ function CreateUI()
             if not self.drag then return end
             self.drag = nil
             DB.scale = math.floor((f:GetScale() or 1) * 100 + 0.5) / 100
-            local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
+            SaveWinPos()
             local mf = rawget(f, "mini"); if mf and mf.SetScale then mf:SetScale(DB.scale) end
             if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
         end)
@@ -509,6 +526,18 @@ function CreateUI()
     end)
     f.helpBtn:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("helpHead")); Tip():Show() end)
     f.helpBtn:SetScript("OnLeave", function() Tip():Hide() end)
+    -- v1.46 (retour d'un joueur : il cherchait la taille de la fenetre) : engrenage a gauche du « ? »,
+    -- ouvre les options sur l'onglet Apparence (taille de la fenetre et de la fleche)
+    f.optBtn = CreateFrame("Button", nil, f); f.optBtn:SetSize(16, 16)
+    f.optBtn:SetPoint("RIGHT", f.helpBtn, "LEFT", -2, 0)
+    Border(f.optBtn, COL.accent, 0.6)
+    f.optBtn.icon = f.optBtn:CreateTexture(nil, "ARTWORK"); f.optBtn.icon:SetSize(12, 12); f.optBtn.icon:SetPoint("CENTER")
+    f.optBtn.icon:SetTexture("Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\IcoGear")
+    if f.optBtn.icon.SetVertexColor then f.optBtn.icon:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
+    local oh = Tex(f.optBtn, COL.accent, 0.15, "HIGHLIGHT"); oh:SetAllPoints()
+    f.optBtn:SetScript("OnClick", function() if ns.UI and ns.UI.OpenOptionsTab then ns.UI.OpenOptionsTab(6) end end)
+    f.optBtn:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("optBtn")); Tip():AddLine(T("optBtnTip"), 1, 1, 1, true); Tip():Show() end)
+    f.optBtn:SetScript("OnLeave", function() Tip():Hide() end)
 
     -- v1.40 : mode compact = une petite fenetre a part, seulement les objectifs (ou une ligne pour prendre/rendre)
     local mf = CreateFrame("Frame", "WarpathMini", UIParent)
@@ -527,7 +556,7 @@ function CreateUI()
         if r and t then
             local k = (self.GetEffectiveScale and f.GetEffectiveScale) and (self:GetEffectiveScale() / f:GetEffectiveScale()) or 1
             f:ClearAllPoints(); f:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", r * k, t * k)
-            local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y }
+            SaveWinPos()
         end
         self:ClearAllPoints(); self:SetPoint("TOPRIGHT", f, "TOPRIGHT")
     end)
@@ -702,6 +731,10 @@ ns.E = {
     ProfQuestList = function() return ProfQuestList() end, ProfOn = function(id) return ProfOn(id) end,
     ProfSet = function(id, v) ProfSet(id, v) end, ProfDetect = function() return ProfDetect(true) end,
     AskProf = function(q) AskChain(q, true, "prof") end,
+    -- v1.46 : fiche de donjon (Features/DungeonSheet.lua, charge apres ce fichier)
+    DungeonName = function(d) return DungeonName(d) end,
+    DungeonSheetOpen = function(k) return DungeonSheetOpen and DungeonSheetOpen(k) end,
+    DungeonBadge = function(k) if DungeonBadge then return DungeonBadge(k) end; return 0, 0 end,
     Kit = { COL = COL, FONT = FONT, DISPLAY = DISPLAY, Caps = Caps, Upper = Upper, Spaced = Spaced, FS = FS, Tex = Tex,
             Diamond = Diamond, Divider = Divider, TitledRule = TitledRule, FlatButton = FlatButton,
             Border = Border, SectionHead = SectionHead, Chip = Chip, DiamondCheck = DiamondCheck,

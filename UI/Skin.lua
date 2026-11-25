@@ -258,11 +258,13 @@ function Layout()
     if qb then
         local inCity = QMCity and QMCity() and not DB.qm and not (IS_DUNGEON and IS_DUNGEON[DB.guide] and DungeonLogActive and DungeonLogActive())
         qb:SetShown(inCity and true or false)
-        -- icones de l'en-tete, de droite a gauche : « - », sac (en capitale), « ? » ; le titre s'arrete avant
+        -- icones de l'en-tete, de droite a gauche : « - », sac (en capitale), « ? », engrenage (v1.46, accroche
+        -- au « ? ») ; le titre s'arrete avant
         local hb = rawget(f, "helpBtn")
         if hb then hb:ClearAllPoints(); hb:SetPoint("RIGHT", inCity and qb or f.miniBtn, "LEFT", -2, 0) end
+        local gear = rawget(f, "optBtn") and 18 or 0
         f.title:ClearAllPoints(); f.title:SetPoint("LEFT", f, "TOPLEFT", PAD + 12, -(HEAD_H or 34) / 2)
-        f.title:SetPoint("RIGHT", f, "TOPRIGHT", inCity and -62 or -44, -(HEAD_H or 34) / 2)
+        f.title:SetPoint("RIGHT", f, "TOPRIGHT", (inCity and -62 or -44) - gear, -(HEAD_H or 34) / 2)
     end
     -- en-tete de l'etape : badge de niveau a gauche, type + titre a droite
     local badge = f.badge and f.badge:IsShown()
@@ -879,6 +881,9 @@ function RefreshInner(forceWP)
         elseif f.advice then f.advice:Hide(); if HearthButton then pcall(HearthButton, false) end end
         if ns.Targets then ns.Targets.Update(det and g or s) end
         local wpKey = (det and ("pre" .. det.id .. (det.done and "d" or "") .. ">") or "") .. (sp and (sp.kind .. sp.x .. ":" .. sp.y .. ">") or "") .. i .. (tr and (":" .. tr.id) or "") .. (fl and (":fl:" .. fl.from.key .. ">" .. fl.to.key) or "")
+        -- v1.46 : de quoi deplacer la fleche sans tout reconstruire (RetargetLight), seulement a pied vers l'objectif
+        lightCtx = (not peek and not det and not tr and not fl and sp) and { i = i, kind = sp.kind, out = sp.out,
+            area = distTarget and distTarget[4] or false, t = GetTime and GetTime() or 0 } or nil
         if not peek and (forceWP or lastWP ~= wpKey) then
             lastWP = wpKey
             if fl then
@@ -894,6 +899,28 @@ function RefreshInner(forceWP)
         Layout()
     end
     if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
+end
+
+-- v1.46 : en marchant, seul le point vise bouge (objet le plus proche, fil d'Ariane, grotte...) : on deplace
+-- la fleche et le bloc destination sans reconstruire la fenetre ni recalculer les vols. Avant, Refresh(true)
+-- toutes les 2 s faisait sauter l'image. Renvoie false si une mise a jour complete est necessaire.
+local LIGHT_KINDS = { obj = true, trail = true, pass = true, gate = true, enter = true, exit = true, corpse = true }
+function RetargetLight(sp)
+    local c = lightCtx
+    if not (c and sp and f and steps) or peek or focus then return false end
+    local s = steps[current]
+    if not s or c.i ~= current or sp.kind ~= c.kind or sp.out ~= c.out or not LIGHT_KINDS[sp.kind] then return false end
+    local now = GetTime and GetTime() or 0
+    if now - (c.t or 0) > 10 then return false end      -- une vraie mise a jour de temps en temps (vols, conseils)
+    local g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest }
+    distTarget = { sp.m, sp.x, sp.y, c.area }
+    if f.destName then f.destName:SetText((g.zone and g.zone ~= "") and g.zone or (MAPNAME[sp.m] or "")) end
+    f.destCoord = string.format("%.1f, %.1f", sp.x, sp.y) .. (MAPNAME[sp.m] and ("  ·  " .. MAPNAME[sp.m]) or "")
+    lastWP = sp.kind .. sp.x .. ":" .. sp.y .. ">" .. current
+    SetWaypoint(g)
+    UpdateDistance()
+    if UpdateMini then pcall(UpdateMini) end
+    return true
 end
 
 -- Refresh protege : une erreur d'affichage est signalee clairement dans le chat (une fois par message)
@@ -1130,13 +1157,13 @@ end
 -- centree verticalement dans sa case (le « x » est une minuscule posee sur la ligne de base).
 -- Renvoie true si le dessin a marche ; sinon on garde la lettre (fallback).
 function Glyph(b, label, c, size)
-    if label ~= "x" and label ~= "-" and label ~= "+" then return false end
+    if label ~= "x" and label ~= "-" and label ~= "+" and label ~= "^" and label ~= "v" then return false end
     size = size or 8
     local ok = pcall(function()
-        local function bar(w, h, rot)
+        local function bar(w, h, rot, dx, dy)
             local t = b:CreateTexture(nil, "ARTWORK")
             t:SetColorTexture(c[1], c[2], c[3], 1)
-            t:SetSize(w, h); t:SetPoint("CENTER", b, "CENTER", 0, 0)
+            t:SetSize(w, h); t:SetPoint("CENTER", b, "CENTER", dx or 0, dy or 0)
             if rot then t:SetRotation(rot) end
             return t
         end
@@ -1145,6 +1172,10 @@ function Glyph(b, label, c, size)
             b.g1 = bar(d, 1.5, math.pi / 4); b.g2 = bar(d, 1.5, -math.pi / 4)
         elseif label == "-" then
             b.g1 = bar(size, 1.5)
+        elseif label == "^" or label == "v" then
+            -- v1.46 : chevron (monter / descendre) : deux traits en V, pointe en haut ou en bas
+            local s, d = (label == "^") and 1 or -1, size * 0.7
+            b.g1 = bar(d, 1.5, s * math.pi / 4, -d * 0.33, 0); b.g2 = bar(d, 1.5, -s * math.pi / 4, d * 0.33, 0)
         else
             b.g1 = bar(size, 1.5); b.g2 = bar(1.5, size)
         end
@@ -1236,8 +1267,10 @@ do
         dlg.text = FS(dlg, 12, COL.white, FONT, "LEFT"); dlg.text:SetPoint("TOP", dlg.rule, "BOTTOM", 0, -12); dlg.text:SetWidth(340)
         if dlg.text.SetSpacing then dlg.text:SetSpacing(2) end
         dlg.buttons = {}
-        for i = 1, 3 do
+        -- v1.46 : 4e bouton facultatif (« Voir les quetes ») : il ne ferme pas la question
+        for i = 1, 4 do
             local b = FlatButton(dlg, 110, 24, function()
+                if i == 4 then if cur and cur.OnButton4 then pcall(cur.OnButton4, dlg) end; return end
                 if i == 1 then finish("OnAccept") elseif i == 2 then finish("OnCancel", "clicked") else finish("OnAlt") end
             end)
             dlg.buttons[i] = b
@@ -1284,7 +1317,7 @@ do
         -- v1.41 : titre propre a chaque question (« DONJON SUGGÉRÉ »...) au lieu de « OGHOULE'S WARPATH » partout
         local hk = d.headKey or POPUP_HEAD[name]   -- v1.43 : une question peut choisir son titre (classe, métiers)
         dlg.head:SetText(Caps(hk and T(hk) or "Oghoule's Warpath"))
-        local labels = { d.button1, d.button2, d.button3 }
+        local labels = { d.button1, d.button2, d.button3, d.button4 }
         for i, b in ipairs(dlg.buttons) do b:SetText(labels[i] or ""); b:SetShown(labels[i] ~= nil) end
         if d.OnShow then pcall(d.OnShow, dlg) end
         local n = 0

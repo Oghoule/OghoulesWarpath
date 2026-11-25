@@ -258,16 +258,28 @@ function BuildChainGuide(q, withSelf)
     if not order or #order == 0 or not target then return nil end
     local list = {}
     local function at(row, p) if p then row.m, row.x, row.y = p[1], p[2], p[3] end; return row end
+    local notes = D.CHAINNOTES or {}
     for _, id in ipairs(order) do
         local e = EST[id]
         if logById[id] == nil then
-            list[#list + 1] = at({ t = "accept", id = id, quest = e.n, lvl = e.l,
+            -- v1.46 : prerequis sur la prise (rapport du 2026-11-24, chaine paladin) : sans eux, la regle
+            -- « en passant » (Near.lua) proposait les quetes suivantes du meme PNJ avant leur tour
+            list[#list + 1] = at({ t = "accept", id = id, quest = e.n, lvl = e.l, preg = e.p, pre = e.p1,
                 text = e.it and "Cette quete commence sur un objet (butin) : utilise-le." or "Prends la quete.",
                 en = e.it and "This quest starts from an item (loot): use it." or "Pick up the quest." }, e.s)
         end
         if e.k or e.d or e.o then
-            list[#list + 1] = at({ t = "do", id = id, quest = e.n, lvl = e.l,
-                text = "Objectif : " .. (e.t or ""), en = "Objective: " .. (e.t or "") }, e.h)
+            -- v1.46 : objets a rapporter nommes, et note ecrite a la main si la quete en a une (D.CHAINNOTES)
+            local items = {}
+            for _, d in ipairs(e.d or {}) do if d[6] then items[#items + 1] = d[6] end end
+            local fr, en = "Objectif : " .. (e.t or ""), "Objective: " .. (e.t or "")
+            if #items > 0 then
+                local l = table.concat(items, ", ")
+                fr, en = fr .. " Objets : " .. l .. ".", en .. " Items: " .. l .. "."
+            end
+            local nt = notes[id]
+            if nt then fr, en = fr .. " " .. nt[1], en .. " " .. nt[2] end
+            list[#list + 1] = at({ t = "do", id = id, quest = e.n, lvl = e.l, text = fr, en = en }, e.h)
         end
         list[#list + 1] = at({ t = "turnin", id = id, quest = e.n, lvl = e.l, text = "Rends la quete.", en = "Turn in the quest." }, e.e)
     end

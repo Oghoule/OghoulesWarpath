@@ -150,6 +150,26 @@ end
 local OW, OH, OPAD, NAVW = 790, 600, 34, 200
 local CW = OW - NAVW - 20 - OPAD
 
+-- v1.46 : une seule ligne de reglage de taille, la meme pour la fenetre et la fleche :
+-- libelle · - · valeur · + · « 100 % » (remet a 100 %). Pas de 5 %, de 60 a 160 %.
+local SCALE_MIN, SCALE_MAX = 0.6, 1.6
+local function ScaleRow(pg, y, lblKey, get, set)
+    local sl = FS(pg, 12, COL.white, FONT, "LEFT"); sl:SetPoint("TOPLEFT", 22, y - 7)
+    Loc(function() sl:SetText(T(lblKey)) end)
+    local val = FS(pg, 12, COL.white, FONT, "CENTER"); val:SetWidth(64); val:SetPoint("TOPLEFT", 232, y - 7)
+    local function show() val:SetText(math.floor((get() or 1) * 100 + 0.5) .. " %") end
+    local function apply(v)
+        v = math.max(SCALE_MIN, math.min(SCALE_MAX, math.floor(v * 20 + 0.5) / 20))
+        set(v); show()
+    end
+    local m = FlatButton(pg, 28, 24, function() apply((get() or 1) - 0.05) end); m:SetPoint("TOPLEFT", 200, y - 1); m:SetLabel("-")
+    local p = FlatButton(pg, 28, 24, function() apply((get() or 1) + 0.05) end); p:SetPoint("TOPLEFT", 300, y - 1); p:SetLabel("+")
+    local r = FlatButton(pg, 64, 24, function() apply(1) end); r:SetPoint("TOPLEFT", 340, y - 1); r:SetLabel("100 %")
+    if r.fs and r.fs.SetFont then r.fs:SetFont(FONT, 10, "") end
+    optRows[#optRows + 1] = show
+    return y - 30
+end
+
 local showTabFn
 local function CreateOptions()
     if opt then return end
@@ -383,14 +403,34 @@ local function CreateOptions()
             if Guides[d.key] then
                 local col, row = n % 2, math.floor(n / 2)
                 n = n + 1
-                local b = FlatButton(pg, BW, 23, function() StartDungeon(d.key); RefreshOptions() end)
+                -- v1.46 : un clic ouvre la fiche du donjon (ses quetes) ; « Prendre les quetes » y lance le guide
+                local b = FlatButton(pg, BW, 23, function()
+                    if not (E.DungeonSheetOpen and E.DungeonSheetOpen(d.key)) then StartDungeon(d.key) end
+                    RefreshOptions()
+                end)
                 b:SetPoint("TOPLEFT", col * (BW + 8), y - row * 26)
                 b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 10, 0)
-                b.fs:SetText(d.name)
+                b.fs:SetText(E.DungeonName(d))
                 if b.fs.SetFont then b.fs:SetFont(FONT, 10, "") end
                 local lv = FS(b, 9, COL.gold, FONT, "RIGHT"); lv:SetPoint("RIGHT", -10, 0)
                 -- v1.42 : le nom s'arrete avant les niveaux (coupe en « ... » si trop long)
-                b.fs:SetPoint("RIGHT", lv, "LEFT", -6, 0); b.fs:SetJustifyH("LEFT")
+                -- v1.46 : compteurs « ! 3 » (a prendre maintenant, dore) et « +2 » (niveau trop bas, rouge)
+                -- « ! 3 » dans un petit cadre dore ; « +2 » dans un cadre rouge a sa gauche ; le nom s'arrete avant
+                local bx = CreateFrame("Frame", nil, b); bx:SetSize(24, 15); bx:SetPoint("RIGHT", lv, "LEFT", -6, 0)
+                bx.edge = K.Border(bx, COL.accent, 0.8)
+                bx.fs = FS(bx, 9, COL.accent, FONT, "CENTER"); bx.fs:SetPoint("CENTER", 0, 0)
+                local RED = { 0.76, 0.29, 0.24 }
+                local red = CreateFrame("Frame", nil, b); red:SetSize(24, 15)
+                K.Border(red, RED, 0.8)
+                red.fs = FS(red, 9, RED, FONT, "CENTER"); red.fs:SetPoint("CENTER", 0, 0)
+                function red:SetText(s) self.fs:SetText(s); self:SetWidth(math.max(20, (self.fs:GetStringWidth() or 12) + 10)) end
+                b.fs:SetJustifyH("LEFT")
+                local function place(hasB, hasR)
+                    bx:SetShown(hasB); red:SetShown(hasR)
+                    red:ClearAllPoints(); red:SetPoint("RIGHT", hasB and bx or lv, "LEFT", hasB and -4 or -6, 0)
+                    b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 10, 0)
+                    b.fs:SetPoint("RIGHT", hasR and red or (hasB and bx) or lv, "LEFT", -6, 0)
+                end
                 if b.fs.SetWordWrap then b.fs:SetWordWrap(false) end
                 b.glow = K.GoldFrame(b)   -- v1.45 : donjon a ton niveau, avec des quetes a faire
                 optRows[#optRows + 1] = function()
@@ -401,17 +441,34 @@ local function CreateOptions()
                     local ideal = DungeonIdeal and DungeonIdeal(d.key)
                     lv:SetText((inRange and "|cffcdbb8e" or "") .. d.min .. "-" .. d.max .. (inRange and "|r" or "")
                         .. (ideal and ("  |cff8c7f62·|r " .. ((me >= ideal and inRange) and "|cffcdbb8e" or "") .. ideal .. ((me >= ideal and inRange) and "|r" or "")) or ""))
+                    local okB, take, later, lvlL = pcall(E.DungeonBadge or function() return 0, 0 end, d.key)
+                    if not okB then take, later = 0, 0 end
+                    b.take, b.later, b.lvlL = take or 0, later or 0, lvlL
+                    local hasB, hasR = (take or 0) > 0, (later or 0) > 0
+                    if hasB then
+                        local bc = (me >= d.min) and COL.accent or COL.dim
+                        bx.fs:SetText("! " .. take)
+                        if bx.fs.SetTextColor then bx.fs:SetTextColor(bc[1], bc[2], bc[3]) end
+                        for _, t in ipairs(bx.edge) do if t.SetColorTexture then t:SetColorTexture(bc[1], bc[2], bc[3], 0.8) end end
+                        bx:SetWidth(math.max(20, (bx.fs:GetStringWidth() or 12) + 10))
+                    end
+                    red:SetText(hasR and ("+" .. later) or "")
+                    place(hasB, hasR)
+                    b.fs:SetText(E.DungeonName(d))   -- suit la langue choisie
                     local active = (DB.guide == d.key)
                     local c = active and COL.accent or COL.white
                     if b.fs.SetTextColor then b.fs:SetTextColor(c[1], c[2], c[3]) end
                 end
                 b:SetScript("OnEnter", function(self)
                     E.Tip():SetOwner(self, "ANCHOR_RIGHT")
-                    E.Tip():AddLine(d.name)
+                    E.Tip():AddLine(E.DungeonName(d))
                     E.Tip():AddLine(T("dTip", d.min, d.max), 1, 1, 1, true)
                     local ideal = DungeonIdeal and DungeonIdeal(d.key)
                     if ideal then E.Tip():AddLine(T("dIdeal", ideal), 0.84, 0.72, 0.4, true) end
                     if b.glow:IsShown() then E.Tip():AddLine(T("atLevel"), 0.88, 0.74, 0.43) end
+                    if (b.take or 0) > 0 then E.Tip():AddLine(T("dsBadgeTip", b.take), 0.84, 0.72, 0.4) end
+                    if (b.later or 0) > 0 and b.lvlL then E.Tip():AddLine(T("dsLaterTip", b.later, b.lvlL), 0.76, 0.29, 0.24) end
+                    E.Tip():AddLine(T("dsClickTip"), 0.55, 0.5, 0.38)
                     E.Tip():Show()
                 end)
                 b:SetScript("OnLeave", function() E.Tip():Hide() end)
@@ -564,32 +621,11 @@ local function CreateOptions()
 
     -- 3. Itineraire
     do
-        -- v1.41 (audit, point 8) : trois sections : Fleche · Trajets et vols · Ciblage
+        -- v1.41 (audit, point 8) : sections Trajets et vols · Ciblage (v1.46 : la Fleche est passee dans Apparence)
         local pg = pages[5]
         local y = 0
         local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
         local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
-        -- FLECHE
-        sec("secArrow")
-        row(CheckRow(pg, CW, "arrow", function() return DB.wp end,
-            function(v) DB.wp = v; if not v then ClearWaypoint() end; E.ResetWP(); Refresh(true) end))
-        row(CheckRow(pg, CW, "arrowOwn", function() return DB.ownArrow ~= false end,
-            function(v) DB.ownArrow = v; E.PlaceWaypointAgain() end))
-        row(CheckRow(pg, CW, "gameWP", function() return DB.gameWP ~= false end,
-            function(v) DB.gameWP = v; E.PlaceWaypointAgain() end))
-        row(CheckRow(pg, CW, "mmPin", function() return DB.mmPin ~= false end, function(v) DB.mmPin = v end))
-        local sl = FS(pg, 10, COL.gold, FONT, "LEFT"); sl:SetPoint("TOPLEFT", 0, y - 8)
-        Loc(function() sl:SetText(Caps(T("arrowScale"))) end)
-        local sv = FS(pg, 11, COL.white, FONT, "CENTER"); sv:SetWidth(60); sv:SetPoint("TOPLEFT", 216, y - 8)
-        local function setS(d) DB.arrowScale = math.max(0.6, math.min(1.6, (DB.arrowScale or 1) + d)); RefreshOptions() end
-        local m1 = FlatButton(pg, 28, 24, function() setS(-0.1) end); m1:SetPoint("TOPLEFT", 180, y - 2); m1:SetLabel("-")
-        local p1 = FlatButton(pg, 28, 24, function() setS(0.1) end); p1:SetPoint("TOPLEFT", 284, y - 2); p1:SetLabel("+")
-        local rs = FlatButton(pg, 200, 24, function() if ns.Arrow then ns.Arrow.Reset() end end)
-        rs:SetPoint("TOPLEFT", 330, y - 2)
-        Loc(function() rs:SetLabel(Caps(T("arrowReset"))) end)
-        if rs.fs.SetFont then rs.fs:SetFont(FONT, 9, "") end
-        optRows[#optRows + 1] = function() sv:SetText(math.floor((DB.arrowScale or 1) * 100 + 0.5) .. " %") end
-        y = y - 40
         -- TRAJETS ET VOLS
         sec("secTrips")
         row(CheckRow(pg, CW, "useFlights", function() return DB.useFlights ~= false end,
@@ -617,41 +653,51 @@ local function CreateOptions()
         end)
     end
 
-    -- 4. Affichage
+    -- 4. Apparence (v1.46, retour d'un joueur : la taille de la fleche etait cachee dans Itineraire)
+    -- Fenetre · Fleche · Cartes, puis les deux boutons « replacer » cote a cote. La fleche s'affiche en
+    -- apercu tant que l'onglet est ouvert. Messages et Extras sont passes dans Comportement (page 7).
     do
-        -- v1.41 (audit, point 8) : trois sections : Fenetre · Messages · Extras (venus d'Automatisation)
         local pg = pages[6]
         local y = 0
         local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
         local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
         local function flag(key, field, def)
             return CheckRow(pg, CW, key, function() if def then return DB[field] ~= false end return DB[field] and true or false end,
-                function(v) DB[field] = v; if field == "trainer" and not v then DB.trainDue = nil end; Refresh(true) end)
+                function(v) DB[field] = v; Refresh(true) end)
         end
         -- FENETRE
         sec("secWindow")
         row(CheckRow(pg, CW, "showWindow", function() return DB.shown ~= false end, function(v) E.ShowGuide(v) end))
         row(CheckRow(pg, CW, "lock", function() return DB.locked end, function(v) DB.locked = v end))
-        row(CheckRow(pg, CW, "mmButton", function() return not DB.mmHide end,
-            function(v) DB.mmHide = not v; if mm then mm:SetShown(v) end end))
         row(flag("miniOpt", "mini", false))
         row(flag("compact", "compact", false))
-        y = y - 6
-        -- taille de la fenetre : -  100 %  +
-        local sl = FS(pg, 9, COL.gold, FONT, "LEFT"); sl:SetPoint("TOPLEFT", 0, y - 9)
-        Loc(function() sl:SetText(Caps(T("scaleLbl"))) end)
-        local val = FS(pg, 12, COL.white, FONT, "CENTER"); val:SetWidth(70); val:SetPoint("TOPLEFT", 190, y - 7)
-        local function SetScale(v)
-            v = math.max(0.6, math.min(1.5, math.floor(v * 20 + 0.5) / 20))
+        y = ScaleRow(pg, y, "scaleWin", function() return DB.scale or 1 end, function(v)
             DB.scale = v
             local f = E.Frame(); if f then f:SetScale(v); local mf = rawget(f, "mini"); if mf then mf:SetScale(v) end end
-            val:SetText(math.floor(v * 100 + 0.5) .. " %")
-        end
-        local minus = FlatButton(pg, 28, 26, function() SetScale((DB.scale or 1) - 0.05) end); minus:SetPoint("TOPLEFT", 150, y); minus:SetLabel("-")
-        local plus = FlatButton(pg, 28, 26, function() SetScale((DB.scale or 1) + 0.05) end); plus:SetPoint("TOPLEFT", 272, y); plus:SetLabel("+")
-        optRows[#optRows + 1] = function() val:SetText(math.floor((DB.scale or 1) * 100 + 0.5) .. " %") end
-        y = y - 46
-        local rp = FlatButton(pg, 300, 28, function()
+        end)
+        y = y - 8
+        -- FLECHE
+        sec("secArrow")
+        row(CheckRow(pg, CW, "arrow", function() return DB.wp end,
+            function(v) DB.wp = v; if not v then ClearWaypoint() end; E.ResetWP(); Refresh(true) end))
+        row(CheckRow(pg, CW, "arrowOwn", function() return DB.ownArrow ~= false end,
+            function(v) DB.ownArrow = v; E.PlaceWaypointAgain() end))
+        row(CheckRow(pg, CW, "gameWP", function() return DB.gameWP ~= false end,
+            function(v) DB.gameWP = v; E.PlaceWaypointAgain() end))
+        row(flag("smartArrowOpt", "smartArrow", true))
+        row(flag("trailOpt", "trailAsk", true))
+        y = ScaleRow(pg, y, "arrowScale", function() return DB.arrowScale or 1 end, function(v) DB.arrowScale = v end)
+        y = y - 8
+        -- CARTES
+        sec("secMaps")
+        row(CheckRow(pg, CW, "mmPin", function() return DB.mmPin ~= false end, function(v) DB.mmPin = v end))
+        row(CheckRow(pg, CW, "mapPin", function() return DB.mapPin ~= false end, function(v) DB.mapPin = v end))
+        row(CheckRow(pg, CW, "mmButton", function() return not DB.mmHide end,
+            function(v) DB.mmHide = not v; if mm then mm:SetShown(v) end end))
+        y = y - 8
+        -- replacer la fenetre et la fleche, cote a cote
+        local BW2 = math.floor((CW - 12) / 2)
+        local rp = FlatButton(pg, BW2, 28, function()
             DB.wpos = nil
             local f = E.Frame()
             if f then
@@ -662,17 +708,35 @@ local function CreateOptions()
         end)
         rp:SetPoint("TOPLEFT", 0, y)
         Loc(function() rp:SetLabel(Caps(T("resetPos"))) end)
-        if rp.fs.SetFont then rp.fs:SetFont(FONT, 9, "") end
-        y = y - 34
-        -- v1.43 : revoir la visite guidee (ferme les options pour laisser voir la fenetre du guide)
-        local tv = FlatButton(pg, 300, 28, function()
-            if opt then opt:Hide() end
-            SlashCmdList.WARPATH("tuto")
-        end)
-        tv:SetPoint("TOPLEFT", 0, y)
-        Loc(function() tv:SetLabel(Caps(T("tutoReplay"))) end)
-        if tv.fs.SetFont then tv.fs:SetFont(FONT, 9, "") end
-        y = y - 44
+        local ra = FlatButton(pg, BW2, 28, function() if ns.Arrow then ns.Arrow.Reset() end end)
+        ra:SetPoint("TOPLEFT", BW2 + 12, y)
+        Loc(function() ra:SetLabel(Caps(T("arrowReset"))) end)
+        -- apercu de la fleche tant que l'onglet est visible (sinon on regle sa taille a l'aveugle)
+        pg:HookScript("OnShow", function() if ns.Arrow and ns.Arrow.Preview then ns.Arrow.Preview(true) end end)
+        pg:HookScript("OnHide", function() if ns.Arrow and ns.Arrow.Preview then ns.Arrow.Preview(false) end end)
+    end
+
+    -- Comportement (v1.46 : Automatisation, puis Messages et Extras venus d'Affichage)
+    do
+        local pg = pages[7]
+        local y = 0
+        local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
+        local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
+        local function flag(key, field, def)
+            return CheckRow(pg, CW, key, function() if def then return DB[field] ~= false end return DB[field] and true or false end,
+                function(v) DB[field] = v; if field == "trainer" and not v then DB.trainDue = nil end; Refresh(true) end)
+        end
+        -- AUTOMATISATION
+        sec("secAuto")
+        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" } }) do
+            row(flag(o[1], o[2], true))
+        end
+        row(CheckRow(pg, CW, "shareOpt", function() return WarpathDropDB and WarpathDropDB._share ~= false end,
+            function(v) if WarpathDropDB then WarpathDropDB._share = v end end))
+        local note = FS(pg, 10, COL.soft, FONT, "LEFT"); note:SetWidth(CW); note:SetPoint("TOPLEFT", 0, y - 4)
+        Loc(function() note:SetText(T("autoNote")) end)
+        local nh = note.GetStringHeight and note:GetStringHeight()
+        y = y - 4 - ((type(nh) == "number" and nh > 0) and nh or 28) - 14
         -- MESSAGES : chat (tous / importants / aucun ; erreurs et commandes toujours), conseils, rappel d'entraineur
         sec("secMessages")
         local cl = FS(pg, 12, COL.white, FONT, "LEFT"); cl:SetPoint("TOPLEFT", 22, y - 7)
@@ -698,27 +762,17 @@ local function CreateOptions()
             function(v) if WarpathDropDB then WarpathDropDB._pvpShow = v end; if _G.WarpathPvPRefresh then pcall(_G.WarpathPvPRefresh, true) end end))
         row(CheckRow(pg, CW, "pvpShot", function() return DB.pvpShot and true or false end, function(v) DB.pvpShot = v end))
         row(CheckRow(pg, CW, "chronBanner", function() return DB.chronBanner ~= false end, function(v) DB.chronBanner = v end))
-        local cv = FlatButton(pg, 200, 24, function() E.ChronShow() end)
+        local BW2 = math.floor((CW - 12) / 2)
+        local cv = FlatButton(pg, BW2, 28, function() E.ChronShow() end)
         cv:SetPoint("TOPLEFT", 0, y - 4)
         Loc(function() cv:SetLabel(K.Upper(T("chOpen"))) end)
-    end
-
-    -- Automatisation
-    do
-        local pg = pages[7]
-        local h = SmallHeader(pg, "tabAuto"); h:SetPoint("TOPLEFT", 0, 0)
-        local y = -18
-        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "smartArrowOpt", "smartArrow" }, { "trailOpt", "trailAsk" } }) do
-            local field = o[2]
-            local r = CheckRow(pg, CW, o[1], function() return DB[field] ~= false end, function(v) DB[field] = v; Refresh(true) end)
-            r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        end
-        local sh = CheckRow(pg, CW, "shareOpt", function() return WarpathDropDB and WarpathDropDB._share ~= false end,
-            function(v) if WarpathDropDB then WarpathDropDB._share = v end end)
-        sh:SetPoint("TOPLEFT", 0, y); y = y - ROW_H - 10
-        local note = FS(pg, 10, COL.soft, FONT, "LEFT"); note:SetWidth(CW); note:SetPoint("TOPLEFT", 0, y)
-        Loc(function() note:SetText(T("autoNote")) end)
-        -- (les extras sont passes dans l'onglet Affichage en v1.41)
+        -- v1.43 : revoir la visite guidee (ferme les options pour laisser voir la fenetre du guide)
+        local tv = FlatButton(pg, BW2, 28, function()
+            if opt then opt:Hide() end
+            SlashCmdList.WARPATH("tuto")
+        end)
+        tv:SetPoint("TOPLEFT", BW2 + 12, y - 4)
+        Loc(function() tv:SetLabel(Caps(T("tutoReplay"))) end)
     end
 
     opt:SetScript("OnShow", function()

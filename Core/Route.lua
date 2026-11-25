@@ -66,7 +66,11 @@ function PlaceNative(w)
     pcall(function()
         if C_Map.CanSetUserWaypointOnMap and not C_Map.CanSetUserWaypointOnMap(w.m) then return end
         C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(w.m, w.x / 100, w.y / 100))
-        if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+        -- v1.46 : « suivi » du repere seulement si tu utilises la fleche du jeu. Le suivi fait redessiner par
+        -- Warpath les icones de quete (suivi des objectifs, carte) ; elles restent « marquees » et, plus tard en
+        -- combat, le jeu bloque SetPassThroughButtons quand il les met a jour (rapports des 23 et 24 novembre :
+        -- escortes, Durnholde, 14 boutons d'un coup alors que le repere n'est plus touche en combat).
+        if DB.ownArrow == false and C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
             C_SuperTrack.SetSuperTrackedUserWaypoint(true)
         end
         BlizzArrowShown(DB.ownArrow == false)

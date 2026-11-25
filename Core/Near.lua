@@ -123,8 +123,19 @@ function NearTick()
     if not steps or peek or focus or not baseCurrent or computingOther then return end
     if DungeonLogActive and DungeonLogActive() then return end
     pcall(CaveTrack)
-    local ok, pk = pcall(function() return StepPointKey(steps[current]) .. (TrainDetour(steps[current]) and "T" or "") end)
-    if ok and pk ~= lastPointKey then lastPointKey = pk; lastWP = nil; Refresh(true); return end
+    local sp
+    local ok, pk = pcall(function()
+        sp = StepPoint(steps[current])
+        return (sp and (sp.kind .. sp.m .. ":" .. sp.x .. ":" .. sp.y) or "") .. (TrainDetour(steps[current]) and "T" or "")
+    end)
+    if ok and pk ~= lastPointKey then
+        lastPointKey = pk
+        -- v1.46 : seul le point a bouge (meme etape, meme genre) : la fleche se deplace sans tout reconstruire
+        local okL, light = false, false
+        if pk:sub(-1) ~= "T" and RetargetLight then okL, light = pcall(RetargetLight, sp) end
+        if not (okL and light) then lastWP = nil; Refresh(true) end
+        return
+    end
     local j = NearPick(baseCurrent) or baseCurrent
     if j ~= current and steps[j] then
         current = j; DB.step[DB.guide] = current
