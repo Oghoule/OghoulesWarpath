@@ -9,6 +9,10 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+-- v1.50 : module ns.Mod.Tutorial (publie en fin de fichier pour les autres fichiers)
+local ShowTutorial
+local Window = ns.Mod.Window -- v1.50 : module
+local Skin = ns.Mod.Skin -- v1.50 : module
 
 -- Chaque target renvoie les morceaux de la grande fenetre a entourer (le trou = leur union).
 -- Une page dont rien n'est affiche est sautee. La visite se fait toujours en mode complet.
@@ -126,12 +130,12 @@ local function Render()
     card:ClearAllPoints()
     if p.welcome then
         card:SetWidth(380)
-        card.title:SetFont(DISPLAY, 16, ""); card.title:SetJustifyH("CENTER")
-        card.title:SetText(Caps("Oghoule's Warpath"))
+        card.title:SetFont(Skin.DISPLAY, 16, ""); card.title:SetJustifyH("CENTER")
+        card.title:SetText(Skin.Caps("Oghoule's Warpath"))
     else
         card:SetWidth(320)
-        card.title:SetFont(FONT, 12, ""); card.title:SetJustifyH("CENTER")
-        card.title:SetText(Caps(T(p.head)))
+        card.title:SetFont(Skin.FONT, 12, ""); card.title:SetJustifyH("CENTER")
+        card.title:SetText(Skin.Caps(T(p.head)))
     end
     card.rule:SetWidth(card:GetWidth() - 60)
     card.text:SetWidth(card:GetWidth() - 50)
@@ -140,7 +144,7 @@ local function Render()
     for i, d in ipairs(card.dots) do
         if i <= #list then
             d:ClearAllPoints(); d:SetPoint("BOTTOM", card, "BOTTOM", (i - (#list + 1) / 2) * 14, 50)
-            d:SetStyle(i == cur and COL.red or COL.dim, i ~= cur); d:Show()
+            d:SetStyle(i == cur and Skin.COL.red or Skin.COL.dim, i ~= cur); d:Show()
         else d:Hide() end
     end
     -- boutons
@@ -187,36 +191,36 @@ local function Build()
     overlay:EnableMouse(true)   -- le voile bloque les clics vers le jeu pendant la visite
     -- voile en 4 morceaux autour du trou (dessus, dessous, gauche, droite)
     overlay.veil = {}
-    for i = 1, 4 do overlay.veil[i] = Tex(overlay, { 0, 0, 0 }, 0.60, "BACKGROUND") end
+    for i = 1, 4 do overlay.veil[i] = Skin.Tex(overlay, { 0, 0, 0 }, 0.60, "BACKGROUND") end
     -- filet dore autour du trou, losanges aux coins
     overlay.ring = CreateFrame("Frame", nil, overlay)
-    Border(overlay.ring, COL.accent, 0.9)
+    Skin.Border(overlay.ring, Skin.COL.accent, 0.9)
     for _, c in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
-        local g = Diamond(overlay.ring, 8, COL.red); g:SetPoint("CENTER", overlay.ring, c, 0, 0)
+        local g = Skin.Diamond(overlay.ring, 8, Skin.COL.red); g:SetPoint("CENTER", overlay.ring, c, 0, 0)
     end
 
     local card = CreateFrame("Frame", nil, overlay)
     card:SetSize(380, 196); card:SetClampedToScreen(true)
     card:EnableMouse(true)
-    local bg = Tex(card, COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
-    Border(card, COL.line)
+    local bg = Skin.Tex(card, Skin.COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
+    Skin.Border(card, Skin.COL.line)
     for _, c in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
-        local g = Diamond(card, 8, COL.gold); g:SetPoint("CENTER", card, c, 0, 0)
+        local g = Skin.Diamond(card, 8, Skin.COL.gold); g:SetPoint("CENTER", card, c, 0, 0)
     end
 
-    card.title = FS(card, 16, COL.gold, DISPLAY, "CENTER"); card.title:SetPoint("TOP", 0, -18)
-    card.rule = Divider(card, 300); card.rule:SetPoint("TOP", card.title, "BOTTOM", 0, -8)
-    card.text = FS(card, 12, COL.white, FONT, "CENTER"); card.text:SetWidth(320)
+    card.title = Skin.FS(card, 16, Skin.COL.gold, Skin.DISPLAY, "CENTER"); card.title:SetPoint("TOP", 0, -18)
+    card.rule = Skin.Divider(card, 300); card.rule:SetPoint("TOP", card.title, "BOTTOM", 0, -8)
+    card.text = Skin.FS(card, 12, Skin.COL.white, Skin.FONT, "CENTER"); card.text:SetWidth(320)
     card.text:SetPoint("TOP", card.rule, "BOTTOM", 0, -12)
     if card.text.SetSpacing then card.text:SetSpacing(2) end
 
     card.dots = {}
-    for i = 1, 12 do card.dots[i] = Diamond(card, 7, COL.dim, true) end
+    for i = 1, 12 do card.dots[i] = Skin.Diamond(card, 7, Skin.COL.dim, true) end
 
-    card.skip = FlatButton(card, 70, 24, Finish); card.skip:SetPoint("BOTTOMLEFT", 16, 14)
-    card.go = FlatButton(card, 100, 24, function() Go(1) end); card.go:SetPoint("BOTTOMRIGHT", -16, 14)
-    if card.go.fs then card.go.fs:SetTextColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
-    card.prev = FlatButton(card, 100, 24, function() Go(-1) end); card.prev:SetPoint("RIGHT", card.go, "LEFT", -8, 0)
+    card.skip = Skin.FlatButton(card, 70, 24, Finish); card.skip:SetPoint("BOTTOMLEFT", 16, 14)
+    card.go = Skin.FlatButton(card, 100, 24, function() Go(1) end); card.go:SetPoint("BOTTOMRIGHT", -16, 14)
+    if card.go.fs then card.go.fs:SetTextColor(Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3]) end
+    card.prev = Skin.FlatButton(card, 100, 24, function() Go(-1) end); card.prev:SetPoint("RIGHT", card.go, "LEFT", -8, 0)
     overlay.card = card
 
     overlay:SetScript("OnHide", function()
@@ -224,7 +228,7 @@ local function Build()
         if pending then return end
         if DB then DB.tutoSeen = true end
         if TipDelay then TipDelay(180) end   -- pas d'astuce dans les 3 minutes qui suivent la visite
-        if guideWasShown == false and ShowGuide then pcall(ShowGuide, false) end
+        if guideWasShown == false and Window.ShowGuide then pcall(Window.ShowGuide, false) end
         guideWasShown = nil
         if miniWas and DB then DB.mini = true; if Refresh then pcall(Refresh, true) end end
         miniWas = nil
@@ -263,7 +267,7 @@ function ShowTutorial(force, after)
     local o = Build()
     -- le guide doit etre a l'ecran pour etre montre ; remis comme avant a la fin
     guideWasShown = DB and DB.shown and true or false
-    if not guideWasShown and ShowGuide then pcall(ShowGuide, true) end
+    if not guideWasShown and Window.ShowGuide then pcall(Window.ShowGuide, true) end
     miniWas = DB and DB.mini and true or nil
     if miniWas then DB.mini = false; if Refresh then pcall(Refresh, true) end end
     page, pending = 1, false
@@ -332,23 +336,23 @@ local function TipBuild()
     tip:Hide()
     tip:SetAllPoints(UIParent); tip:SetFrameStrata("DIALOG")   -- pas de souris : le jeu reste cliquable
     tip.ring = CreateFrame("Frame", nil, tip)
-    Border(tip.ring, COL.accent, 0.9)
+    Skin.Border(tip.ring, Skin.COL.accent, 0.9)
     for _, c in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
-        local g = Diamond(tip.ring, 7, COL.red); g:SetPoint("CENTER", tip.ring, c, 0, 0)
+        local g = Skin.Diamond(tip.ring, 7, Skin.COL.red); g:SetPoint("CENTER", tip.ring, c, 0, 0)
     end
     local card = CreateFrame("Frame", nil, tip)
     card:SetSize(260, 120); card:SetClampedToScreen(true); card:EnableMouse(true)
-    local bg = Tex(card, COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
-    Border(card, COL.line)
+    local bg = Skin.Tex(card, Skin.COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
+    Skin.Border(card, Skin.COL.line)
     for _, c in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
-        local g = Diamond(card, 7, COL.gold); g:SetPoint("CENTER", card, c, 0, 0)
+        local g = Skin.Diamond(card, 7, Skin.COL.gold); g:SetPoint("CENTER", card, c, 0, 0)
     end
-    card.head = FS(card, 11, COL.gold, FONT, "LEFT"); card.head:SetPoint("TOPLEFT", 14, -12)
-    card.text = FS(card, 11, COL.white, FONT, "LEFT"); card.text:SetWidth(232)
+    card.head = Skin.FS(card, 11, Skin.COL.gold, Skin.FONT, "LEFT"); card.head:SetPoint("TOPLEFT", 14, -12)
+    card.text = Skin.FS(card, 11, Skin.COL.white, Skin.FONT, "LEFT"); card.text:SetWidth(232)
     card.text:SetPoint("TOPLEFT", card.head, "BOTTOMLEFT", 0, -8)
     if card.text.SetSpacing then card.text:SetSpacing(2) end
-    card.ok = FlatButton(card, 70, 22, function() TipDone(true) end); card.ok:SetPoint("BOTTOMRIGHT", -12, 10)
-    if card.ok.fs then card.ok.fs:SetTextColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
+    card.ok = Skin.FlatButton(card, 70, 22, function() TipDone(true) end); card.ok:SetPoint("BOTTOMRIGHT", -12, 10)
+    if card.ok.fs then card.ok.fs:SetTextColor(Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3]) end
     tip.card = card
     -- suit l'element s'il bouge (fleche deplacee, fenetre glissee)
     local acc = 0
@@ -363,7 +367,7 @@ local function TipShow(t)
     TipBuild()
     curTip, tipShownAt = t, GetTime and GetTime() or 0
     local card = tip.card
-    card.head:SetText(Caps(T(t.head)))
+    card.head:SetText(Skin.Caps(T(t.head)))
     card.text:SetText(T(t.text))
     card.ok:SetLabel("OK")
     card:SetHeight(math.floor((card.text:GetStringHeight() or 30) + 70))
@@ -376,7 +380,7 @@ local function TipCheck()
     if not tipReadyAt then TipDelay(TIP_START) end                     -- 1er passage = connexion
     if InCombat() then if curTip then TipDone(false) end; return end   -- revient apres le combat
     if overlay and overlay:IsShown() then return end
-    if PopupVisible and PopupVisible() then return end
+    if Skin.PopupVisible and Skin.PopupVisible() then return end
     if curTip then
         if Now() - (tipShownAt or 0) > 25 then TipDone(true) end
         return
@@ -399,4 +403,10 @@ end
 
 if not WARPATH_TEST and C_Timer and C_Timer.NewTicker then
     C_Timer.NewTicker(2, function() pcall(TipCheck) end)
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Tutorial)
+do
+    local M = ns.Mod.Tutorial
+    M.ShowTutorial = ShowTutorial
 end

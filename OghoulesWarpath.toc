@@ -16,6 +16,7 @@ Data\Data.lua
 Data\Est.lua
 Data\NpcNames.lua
 Data\DropsData.lua
+Core\Modules.lua
 Core\Drops.lua
 Data\Tips.lua
 Data\Lore.lua

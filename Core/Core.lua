@@ -22,14 +22,27 @@ local State = ns.State
 -- Environnement prive partage par tous les fichiers du moteur (Core, Route, Estimate, Skin, Flow, Window,
 -- Comfort, Commands, Events) : leurs variables communes y vivent, les vraies globales du jeu restent dans _G.
 local DECL = {}
-for n in ("LegPoint heldNear NearNpc QuestUnlocks ChainSteps WeaveSteps Weave Unweave PerfOn PerfStart PerfMark PerfMem RetargetLight TrailTick TrailPoint TrailCmd PassageFor PassageCmd FollowUpAccepts HearthButton CaveDiag MapBar ChipScale DiamondCheck Border SectionHead Chip HEAD_H OpenStepQuest ListBlock AcceptGroup LiveObjectives TraitTrees OnTheWay TrainDetour BackToNow MySpec ForgetCave DeathTip IsCaveStep CaveTrack StepPoint DungeonName DungeonQuests DungeonBadge DungeonAskLine DungeonSheetOpen DungeonSheetDefault DungeonSheetHide BugWindow NearestTrainer TrainReminder TurninGroup nearKind NearPick NearTick LevelWaitLines HubNotes ThenLine InDgInstance OnInstanceChange DungeonInstanceMatches DL DungeonLogActive DungeonLogList Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow ChronPreview CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText DungeonIdeal Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos Advice currentAdvice PrereqDetour RefreshInner ShowWelcome ShowTutorial StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache ClassQuestList CheckClassQuests Advance AllDone AnalyzeChains Applies AskChain AutoPick BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL Caps ChainFor CheckDungeons ClearWaypoint Compute Continent CreateUI D DB DISPLAY DUNGEONS Diamond Dist Divider DropRate EST Estimate FLIGHTS FONT FS FindAnchor FlatButton FormatNum GATES GreenRange Guides HasBit ICON INNER IS_DUNGEON Ids Ignore IsGrey KillTime KnownFlights Lang Layout LearnGates ListDungeons ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable OnEvent OnTaxiClosed OnTaxiOpened OnXPGain LearnFlightHere SetErrand ClearErrand UpdateMini ToggleMini ShowGuide QMCity QMCandidates QMCurrent QMQuit QMSkip QMPoint QMOpen QMClosePick QMGo QMPanelState QMShowPanel CheckQuartermaster CheckDungeonLeft HearthPlace CityCavePoint POPUP_HEAD Toast FadeIn FadeOut Shine GoldFrame HeadButton Glyph ScaleGrip OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestTitle QuestXP RACEBIT RUN Refresh Rendue ResolveNewMaps ScanLog ScheduleAdvance SeenKey SetGuide SetWaypoint Short Spaced StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UpdateDistance Upper VERSION W WP Walk WarpathName WorldPos ZoneOf band blockedBy chainOf depsOf desiredWP distTarget dynOrder errShown ev f lastKill logById optCache say wpCache"):gmatch("%S+") do DECL[n] = true end
+for n in ("heldNear WeaveSteps PerfOn RetargetLight TrailTick TrailPoint PassageFor HearthButton HEAD_H OnTheWay IsCaveStep CaveTrack StepPoint DungeonQuests nearKind NearPick NearTick ThenLine DungeonInstanceMatches DL CheckZoneLevel CheckProfIntro ProfDetect CheckProfQuests DungeonReq Tip Popup HearthPos Advice currentAdvice RefreshInner SuggestDungeonForLevel styleCache CheckClassQuests AskChain BestFlight CLASSBIT CheckDungeons ClearWaypoint Compute D DB Estimate KnownFlights Lang LearnGates LockCandidates MyChain OnEvent UpdateMini QMCandidates QMSkip QMClosePick QMGo CheckDungeonLeft HearthPlace CityCavePoint POPUP_HEAD OptimizeFn PlaceNative PlayerPos PlayerWP Refresh Rendue ScanLog SetGuide SetWaypoint Short StepDone T TransportFor TravelCost UpdateDistance W WP Walk desiredWP distTarget dynOrder errShown f lastKill say wpCache"):gmatch("%S+") do DECL[n] = true end
 -- v1.50 : anciens noms de l'etat, rediriges vers State (outils de test, oubli eventuel) ; jamais stockes dans env
 local STATE = {}
 for n in ("tomtomWP lastWP baseCurrent current focus flightPlan pending G steps peek doneCache pendingAccept computingOther asking inCommand myClass myRace"):gmatch("%S+") do STATE[n] = true end
 local assigned = {}
+-- v1.50 : noms publies par les modules (ns.Mod, Core/Modules.lua) : retrouves pour les anciens acces par CoreEnv
+local MODIDX = ns.ModIndex or {}
 local env = setmetatable({}, {
-    __index = function(_, k) if STATE[k] then return State[k] end if DECL[k] and assigned[k] then return nil end return _G[k] end,
-    __newindex = function(t, k, v) if STATE[k] then State[k] = v elseif DECL[k] then assigned[k] = true; rawset(t, k, v) else _G[k] = v end end,
+    __index = function(_, k)
+        if STATE[k] then return State[k] end
+        if DECL[k] then if assigned[k] then return nil end return _G[k] end
+        local m = MODIDX[k]
+        if m then return m[k] end
+        return _G[k]
+    end,
+    __newindex = function(t, k, v)
+        if STATE[k] then State[k] = v
+        elseif DECL[k] then assigned[k] = true; rawset(t, k, v)
+        elseif MODIDX[k] then MODIDX[k][k] = v
+        else _G[k] = v end
+    end,
 })
 ns.CoreEnv = env
 -- Trace temporaire : affiche (une fois) chaque appel sensible juste avant de le faire
@@ -105,6 +118,12 @@ ns.MapAPI = {
 }
 local _ENV = env
 if setfenv then setfenv(1, env) end
+-- v1.50 : module ns.Mod.Core (publie en fin de fichier pour les autres fichiers)
+local AnalyzeChains, Applies, CHAIN, CHECK, DUNGEONS, FindAnchor, GreenRange, Guides, ICON, IS_DUNGEON, Ids
+local IsGrey, ListHas, MAIN_ORDER, MAXLVL, MINLVL, NearNpc, NextApplicable, QName, QuestTitle, SeenKey
+local StepText, Title, VERSION, blockedBy, chainOf, depsOf, logById
+local Comfort = ns.Mod.Comfort -- v1.50 : module
+local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local DOT, HOLD_R, IS_DUNGEON_SET, LANG, QuestState, heldPrev
 Guides = ns.Guides or {}
@@ -348,13 +367,13 @@ function NearNpc(s, wasNear)
     local g = WP(s.m, s.x, s.y)
     if not (g and g[3] == me[3]) then return false end
     -- un peu plus large pour sortir que pour entrer : pas de va-et-vient a la limite
-    return Dist(me[1], me[2], g[1], g[2]) < (wasNear and HOLD_R + 20 or HOLD_R)
+    return Route.Dist(me[1], me[2], g[1], g[2]) < (wasNear and HOLD_R + 20 or HOLD_R)
 end
 -- deux etapes au meme camp (PNJ a moins de HOLD_R l'un de l'autre, meme continent)
 local function SameCamp(a, b)
     if not (a and b and a.m and a.x and b.m and b.x and WP) then return false end
     local p, q = WP(a.m, a.x, a.y), WP(b.m, b.x, b.y)
-    return p and q and p[3] == q[3] and Dist(p[1], p[2], q[1], q[2]) < HOLD_R or false
+    return p and q and p[3] == q[3] and Route.Dist(p[1], p[2], q[1], q[2]) < HOLD_R or false
 end
 
 function StepDone(i, anchor)
@@ -390,7 +409,7 @@ function StepDone(i, anchor)
         end
         local skip = (passed and not near) or (IsGrey(s) and not chainLike) or (s.optional and DB.seen[SeenKey(i)])
             or not lvlOk -- niveau requis pas atteint : impossible a prendre
-            or (StyleSkip and not s.woven and StyleSkip(i, s))
+            or (Comfort.StyleSkip and not s.woven and Comfort.StyleSkip(i, s))
             -- v1.45 : quete d'appel (bc = quete visee) : le jeu ne la propose plus si la quete visee est
             -- dans ton journal ou deja rendue (Tsunaman sans Trouble in the Deeps, 2026-11-23)
             or (s.bc and (logById[s.bc] ~= nil or Rendue(s.bc)))
@@ -634,7 +653,7 @@ function Compute()
                 local key = SeenKey(i)
                 if not (DB.lvlWait and DB.lvlWait[key]) then
                     local unlocks = false
-                    for _, id in ipairs(Ids(s)) do if QuestUnlocks and QuestUnlocks(id) then unlocks = true end end
+                    for _, id in ipairs(Ids(s)) do if Comfort.QuestUnlocks and Comfort.QuestUnlocks(id) then unlocks = true end end
                     if not unlocks then DB.lvlWait = DB.lvlWait or {}; DB.lvlWait[key] = true end
                 end
             end
@@ -657,4 +676,37 @@ function Compute()
     if State.computingOther then return end
     if State.focus and (State.doneCache[State.focus] or not State.steps[State.focus]) then State.focus = nil end
     DB.step[DB.guide] = State.current
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Core)
+do
+    local M = ns.Mod.Core
+    M.AnalyzeChains = AnalyzeChains
+    M.Applies = Applies
+    M.CHAIN = CHAIN
+    M.CHECK = CHECK
+    M.DUNGEONS = DUNGEONS
+    M.FindAnchor = FindAnchor
+    M.GreenRange = GreenRange
+    M.Guides = Guides
+    M.ICON = ICON
+    M.IS_DUNGEON = IS_DUNGEON
+    M.Ids = Ids
+    M.IsGrey = IsGrey
+    M.ListHas = ListHas
+    M.MAIN_ORDER = MAIN_ORDER
+    M.MAXLVL = MAXLVL
+    M.MINLVL = MINLVL
+    M.NearNpc = NearNpc
+    M.NextApplicable = NextApplicable
+    M.QName = QName
+    M.QuestTitle = QuestTitle
+    M.SeenKey = SeenKey
+    M.StepText = StepText
+    M.Title = Title
+    M.VERSION = VERSION
+    M.blockedBy = blockedBy
+    M.chainOf = chainOf
+    M.depsOf = depsOf
+    M.logById = logById
 end

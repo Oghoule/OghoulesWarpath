@@ -8,6 +8,9 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+local Core = ns.Mod.Core -- v1.50 : module
+-- v1.50 : module ns.Mod.Perf (publie en fin de fichier pour les autres fichiers)
+local PerfMark, PerfMem, PerfStart
 
 PerfOn = false
 
@@ -78,7 +81,7 @@ end
 local function report(secs)
     local list = {}
     for name, st in pairs(stats) do list[#list + 1] = { name = name, n = st.n, t = st.t, mx = st.mx, kb = st.kb } end
-    local out = { T("perfHead", secs, VERSION or "?") }
+    local out = { T("perfHead", secs, Core.VERSION or "?") }
     table.sort(list, function(a, b) return a.t > b.t end)
     for i = 1, math.min(8, #list) do local e = list[i]; out[#out + 1] = T("perfLine", e.name, e.n, e.t, e.mx, e.kb) end
     -- memoire : les plus gros producteurs (souvent les memes, mais pas toujours)
@@ -152,4 +155,12 @@ function PerfStart(secs)
             pcall(report, secs)
         end
     end)
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Perf)
+do
+    local M = ns.Mod.Perf
+    M.PerfMark = PerfMark
+    M.PerfMem = PerfMem
+    M.PerfStart = PerfStart
 end

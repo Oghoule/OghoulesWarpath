@@ -4,6 +4,12 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Flow = ns.Mod.Flow -- v1.50 : module
+local Est = ns.Mod.Est -- v1.50 : module
+-- v1.50 : module ns.Mod.Route (publie en fin de fichier pour les autres fichiers)
+local Continent, Dist, FLIGHTS, GATES, LearnFlightHere, PCOL, PREFIX, PrereqDetour, TRANSPORTS, WorldPos
+local ZoneOf, band, optCache
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local BlizzArrowShown, CONT_FALLBACK, CanFly, EK, FLY_FACTOR, FLY_OVERHEAD, GateNodes, KALIMDOR, RIDE, UNKNOWN
 local WIND, gateKey, gateNodes, lastSample, walkCache
@@ -109,7 +115,7 @@ PREFIX = setmetatable({}, { __index = function(_, k)
 end })
 
 function Short(s)
-    return (PREFIX[s.t] or "") .. " " .. (QName(s) or StepText(s):sub(1, 45))
+    return (PREFIX[s.t] or "") .. " " .. (Core.QName(s) or Core.StepText(s):sub(1, 45))
 end
 
 ------------------------------------------------------------------
@@ -382,7 +388,7 @@ function LearnFlightHere()
                 end
             end
             State.lastWP = nil
-            ScheduleAdvance()
+            Flow.ScheduleAdvance()
         end
     end
 end
@@ -462,19 +468,19 @@ OptimizeFn = function()
             local w = det.m and WP(det.m, det.x, det.y)
             if w then via[i] = w; detKey[#detKey + 1] = i .. (det.done and "d" or "o") else later[i] = true end
         end
-        for _, d in ipairs(depsOf[i] or {}) do if later[d] then later[i] = true end end
+        for _, d in ipairs(Core.depsOf[i] or {}) do if later[d] then later[i] = true end end
     end
     -- une etape sans position (quete prise dans le donjon, ou qui commence sur un objet) ne bloque plus le
     -- calcul : elle passe apres le ramassage, juste avant d'entrer.
     local P, tail = {}, {}
     for i = 1, entrance - 1 do
         local st = State.steps[i]
-        if Applies(st) and not State.doneCache[i] and st.t ~= "note" and not later[i] then
+        if Core.Applies(st) and not State.doneCache[i] and st.t ~= "note" and not later[i] then
             if st.m and st.x and WP(st.m, st.x, st.y) then P[#P + 1] = i else tail[#tail + 1] = i end
         end
     end
     for i = 1, entrance - 1 do
-        if later[i] and Applies(State.steps[i]) and not State.doneCache[i] and State.steps[i].t ~= "note" then tail[#tail + 1] = i end
+        if later[i] and Core.Applies(State.steps[i]) and not State.doneCache[i] and State.steps[i].t ~= "note" then tail[#tail + 1] = i end
     end
     if #P == 0 then return tail[1] and tail or nil end
     local greedy = #P > 12      -- trop d'etapes pour le calcul exact : plus proche voisin (respecte les chaines)
@@ -497,7 +503,7 @@ OptimizeFn = function()
     local need = {}
     for k, i in ipairs(P) do
         local m = 0
-        for _, d in ipairs(depsOf[i] or {}) do
+        for _, d in ipairs(Core.depsOf[i] or {}) do
             if slot[d] then m = m + 2 ^ (slot[d] - 1) end
         end
         need[k] = m
@@ -612,22 +618,40 @@ function PrereqDetour(s)
         if not ok then for _, p in ipairs(s.pre) do blockers[#blockers + 1] = p end end
     end
     for _, p in ipairs(blockers) do
-        if logById[p] ~= nil then
-            local done = logById[p] == true
+        if Core.logById[p] ~= nil then
+            local done = Core.logById[p] == true
             local want = done and "turnin" or "do"
             local m, x, y
             for _, t in ipairs(State.steps) do
                 if t.t == want and t.m and t.x then
-                    for _, id in ipairs(Ids(t)) do if id == p then m, x, y = t.m, t.x, t.y; break end end
+                    for _, id in ipairs(Core.Ids(t)) do if id == p then m, x, y = t.m, t.x, t.y; break end end
                 end
                 if m then break end
             end
-            local e = EST[p]
+            local e = Est.EST[p]
             if not m and e then
                 local c = done and e.e or (e.h or e.e or e.s)
                 if c then m, x, y = c[1], c[2], c[3] end
             end
-            if m then return { id = p, done = done, m = m, x = x, y = y, name = QuestTitle(p) or (e and e.n) or ("#" .. p) } end
+            if m then return { id = p, done = done, m = m, x = x, y = y, name = Core.QuestTitle(p) or (e and e.n) or ("#" .. p) } end
         end
     end
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Route)
+do
+    local M = ns.Mod.Route
+    M.Continent = Continent
+    M.Dist = Dist
+    M.FLIGHTS = FLIGHTS
+    M.GATES = GATES
+    M.LearnFlightHere = LearnFlightHere
+    M.PCOL = PCOL
+    M.PREFIX = PREFIX
+    M.PrereqDetour = PrereqDetour
+    M.TRANSPORTS = TRANSPORTS
+    M.WorldPos = WorldPos
+    M.ZoneOf = ZoneOf
+    M.band = band
+    M.optCache = optCache
 end

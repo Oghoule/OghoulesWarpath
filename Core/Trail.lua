@@ -14,6 +14,11 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Skin = ns.Mod.Skin -- v1.50 : module
+local Est = ns.Mod.Est -- v1.50 : module
+local Route = ns.Mod.Route -- v1.50 : module
+-- v1.50 : module ns.Mod.Trail (publie en fin de fichier pour les autres fichiers)
+local TrailCmd
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local TrailBreak
 
@@ -53,9 +58,9 @@ end
 local function perp(p, a, b)
     local dx, dy = b[1] - a[1], b[2] - a[2]
     local l2 = dx * dx + dy * dy
-    if l2 == 0 then return Dist(p[1], p[2], a[1], a[2]) end
+    if l2 == 0 then return Route.Dist(p[1], p[2], a[1], a[2]) end
     local t = math.max(0, math.min(1, ((p[1] - a[1]) * dx + (p[2] - a[2]) * dy) / l2))
-    return Dist(p[1], p[2], a[1] + t * dx, a[2] + t * dy)
+    return Route.Dist(p[1], p[2], a[1] + t * dx, a[2] + t * dy)
 end
 
 -- Douglas-Peucker : on ne garde que les virages (les points alignes sont retires)
@@ -98,7 +103,7 @@ end
 local function trailEndingNear(g)
     for _, tr in ipairs(trails()) do
         local B = tr.pts[#tr.pts]
-        if tr.c == g[3] and Dist(B[1], B[2], g[1], g[2]) <= END_NEAR then return tr end
+        if tr.c == g[3] and Route.Dist(B[1], B[2], g[1], g[2]) <= END_NEAR then return tr end
     end
 end
 
@@ -115,7 +120,7 @@ local function buildCandidate(here)
         out[#out + 1] = p
         local jump
         for j = #pts, i + 2, -1 do
-            if Dist(p[1], p[2], pts[j][1], pts[j][2]) < LOOP then jump = j; break end
+            if Route.Dist(p[1], p[2], pts[j][1], pts[j][2]) < LOOP then jump = j; break end
         end
         i = jump and (jump + 1) or (i + 1)
     end
@@ -125,8 +130,8 @@ local function buildCandidate(here)
     -- 2) detour : E[k] = longueur marchee de k jusqu'au bout, moins la ligne droite (grandit en remontant)
     local e, L, E = out[n], 0, { [n] = 0 }
     for k = n - 1, 1, -1 do
-        L = L + Dist(out[k][1], out[k][2], out[k + 1][1], out[k + 1][2])
-        E[k] = L - Dist(out[k][1], out[k][2], e[1], e[2])
+        L = L + Route.Dist(out[k][1], out[k][2], out[k + 1][1], out[k + 1][2])
+        E[k] = L - Route.Dist(out[k][1], out[k][2], e[1], e[2])
     end
     local total = E[1]
     if total < MIN_EXCESS then return nil end
@@ -137,9 +142,9 @@ local function buildCandidate(here)
     local part, Lt = {}, 0
     for k = start, n do
         part[#part + 1] = out[k]
-        if k < n then Lt = Lt + Dist(out[k][1], out[k][2], out[k + 1][1], out[k + 1][2]) end
+        if k < n then Lt = Lt + Route.Dist(out[k][1], out[k][2], out[k + 1][1], out[k + 1][2]) end
     end
-    if Lt < MIN_RATIO * Dist(part[1][1], part[1][2], e[1], e[2]) then return nil end
+    if Lt < MIN_RATIO * Route.Dist(part[1][1], part[1][2], e[1], e[2]) then return nil end
     -- 4) simplification (au plus MAX_PTS points)
     local eps, res = 4, nil
     repeat res = simplify(part, eps); eps = eps * 1.5 until #res <= MAX_PTS
@@ -169,7 +174,7 @@ local function checkArrival(here)
     local g = WP(s.m, s.x, s.y)
     if not (g and g[3] == here[3]) then return end
     local key = s.m .. ":" .. s.x .. ":" .. s.y
-    if arrived[key] or Dist(here[1], here[2], g[1], g[2]) > (s.t == "do" and 40 or 25) then return end
+    if arrived[key] or Route.Dist(here[1], here[2], g[1], g[2]) > (s.t == "do" and 40 or 25) then return end
     arrived[key] = true
     if refused()[key] or trailEndingNear(g) then return end
     local cand = buildCandidate(here)
@@ -178,7 +183,7 @@ local function checkArrival(here)
     candidate = cand
     -- v1.43 : « non » seulement si le joueur ferme avec le « x ». Sans reponse (toast efface), on
     -- reproposera a la prochaine seance (arrived[] evite de redemander dans la meme seance).
-    Toast(T("trailHead"), T("trailAsk", math.floor(cand.ex)), TrailKeep,
+    Skin.Toast(T("trailHead"), T("trailAsk", math.floor(cand.ex)), TrailKeep,
         function() refused()[key] = true end)
 end
 
@@ -191,15 +196,15 @@ function TrailTick()
     end
     local pm, px, py = PlayerPos()
     if not (pm and px) then return end
-    local wx, wy = WorldPos(pm, px, py)
+    local wx, wy = Route.WorldPos(pm, px, py)
     if not wx then return end
-    local c, t = Continent(pm), now()
+    local c, t = Route.Continent(pm), now()
     -- saut de plus de 60 m par seconde (teleportation, pierre de foyer) : on repart a zero
-    if last and (last.c ~= c or Dist(last.wx, last.wy, wx, wy) > 60 * math.max(1, t - last.t)) then TrailBreak() end
+    if last and (last.c ~= c or Route.Dist(last.wx, last.wy, wx, wy) > 60 * math.max(1, t - last.t)) then TrailBreak() end
     last = { wx = wx, wy = wy, c = c, t = t }
     local here = { wx, wy, c, pm, r1(px), r1(py), t }
     local p = crumbs[#crumbs]
-    if not p or Dist(p[1], p[2], wx, wy) >= STEP then crumbs[#crumbs + 1] = here end
+    if not p or Route.Dist(p[1], p[2], wx, wy) >= STEP then crumbs[#crumbs + 1] = here end
     while #crumbs > MAX_CRUMBS or (crumbs[1] and t - crumbs[1][7] > KEEP_SECS) do table.remove(crumbs, 1) end
     checkArrival(here)
 end
@@ -217,7 +222,7 @@ end
 -- distance parcourue sur le chemin depuis son debut jusqu'a toi (tu es sur le segment bi)
 local function alongTrail(pts, bi, me)
     local L = 0
-    for k = 1, bi - 1 do L = L + Dist(pts[k][1], pts[k][2], pts[k + 1][1], pts[k + 1][2]) end
+    for k = 1, bi - 1 do L = L + Route.Dist(pts[k][1], pts[k][2], pts[k + 1][1], pts[k + 1][2]) end
     -- + ta projection sur le segment bi
     local a, b = pts[bi], pts[bi + 1]
     local dx, dy = b[1] - a[1], b[2] - a[2]
@@ -235,7 +240,7 @@ function TrailPoint(s, me)
         local pts, n = tr.pts, #tr.pts
         if tr.c == me[3] then
             local A, B = pts[1], pts[n]
-            local into = g and g[3] == me[3] and Dist(B[1], B[2], g[1], g[2]) <= END_NEAR
+            local into = g and g[3] == me[3] and Route.Dist(B[1], B[2], g[1], g[2]) <= END_NEAR
             local bd, bi
             local pr = prog[tr.k]
             if pr then bd, bi = nearestSeg(pts, me, pr - 2, pr + 4) end
@@ -246,23 +251,23 @@ function TrailPoint(s, me)
             if into then
                 if on then
                     -- sur le chemin : un point ~20 m plus loin vers le bout
-                    for k = bi + 1, n do aim = k; if Dist(me[1], me[2], pts[k][1], pts[k][2]) >= AIM then break end end
-                    if aim == n and Dist(me[1], me[2], B[1], B[2]) < 12 then aim = nil end
+                    for k = bi + 1, n do aim = k; if Route.Dist(me[1], me[2], pts[k][1], pts[k][2]) >= AIM then break end end
+                    if aim == n and Route.Dist(me[1], me[2], B[1], B[2]) < 12 then aim = nil end
                 else
                     -- pas encore dessus : son entree, si elle est plus pres que l'objectif (tu es du mauvais cote)
-                    local dA = Dist(me[1], me[2], A[1], A[2])
-                    if dA < 500 and dA + 15 < Dist(me[1], me[2], g[1], g[2]) then aim = 1 end
+                    local dA = Route.Dist(me[1], me[2], A[1], A[2])
+                    if dA < 500 and dA + 15 < Route.Dist(me[1], me[2], g[1], g[2]) then aim = 1 end
                 end
             elseif on and alongTrail(pts, bi, me) > 80 and g and g[3] == me[3]
-                   and Dist(A[1], A[2], g[1], g[2]) + 30 < Dist(me[1], me[2], g[1], g[2]) then
+                   and Route.Dist(A[1], A[2], g[1], g[2]) + 30 < Route.Dist(me[1], me[2], g[1], g[2]) then
                 -- le bout de ce chemin ne sert pas a l'etape : on ressort par ou on est entre
                 -- (seulement si tu es bien engage dessus : passer pres de l'entree ne detourne pas la fleche)
                 -- v1.45 : et seulement si l'entree te rapproche de l'objectif. Avant : arrive a Zoram'gar par
                 -- le chemin d'Astranaar, la fleche voulait te faire refaire tout le chemin pour aller a BFD (au nord)
-                for k = bi, 1, -1 do aim = k; if Dist(me[1], me[2], pts[k][1], pts[k][2]) >= AIM then break end end
+                for k = bi, 1, -1 do aim = k; if Route.Dist(me[1], me[2], pts[k][1], pts[k][2]) >= AIM then break end end
             end
             if aim then
-                local cost = (into and 0 or 100000) + Dist(me[1], me[2], pts[aim][1], pts[aim][2])
+                local cost = (into and 0 or 100000) + Route.Dist(me[1], me[2], pts[aim][1], pts[aim][2])
                 if not best or cost < best.cost then best = { cost = cost, p = pts[aim], out = not into } end
             end
         end
@@ -301,7 +306,7 @@ function TrailCmd(arg)
             local p = type(v) == "table" and v.p
             if p and #p >= 6 then
                 n = n + 1
-                say(string.format("  %s %.1f, %.1f  (%d)", MAPNAME[ZoneOf(p[#p - 2])] or tostring(p[#p - 2]), p[#p - 1], p[#p], #p / 3))
+                say(string.format("  %s %.1f, %.1f  (%d)", Est.MAPNAME[Route.ZoneOf(p[#p - 2])] or tostring(p[#p - 2]), p[#p - 1], p[#p], #p / 3))
             end
         end
         say(n == 0 and T("trailEmpty") or T("trailCount", n))
@@ -331,4 +336,10 @@ do
         local ok, nm = pcall(C_Spell.GetSpellName, spellID)
         if ok and nm and GATHER[nm] then TrailBreak() end
     end)
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Trail)
+do
+    local M = ns.Mod.Trail
+    M.TrailCmd = TrailCmd
 end

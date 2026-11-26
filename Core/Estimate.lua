@@ -4,6 +4,11 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+-- v1.50 : module ns.Mod.Est (publie en fin de fichier pour les autres fichiers)
+local BuildChainGuide, ChainFor, ChainSteps, DropRate, EST, FormatNum, HasBit, KillTime, MAPNAME, MobXP
+local MySpec, OnXPGain, QAvailable, QuestXP, RACEBIT, RUN, ResolveNewMaps, TraitTrees
+local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local BASE_KILL, DROP_PRIOR, DROP_WEIGHT, KILL_WORD, OBJ_SECS, SPEC, ZeroDiff
 
@@ -191,7 +196,7 @@ function Estimate(list, withTravel)
         local e = EST[q]
         if e then
             r.qxp = r.qxp + QuestXP(e, p)
-            if logById[q] == nil then go(e.s) end
+            if Core.logById[q] == nil then go(e.s) end
             go(e.h)
             for _, k in ipairs(e.k or {}) do
                 local n = k[2] or 1
@@ -242,7 +247,7 @@ function ChainFor(q, withSelf)
         for _, pq in ipairs(e.p or {}) do visit(pq) end
         if e.p1 then
             local ok = false
-            for _, pq in ipairs(e.p1) do if Rendue(pq) or logById[pq] ~= nil then ok = true end end
+            for _, pq in ipairs(e.p1) do if Rendue(pq) or Core.logById[pq] ~= nil then ok = true end end
             if not ok then
                 local pick
                 for _, pq in ipairs(e.p1) do if QAvailable(pq) then pick = pq; break end end
@@ -265,7 +270,7 @@ function ChainSteps(q, withSelf)
     local notes = D.CHAINNOTES or {}
     for _, id in ipairs(order) do
         local e = EST[id]
-        if logById[id] == nil then
+        if Core.logById[id] == nil then
             -- v1.46 : prerequis sur la prise (rapport du 2026-11-24, chaine paladin) : sans eux, la regle
             -- « en passant » (Near.lua) proposait les quetes suivantes du meme PNJ avant leur tour
             list[#list + 1] = at({ t = "accept", id = id, quest = e.n, lvl = e.l, preg = e.p, pre = e.p1,
@@ -303,7 +308,7 @@ function LockCandidates()
     if not State.steps then return out end
     for i = math.max(1, State.current - 25), #State.steps do
         local s = State.steps[i]
-        if blockedBy[i] and s.t == "accept" and not DB.lockHide[s.id] and type(s.id) == "number" and ChainFor(s.id) then
+        if Core.blockedBy[i] and s.t == "accept" and not DB.lockHide[s.id] and type(s.id) == "number" and ChainFor(s.id) then
             out[#out + 1] = i
         end
     end
@@ -372,17 +377,17 @@ function ResolveNewMaps()
         end
         return p
     end
-    for _, g in pairs(Guides) do for _, st in ipairs(g.steps or {}) do fixRow(st) end end
+    for _, g in pairs(Core.Guides) do for _, st in ipairs(g.steps or {}) do fixRow(st) end end
     for _, e in pairs(EST) do e.s, e.e, e.h = fixPos(e.s), fixPos(e.e), fixPos(e.h) end
-    for _, n in ipairs(FLIGHTS) do fixRow(n) end
+    for _, n in ipairs(Route.FLIGHTS) do fixRow(n) end
     for _, n in ipairs(ns.Inns or {}) do fixRow(n) end
     for _, n in ipairs(ns.Trainers or {}) do fixRow(n) end
     for k, p in pairs(ns.Vendors or {}) do ns.Vendors[k] = fixPos(p) end
-    for _, g in ipairs(GATES) do fixRow(g) end
-    for k = #TRANSPORTS, 1, -1 do
-        local tr = TRANSPORTS[k]
+    for _, g in ipairs(Route.GATES) do fixRow(g) end
+    for k = #Route.TRANSPORTS, 1, -1 do
+        local tr = Route.TRANSPORTS[k]
         tr.from, tr.to = fixPos(tr.from), fixPos(tr.to)
-        if not tr.from or not tr.to then table.remove(TRANSPORTS, k) end
+        if not tr.from or not tr.to then table.remove(Route.TRANSPORTS, k) end
     end
     wipe(wpCache)
     return found
@@ -390,3 +395,25 @@ end
 
 MAPNAME = { [1411] = "Durotar", [1420] = "Tirisfal Glades", [1434] = "Stranglethorn Vale", [1413] = "The Barrens" }
 
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Est)
+do
+    local M = ns.Mod.Est
+    M.BuildChainGuide = BuildChainGuide
+    M.ChainFor = ChainFor
+    M.ChainSteps = ChainSteps
+    M.DropRate = DropRate
+    M.EST = EST
+    M.FormatNum = FormatNum
+    M.HasBit = HasBit
+    M.KillTime = KillTime
+    M.MAPNAME = MAPNAME
+    M.MobXP = MobXP
+    M.MySpec = MySpec
+    M.OnXPGain = OnXPGain
+    M.QAvailable = QAvailable
+    M.QuestXP = QuestXP
+    M.RACEBIT = RACEBIT
+    M.RUN = RUN
+    M.ResolveNewMaps = ResolveNewMaps
+    M.TraitTrees = TraitTrees
+end

@@ -4,6 +4,23 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Perf = ns.Mod.Perf -- v1.50 : module
+-- v1.50 : module ns.Mod.Commands (publie en fin de fichier pour les autres fichiers)
+local BugWindow, ShowWelcome
+local Tutorial = ns.Mod.Tutorial -- v1.50 : module
+local DungeonSheet = ns.Mod.DungeonSheet -- v1.50 : module
+local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
+local PvP = ns.Mod.PvP -- v1.50 : module
+local Chronicle = ns.Mod.Chronicle -- v1.50 : module
+local Journal = ns.Mod.Journal -- v1.50 : module
+local Window = ns.Mod.Window -- v1.50 : module
+local Skin = ns.Mod.Skin -- v1.50 : module
+local Flow = ns.Mod.Flow -- v1.50 : module
+local Near = ns.Mod.Near -- v1.50 : module
+local Est = ns.Mod.Est -- v1.50 : module
+local Route = ns.Mod.Route -- v1.50 : module
+local Trail = ns.Mod.Trail -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local ListGuides, ShowNews
 
@@ -12,10 +29,10 @@ local ListGuides, ShowNews
 ------------------------------------------------------------------
 function ListGuides()
     local keys = {}
-    for k in pairs(Guides) do if not IS_DUNGEON[k] then keys[#keys + 1] = k end end
+    for k in pairs(Core.Guides) do if not Core.IS_DUNGEON[k] then keys[#keys + 1] = k end end
     table.sort(keys)
     for _, k in ipairs(keys) do
-        say(string.format("  %s%s - %s", k, k == DB.guide and T("active") or "", Title(Guides[k])))
+        say(string.format("  %s%s - %s", k, k == DB.guide and T("active") or "", Core.Title(Core.Guides[k])))
     end
     say(T("dList"))
     say(T("guideHelp"))
@@ -29,13 +46,13 @@ SlashCmdList["WARPATH"] = function(msg)
     local cmd, arg = (msg or ""):match("^(%S*)%s*(.-)$")
     cmd = (cmd or ""):lower()
     if cmd == "" or cmd == "toggle" then
-        ShowGuide(DB.shown == false)
+        Window.ShowGuide(DB.shown == false)
     elseif cmd == "compact" or cmd == "mini" then
-        ToggleMini()
+        Window.ToggleMini()
     elseif cmd == "intendance" or cmd == "quartermaster" or cmd == "qm" then
-        if arg == "stop" or arg == "quitter" or arg == "quit" then QMQuit() else QMOpen() end
+        if arg == "stop" or arg == "quitter" or arg == "quit" then Quartermaster.QMQuit() else Quartermaster.QMOpen() end
     elseif cmd == "skip" or cmd == "ignore" then
-        Ignore()
+        Flow.Ignore()
     elseif cmd == "unskip" then
         if arg == "all" or arg == "tout" then
             wipe(DB.ignored); wipe(DB.seen); DB.lvlWait = nil; say(T("unskipAll"))
@@ -48,15 +65,15 @@ SlashCmdList["WARPATH"] = function(msg)
             say(T("ignoredList", #list > 0 and table.concat(list, ", ") or T("none")))
             say(T("unskipHelp"))
         end
-        Advance(); Refresh(true)
+        Flow.Advance(); Refresh(true)
     elseif cmd == "next" then
-        Peek(1)
+        Flow.Peek(1)
     elseif cmd == "prev" then
-        Peek(-1)
+        Flow.Peek(-1)
     elseif cmd == "now" or cmd == "sync" then
-        State.peek = nil; if optCache then optCache.key = nil end; Advance(); Refresh(true)
+        State.peek = nil; if Route.optCache then Route.optCache.key = nil end; Flow.Advance(); Refresh(true)
         if State.steps then
-            if State.current > #State.steps then say(T("doneByQuests", Title(State.G)))
+            if State.current > #State.steps then say(T("doneByQuests", Core.Title(State.G)))
             else say(T("stepNow", State.current, #State.steps)) end
         end
     elseif cmd == "trajet" or cmd == "route" then
@@ -68,8 +85,8 @@ SlashCmdList["WARPATH"] = function(msg)
         if here[3] ~= dest[3] then say(T("routeOther")); return end
         local walk = Walk(here, dest)
         local fl, c = BestFlight(here, dest, (DB.useFlights ~= false) and KnownFlights() or {})
-        say(T("routeWalk", math.floor(walk / RUN / 60 + 0.5), math.floor(Dist(here[1], here[2], dest[1], dest[2]) + 0.5)))
-        if fl then say(T("routeFly", fl.from.name, fl.to.name, math.floor(c / RUN / 60 + 0.5)))
+        say(T("routeWalk", math.floor(walk / Est.RUN / 60 + 0.5), math.floor(Route.Dist(here[1], here[2], dest[1], dest[2]) + 0.5)))
+        if fl then say(T("routeFly", fl.from.name, fl.to.name, math.floor(c / Est.RUN / 60 + 0.5)))
         else say(T("routeNoFly")) end
     elseif cmd == "goto" then
         local n = tonumber(arg)
@@ -82,15 +99,15 @@ SlashCmdList["WARPATH"] = function(msg)
         if arg == "" then ListGuides()
         elseif arg:lower() == "auto" then
             DB.manual = nil
-            local k = AutoPick()
+            local k = Flow.AutoPick()
             if k then SetGuide(k) end
-        elseif IS_DUNGEON[arg:lower()] then StartDungeon(arg:lower())
+        elseif Core.IS_DUNGEON[arg:lower()] then Flow.StartDungeon(arg:lower())
         elseif SetGuide(arg:lower()) then DB.manual = true
         else say(T("unknownGuide", arg)); ListGuides() end
     elseif cmd == "options" or cmd == "config" or cmd == "o" then
         ns.UI.ToggleOptions()
     elseif cmd == "perf" then
-        PerfStart(tonumber(arg))   -- v1.47 : mesure des performances (60 s par defaut)
+        Perf.PerfStart(tonumber(arg))   -- v1.47 : mesure des performances (60 s par defaut)
     elseif cmd == "fleche" or cmd == "flèche" or cmd == "arrow" or cmd == "apparence" or cmd == "appearance" then
         ns.UI.OpenOptionsTab(6)   -- v1.46 : onglet Apparence (fenetre, fleche, cartes)
     elseif cmd == "lang" or cmd == "langue" or cmd == "language" then
@@ -102,14 +119,14 @@ SlashCmdList["WARPATH"] = function(msg)
         say(DB.mmHide and T("mmHidden") or T("mmShown"))
     elseif cmd == "donjon" or cmd == "dungeon" or cmd == "d" then
         local a = arg:lower()
-        if a == "" then ListDungeons()
-        elseif a == "stop" then StopDungeon()
+        if a == "" then Flow.ListDungeons()
+        elseif a == "stop" then Flow.StopDungeon()
         elseif a == "fiche" or a == "sheet" or a == "quetes" or a == "quests" or a:match("^fiche ") or a:match("^sheet ") or a:match("^quests ") then
             local k = a:match("^%S+%s+(%S+)")
-            if not ((k and DungeonSheetOpen and DungeonSheetOpen(k)) or (not k and DungeonSheetDefault and DungeonSheetDefault())) then say(T("dsNone")) end
+            if not ((k and DungeonSheet.DungeonSheetOpen and DungeonSheet.DungeonSheetOpen(k)) or (not k and DungeonSheet.DungeonSheetDefault and DungeonSheet.DungeonSheetDefault())) then say(T("dsNone")) end
         elseif a == "reset" then wipe(DB.dAnswer); wipe(DB.dLater); say(T("dReset")); CheckDungeons()
-        elseif IS_DUNGEON[a] then StartDungeon(a)
-        else say(T("unknownDungeon", arg)); ListDungeons() end
+        elseif Core.IS_DUNGEON[a] then Flow.StartDungeon(a)
+        else say(T("unknownDungeon", arg)); Flow.ListDungeons() end
     elseif cmd == "wp" then
         DB.wp = not DB.wp
         if not DB.wp then ClearWaypoint() end
@@ -132,7 +149,7 @@ SlashCmdList["WARPATH"] = function(msg)
         -- signalement : enregistre ou tu en es (envoie ensuite le fichier WTF\Account\...\SavedVariables\OghoulesWarpath.lua)
         local g = DB.guide
         local i = g and DB.step[g]
-        local s = g and Guides[g] and i and Guides[g].steps[i]
+        local s = g and Core.Guides[g] and i and Core.Guides[g].steps[i]
         local mapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
         local pos = mapID and ns.MapAPI.PlayerPos(mapID, "player")
         local x, y = 0, 0
@@ -140,20 +157,20 @@ SlashCmdList["WARPATH"] = function(msg)
         WarpathDropDB._bugs = WarpathDropDB._bugs or {}
         local b = WarpathDropDB._bugs
         if #b >= 100 then table.remove(b, 1) end
-        b[#b + 1] = { when = date and date("%Y-%m-%d %H:%M") or "", v = VERSION, guide = g, step = i,
-            id = s and s.id, text = s and StepText(s), map = mapID, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10,
+        b[#b + 1] = { when = date and date("%Y-%m-%d %H:%M") or "", v = Core.VERSION, guide = g, step = i,
+            id = s and s.id, text = s and Core.StepText(s), map = mapID, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10,
             lvl = UnitLevel("player"), race = State.myRace, class = State.myClass, note = arg ~= "" and arg or nil }
         say(T("bugSaved", #b))
     elseif cmd == "chemin" or cmd == "path" or cmd == "trail" then
-        TrailCmd(arg)
+        Trail.TrailCmd(arg)
     elseif cmd == "passage" or cmd == "pass" then
-        PassageCmd(arg)
+        Near.PassageCmd(arg)
     elseif cmd == "diag" and arg ~= "plus" and arg ~= "more" then
         -- version courte : ce qui sert a comprendre un souci en jeu (grotte, position, specialisation)
         local function yn(v) return v and ("|cff9cc7a8" .. T("yes") .. "|r") or ("|cffc24a3e" .. T("no") .. "|r") end
-        local zone = State.G and Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "") or "?"
-        say(T("dgxHead", VERSION, zone, State.current or 0, State.steps and #State.steps or 0))
-        local c = CaveDiag and CaveDiag() or {}
+        local zone = State.G and Core.Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "") or "?"
+        say(T("dgxHead", Core.VERSION, zone, State.current or 0, State.steps and #State.steps or 0))
+        local c = Near.CaveDiag and Near.CaveDiag() or {}
         say("|cffcdbb8e" .. T("dgxCave") .. "|r")
         say("   " .. T("dgxWhere", c.indoors and ("|cff9cc7a8" .. T("diagIn") .. "|r") or T("diagOut")))
         say("   " .. T("dgxCaveStep", yn(c.cave)))
@@ -168,9 +185,9 @@ SlashCmdList["WARPATH"] = function(msg)
         local AIM = { pass = "dgxAimPass", zone = "dgxAimZone", enter = "dgxAimEnter", exit = "dgxAimExit", obj = "dgxAimObj", corpse = "dgxAimCorpse", step = "dgxAimStep" }
         say("   " .. T("dgxAim", T(AIM[c.aim] or "dgxAimStep")))
         local pm, px, py = PlayerPos()
-        say(T("dgxPos", MAPNAME[pm] or tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?"))
-        local spec = MySpec and MySpec()
-        say(T("dgxSpec", tostring(spec or "?"), math.floor((KillTime()) + 0.5)))
+        say(T("dgxPos", Est.MAPNAME[pm] or tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?"))
+        local spec = Est.MySpec and Est.MySpec()
+        say(T("dgxSpec", tostring(spec or "?"), math.floor((Est.KillTime()) + 0.5)))
         say("|cff8c7f62" .. T("dgxMore") .. "|r")
     elseif cmd == "diag" then
         -- version complete (/warpath diag plus) : API du jeu, talents, donnees
@@ -188,19 +205,19 @@ SlashCmdList["WARPATH"] = function(msg)
         for _, n in ipairs({ "C_ClassTalents", "C_Traits", "C_SpecializationInfo", "C_Talent" }) do apis[#apis + 1] = n .. "=" .. (_G[n] and "oui" or "non") end
         say("API talents : " .. table.concat(apis, ", "))
         local okC2, cs = pcall(function() return C_SpecializationInfo and C_SpecializationInfo.GetSpecialization and C_SpecializationInfo.GetSpecialization() end)
-        local trees, why = TraitTrees()
+        local trees, why = Est.TraitTrees()
         local tl = {}
         for t, tr in ipairs(trees or {}) do tl[#tl + 1] = t .. ":" .. tostring(tr.id) .. " (" .. tr.n .. " noeuds, " .. tr.spent .. " pts)" end
         say("C_SpecializationInfo=" .. tostring(okC2 and cs) .. " ; traits " .. tostring(why) .. " ; arbres " .. (#tl > 0 and table.concat(tl, ", ") or "aucun"))
-        local spec = MySpec and MySpec()
-        say(T("diagHead", VERSION))
-        say(T("diagSpec", tostring(okS and sp), tostring(okT and tab), tostring(spec), math.floor((KillTime()) + 0.5)))
+        local spec = Est.MySpec and Est.MySpec()
+        say(T("diagHead", Core.VERSION))
+        say(T("diagSpec", tostring(okS and sp), tostring(okT and tab), tostring(spec), math.floor((Est.KillTime()) + 0.5)))
         local indoors = IsIndoors and IsIndoors()
         local pm, px, py = PlayerPos()
         say(T("diagPos", tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?", indoors and T("diagIn") or T("diagOut"),
             yn(PlayerWP() ~= nil)))
         local s = State.steps and State.steps[State.current]
-        local q = s and Ids(s)[1]
+        local q = s and Core.Ids(s)[1]
         local objs = q and C_QuestLog and C_QuestLog.GetQuestObjectives and select(2, pcall(C_QuestLog.GetQuestObjectives, q))
         local o1 = type(objs) == "table" and objs[1]
         say(T("diagQuest", tostring(q), o1 and (tostring(o1.text) .. " " .. tostring(o1.numFulfilled) .. "/" .. tostring(o1.numRequired)) or "-",
@@ -212,7 +229,7 @@ SlashCmdList["WARPATH"] = function(msg)
         say((Lang() == "en" and "Step item: " or "Objet de l'étape : ") ..tostring(ns.Comfort and ns.Comfort.ItemDiag and select(2, pcall(ns.Comfort.ItemDiag))))
         say(T("diagData", nC, nB, wm, (GetLocale and GetLocale()) or "?", Lang()))
     elseif cmd == "classe" or cmd == "class" then
-        local list = ClassQuestList()
+        local list = Flow.ClassQuestList()
         local n = tonumber(arg)
         if n and list[n] and list[n].q and not list[n].done then AskChain(list[n].q, true); return end
         if #list == 0 then say(T("classNone")); return end
@@ -221,27 +238,27 @@ SlashCmdList["WARPATH"] = function(msg)
         end
     elseif cmd == "tisser" or cmd == "weave" then
         -- v1.47 : /warpath tisser <id> integre une chaine de classe au guide ; « off » les retire toutes
-        if arg == "off" then Unweave(nil); return end
+        if arg == "off" then Flow.Unweave(nil); return end
         local q = tonumber(arg)
-        if q then Weave(q); return end
+        if q then Flow.Weave(q); return end
         local n = 0
-        for wq in pairs(DB.woven or {}) do n = n + 1; say("  " .. wq .. " " .. (EST[wq] and EST[wq].n or "?")) end
+        for wq in pairs(DB.woven or {}) do n = n + 1; say("  " .. wq .. " " .. (Est.EST[wq] and Est.EST[wq].n or "?")) end
         if n == 0 then say(T("wovenNone")) end
     elseif cmd == "tuto" or cmd == "tutorial" or cmd == "visite" or cmd == "tour" then
-        ShowTutorial(true)
+        Tutorial.ShowTutorial(true)
     elseif cmd == "news" or cmd == "nouveautes" or cmd == "quoi" then
         if not ShowNews(true) then say(T("newsNone")) end
     elseif cmd == "chronique" or cmd == "chronicle" or cmd == "chron" then
-        ChronShow(arg == "now" and 0 or nil)
+        Chronicle.ChronShow(arg == "now" and 0 or nil)
     elseif cmd == "apercu" or cmd == "aperçu" or cmd == "preview" then
         -- v1.42 : montre tout de suite la banniere de la Chronique et le « Quoi de neuf » (fondus, reflet),
         -- sans rien changer aux sauvegardes
-        if not (ChronPreview and ChronPreview()) then say(T("chPreviewNone")) end
-        Toast(T("popNews"), T("newsToast", VERSION), function() ShowNews(true) end)
+        if not (Chronicle.ChronPreview and Chronicle.ChronPreview()) then say(T("chPreviewNone")) end
+        Skin.Toast(T("popNews"), T("newsToast", Core.VERSION), function() ShowNews(true) end)
     elseif cmd == "pvp" then
-        PvPReport(arg)
+        PvP.PvPReport(arg)
     elseif cmd == "temps" or cmd == "time" or cmd == "xp" then
-        JournalReport((arg or ""):lower())
+        Journal.JournalReport((arg or ""):lower())
     elseif cmd == "partage" or cmd == "share" then
         if arg == "off" then WarpathDropDB._share = false elseif arg == "on" then WarpathDropDB._share = true end
         local np = 0
@@ -249,7 +266,7 @@ SlashCmdList["WARPATH"] = function(msg)
         say(T("shareState", ns.ShareOn() and T("shareOn") or T("shareOff"), np))
     elseif cmd == "reset" then
         wipe(DB.ignored); wipe(DB.seen); wipe(DB.done); DB.manual = nil; DB.lvlWait = nil
-        local k = AutoPick()
+        local k = Flow.AutoPick()
         if k then SetGuide(k) end
         say(T("resetDone"))
     else
@@ -287,12 +304,12 @@ do
     _G["BINDING_NAME_CLICK WarpathTarget2:LeftButton"] = B("Cibler la 2e cible de l'étape", "Target the step's 2nd target")
 end
 _G.WarpathBinding = function(action)
-    if action == "ok" then Ignore()
-    elseif action == "prev" then Peek(-1)
-    elseif action == "next" then Peek(1)
-    elseif action == "now" then BackToNow()
+    if action == "ok" then Flow.Ignore()
+    elseif action == "prev" then Flow.Peek(-1)
+    elseif action == "next" then Flow.Peek(1)
+    elseif action == "now" then Flow.BackToNow()
     elseif action == "toggle" then SlashCmdList.WARPATH("toggle")
-    elseif action == "mini" then ToggleMini()
+    elseif action == "mini" then Window.ToggleMini()
     elseif action == "options" then SlashCmdList.WARPATH("options") end
 end
 
@@ -530,25 +547,25 @@ function ShowNews(all)
             else more = more + 1 end
         end
     end
-    if WarpathDropDB then WarpathDropDB._seenVer = VERSION end
+    if WarpathDropDB then WarpathDropDB._seenVer = Core.VERSION end
     if n == 0 then return false end
     if more > 0 and not all then lines[#lines + 1] = "|cff8c7f62" .. T("newsMore", more) .. "|r" end
     StaticPopupDialogs["WARPATH_NEWS"] = { text = "%s", button1 = T("newsOk"), timeout = 0, whileDead = true, hideOnEscape = true }
     -- v1.41 (audit) : apres une mise a jour, un bandeau discret (10 s) plutot qu'une fenetre ; clic = le detail.
     -- /warpath news ouvre toujours la fenetre complete.
-    if not all and Toast then
-        local txt = T("newsHead", VERSION) .. "\n\n" .. table.concat(lines, "\n\n")
-        Toast(T("popNews"), T("newsToast", VERSION), function() Popup("WARPATH_NEWS", txt) end)
+    if not all and Skin.Toast then
+        local txt = T("newsHead", Core.VERSION) .. "\n\n" .. table.concat(lines, "\n\n")
+        Skin.Toast(T("popNews"), T("newsToast", Core.VERSION), function() Popup("WARPATH_NEWS", txt) end)
         return true
     end
-    Popup("WARPATH_NEWS", T("newsHead", VERSION) .. "\n\n" .. table.concat(lines, "\n\n"))
+    Popup("WARPATH_NEWS", T("newsHead", Core.VERSION) .. "\n\n" .. table.concat(lines, "\n\n"))
     return true
 end
 
 function ShowWelcome()
     if DB and DB.welcomed then
         if WarpathDropDB and WarpathDropDB._seenVer == nil then WarpathDropDB._seenVer = "0.68" end -- deja installe avant le Quoi de neuf
-        if WarpathDropDB and vnum(WarpathDropDB._seenVer) < vnum(VERSION) then ShowNews(false) end
+        if WarpathDropDB and vnum(WarpathDropDB._seenVer) < vnum(Core.VERSION) then ShowNews(false) end
         return
     end
     if not DB or DB.welcomed or not StaticPopup_Show then return end
@@ -556,7 +573,7 @@ function ShowWelcome()
     -- version courte apres la visite). Le choix du 1er temps suffit a ne plus redemander la bienvenue.
     local function welcomed()
         DB.welcomed = true
-        if WarpathDropDB then WarpathDropDB._seenVer = VERSION end
+        if WarpathDropDB then WarpathDropDB._seenVer = Core.VERSION end
     end
     local function last(key)
         return {
@@ -565,13 +582,13 @@ function ShowWelcome()
             timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
         }
     end
-    StaticPopupDialogs["WARPATH_WELCOME"] = last(T("welcome", WarpathName()))
+    StaticPopupDialogs["WARPATH_WELCOME"] = last(T("welcome", Skin.WarpathName()))
     StaticPopupDialogs["WARPATH_WELCOME_DONE"] = last(T("tutoDone"))
     StaticPopupDialogs["WARPATH_WELCOME_ASK"] = {
-        text = T("welcomeAsk", WarpathName()), button1 = T("welcomeTour"), button2 = T("welcomeNoTour"),
+        text = T("welcomeAsk", Skin.WarpathName()), button1 = T("welcomeTour"), button2 = T("welcomeNoTour"),
         OnAccept = function()
             welcomed()
-            ShowTutorial(true, function() Popup("WARPATH_WELCOME_DONE") end)
+            Tutorial.ShowTutorial(true, function() Popup("WARPATH_WELCOME_DONE") end)
         end,
         OnCancel = function(_, _, reason)
             welcomed(); DB.tutoSeen = true
@@ -592,45 +609,52 @@ do
             win:SetFrameStrata("FULLSCREEN_DIALOG"); win:EnableMouse(true); win:SetClampedToScreen(true)
             win:SetMovable(true); win:RegisterForDrag("LeftButton")
             win:SetScript("OnDragStart", win.StartMoving); win:SetScript("OnDragStop", win.StopMovingOrSizing)
-            local bg = Tex(win, COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
+            local bg = Skin.Tex(win, Skin.COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
             for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-                local t = Tex(win, COL.line)
+                local t = Skin.Tex(win, Skin.COL.line)
                 if side == "TOP" or side == "BOTTOM" then t:SetHeight(1); t:SetPoint(side .. "LEFT"); t:SetPoint(side .. "RIGHT")
                 else t:SetWidth(1); t:SetPoint("TOP" .. side); t:SetPoint("BOTTOM" .. side) end
             end
             -- v1.41 (uniformisation) : en-tete standard (34 px, losange rouge, titre a gauche, « x »)
             win:SetHeight(264)
-            local hbg = Tex(win, COL.panel or COL.bg, 1, "BORDER"); hbg:SetHeight(34); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
-            local hln = Tex(win, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -34); hln:SetPoint("TOPRIGHT", 0, -34)
-            local gem = Diamond(win, 8, COL.red); gem:SetPoint("LEFT", win, "TOPLEFT", 14, -17)
-            win.head = FS(win, 12, COL.white, FONT, "LEFT"); win.head:SetPoint("LEFT", win, "TOPLEFT", 30, -17)
-            local x = HeadButton(win, "x"); x:SetPoint("RIGHT", win, "TOPRIGHT", -6, -17)
+            local hbg = Skin.Tex(win, Skin.COL.panel or Skin.COL.bg, 1, "BORDER"); hbg:SetHeight(34); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
+            local hln = Skin.Tex(win, Skin.COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -34); hln:SetPoint("TOPRIGHT", 0, -34)
+            local gem = Skin.Diamond(win, 8, Skin.COL.red); gem:SetPoint("LEFT", win, "TOPLEFT", 14, -17)
+            win.head = Skin.FS(win, 12, Skin.COL.white, Skin.FONT, "LEFT"); win.head:SetPoint("LEFT", win, "TOPLEFT", 30, -17)
+            local x = Skin.HeadButton(win, "x"); x:SetPoint("RIGHT", win, "TOPRIGHT", -6, -17)
             x:SetScript("OnClick", function() win:Hide() end)
-            win.sub = FS(win, 11, COL.soft, FONT, "LEFT"); win.sub:SetPoint("TOPLEFT", 16, -46); win.sub:SetWidth(348)
+            win.sub = Skin.FS(win, 11, Skin.COL.soft, Skin.FONT, "LEFT"); win.sub:SetPoint("TOPLEFT", 16, -46); win.sub:SetWidth(348)
             local box = CreateFrame("EditBox", nil, win)
             box:SetPoint("TOPLEFT", 16, -84); box:SetPoint("BOTTOMRIGHT", -16, 46)
             box:SetMultiLine(true); box:SetAutoFocus(true); box:SetMaxLetters(600)
             if box.SetFontObject then box:SetFontObject(ChatFontNormal) end
-            if box.SetFont then pcall(box.SetFont, box, FONT, 12, "") end
+            if box.SetFont then pcall(box.SetFont, box, Skin.FONT, 12, "") end
             if box.SetTextInsets then box:SetTextInsets(6, 6, 6, 6) end
-            local bbg = Tex(box, COL.faint, 0.35, "BACKGROUND"); bbg:SetAllPoints()
+            local bbg = Skin.Tex(box, Skin.COL.faint, 0.35, "BACKGROUND"); bbg:SetAllPoints()
             box:SetScript("OnEscapePressed", function() win:Hide() end)
             win.box = box
-            win.send = FlatButton(win, 110, 22, function()
+            win.send = Skin.FlatButton(win, 110, 22, function()
                 local t = (win.box:GetText() or ""):gsub("[\r\n]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
                 SlashCmdList.WARPATH("bug " .. (t ~= "" and t or "-"))
                 win:Hide()
             end)
             win.send:SetPoint("BOTTOMRIGHT", -16, 14)
-            win.cancel = FlatButton(win, 90, 22, function() win:Hide() end)
+            win.cancel = Skin.FlatButton(win, 90, 22, function() win:Hide() end)
             win.cancel:SetPoint("RIGHT", win.send, "LEFT", -8, 0)
             if UISpecialFrames then table.insert(UISpecialFrames, "WarpathBugWindow") end
         end
-        win.head:SetText(Caps(T("bugTitle")))
+        win.head:SetText(Skin.Caps(T("bugTitle")))
         win.sub:SetText(T("bugExplain"))
-        win.send:SetLabel(Caps(T("bugSend"))); win.cancel:SetLabel(Caps(T("chClose")))
+        win.send:SetLabel(Skin.Caps(T("bugSend"))); win.cancel:SetLabel(Skin.Caps(T("chClose")))
         win.box:SetText("")
         win:Show(); if win.Raise then win:Raise() end
         if win.box.SetFocus then win.box:SetFocus() end
     end
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Commands)
+do
+    local M = ns.Mod.Commands
+    M.BugWindow = BugWindow
+    M.ShowWelcome = ShowWelcome
 end

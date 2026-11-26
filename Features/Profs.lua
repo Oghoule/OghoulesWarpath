@@ -8,6 +8,15 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
+-- v1.50 : module ns.Mod.Profs (publie en fin de fichier pour les autres fichiers)
+local NearestTrainer, PROF_KEY, PROF_ORDER, ProfName, ProfOn, ProfQuestList, ProfSet, TrainReminder
+local TrainerPinsRefresh
+local Skin = ns.Mod.Skin -- v1.50 : module
+local Near = ns.Mod.Near -- v1.50 : module
+local Est = ns.Mod.Est -- v1.50 : module
+local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local CheckWeaponMaster, PROF_NAMES
 
@@ -102,8 +111,8 @@ do
     function ProfQuestList()
         local out = {}
         for _, e in ipairs(ns.ProfQuests or {}) do
-            if ProfOn(e.s) and EST[e.q] and QAvailable(e.q) then
-                out[#out + 1] = { q = e.q, s = e.s, m = e.m, r = e.r, l = e.l, name = EST[e.q].n, spec = e.x, dungeon = e.d,
+            if ProfOn(e.s) and Est.EST[e.q] and Est.QAvailable(e.q) then
+                out[#out + 1] = { q = e.q, s = e.s, m = e.m, r = e.r, l = e.l, name = Est.EST[e.q].n, spec = e.x, dungeon = e.d,
                                   done = Rendue(e.q), rank = rankOk(e) }
             end
         end
@@ -111,11 +120,11 @@ do
         return out
     end
 
-    local function mapOf(id) local e = EST[id]; return e and e.s and e.s[1] end
+    local function mapOf(id) local e = Est.EST[id]; return e and e.s and e.s[1] end
 
     function CheckProfQuests()
-        if not DB or DB.noProfAsk or DB.guide == "chain" or IS_DUNGEON[DB.guide] or State.asking or not StaticPopup_Show then return end
-        if PopupVisible() or (StaticPopup_Visible and (StaticPopup_Visible("WARPATH_CHAIN") or StaticPopup_Visible("WARPATH_DUNGEON"))) then return end
+        if not DB or DB.noProfAsk or DB.guide == "chain" or Core.IS_DUNGEON[DB.guide] or State.asking or not StaticPopup_Show then return end
+        if Skin.PopupVisible() or (StaticPopup_Visible and (StaticPopup_Visible("WARPATH_CHAIN") or StaticPopup_Visible("WARPATH_DUNGEON"))) then return end
         if UnitAffectingCombat and UnitAffectingCombat("player") then return end
         DB.pqAsked = DB.pqAsked or {}
         local lvl = UnitLevel("player") or 1
@@ -123,12 +132,12 @@ do
         if not here then return end
         for _, c in ipairs(ProfQuestList()) do
             if not c.done and not c.spec and not c.dungeon and c.rank and ProfDetect()[c.s] ~= nil and lvl >= c.r and lvl <= c.l + 6
-                and not DB.pqAsked[c.q] and logById[c.q] == nil then
-                local order = ChainFor(c.q, true)
+                and not DB.pqAsked[c.q] and Core.logById[c.q] == nil then
+                local order = Est.ChainFor(c.q, true)
                 if order and #order > 0 then
                     -- seulement si la chaine commence dans la zone ou tu es (une suggestion en passant, pas un voyage)
                     local first = order[1]
-                    if logById[first] ~= nil or mapOf(first) == here then
+                    if Core.logById[first] ~= nil or mapOf(first) == here then
                         DB.pqAsked[c.q] = true
                         AskChain(c.q, true, "prof")
                         return
@@ -143,8 +152,8 @@ do
     local CAPITAL = { [1637] = true, [1638] = true, [1497] = true }
     function CheckProfIntro()
         if not DB or DB.profIntro == "done" or not StaticPopup_Show then return end
-        if DB.guide == "chain" or IS_DUNGEON[DB.guide] or State.asking then return end
-        if PopupVisible() or (StaticPopup_Visible and (StaticPopup_Visible("WARPATH_CHAIN") or StaticPopup_Visible("WARPATH_DUNGEON"))) then return end
+        if DB.guide == "chain" or Core.IS_DUNGEON[DB.guide] or State.asking then return end
+        if Skin.PopupVisible() or (StaticPopup_Visible and (StaticPopup_Visible("WARPATH_CHAIN") or StaticPopup_Visible("WARPATH_DUNGEON"))) then return end
         if UnitAffectingCombat and UnitAffectingCombat("player") then return end
         local lvl = UnitLevel("player") or 1
         local known = ProfDetect(true)
@@ -183,20 +192,20 @@ do
         for _, e in ipairs(list or {}) do
             local g = WP(e[1], e[2], e[3])
             if g and g[3] == me[3] then
-                local d = Dist(me[1], me[2], g[1], g[2])
+                local d = Route.Dist(me[1], me[2], g[1], g[2])
                 if not bd or d < bd then best, bd = e, d end
             end
         end
         return best, bd
     end
     local function mname(m)
-        if MAPNAME[m] then return MAPNAME[m] end
+        if Est.MAPNAME[m] then return Est.MAPNAME[m] end
         local ok, i = pcall(function() return C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(m) end)
         return (ok and i and i.name) or ""
     end
     local function setWP(e)
         -- la fleche de l'addon y va (avant, seul le point du jeu changeait, et le guide l'ecrasait aussitot)
-        if SetErrand then SetErrand(e[1], e[2], e[3], e[4]); return end
+        if Near.SetErrand then Near.SetErrand(e[1], e[2], e[3], e[4]); return end
         if C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates then
             pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(e[1], e[2] / 100, e[3] / 100))
             if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
@@ -211,12 +220,12 @@ do
     -- premiere visite d'une capitale : competences d'armes
     local CAPS = { [1454] = true, [1456] = true, [1458] = true }
     function CheckWeaponMaster()
-        if not DB or DB.wmSeen or State.asking or PopupVisible() then return end
+        if not DB or DB.wmSeen or State.asking or Skin.PopupVisible() then return end
         local here = PlayerPos and select(1, PlayerPos())
         if not (here and CAPS[here]) then return end
         -- v1.41 : plus de question pour le maitre d'armes, l'Intendance s'en charge : une seule ligne dans le chat
         -- pour la faire connaitre (premiere capitale au-dessus du niveau 15, ou l'Intendance n'est pas proposee)
-        if QMOpen then
+        if Quartermaster.QMOpen then
             DB.wmSeen = true
             if not DB.qmHint then DB.qmHint = true; say(T("qmHint")) end
             return
@@ -248,10 +257,10 @@ do
         local child = WorldMapFrame.ScrollContainer.Child
         b = CreateFrame("Button", nil, child)
         b:SetSize(18, 18); b:SetFrameStrata("HIGH")
-        b.bg = Tex(b, COL.bg, 0.9, "BACKGROUND"); b.bg:SetAllPoints()
+        b.bg = Skin.Tex(b, Skin.COL.bg, 0.9, "BACKGROUND"); b.bg:SetAllPoints()
         b.edge = {}
         for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-            local e = Tex(b, COL.accent)
+            local e = Skin.Tex(b, Skin.COL.accent)
             if side == "TOP" or side == "BOTTOM" then e:SetHeight(1); e:SetPoint(side .. "LEFT"); e:SetPoint(side .. "RIGHT")
             else e:SetWidth(1); e:SetPoint("TOP" .. side); e:SetPoint("BOTTOM" .. side) end
         end
@@ -260,15 +269,15 @@ do
         b:SetScript("OnEnter", function(self)
             local t = Tip(); t:SetOwner(self, "ANCHOR_RIGHT")
             t:AddLine(self.t.n)
-            t:AddLine(self.t.label or (ProfName(self.t.s) .. (RANKKEY[self.t.r] and (" - " .. T(RANKKEY[self.t.r])) or "")), COL.gold[1], COL.gold[2], COL.gold[3])
-            t:AddLine(T("trainerClick"), COL.soft[1], COL.soft[2], COL.soft[3], true)
+            t:AddLine(self.t.label or (ProfName(self.t.s) .. (RANKKEY[self.t.r] and (" - " .. T(RANKKEY[self.t.r])) or "")), Skin.COL.gold[1], Skin.COL.gold[2], Skin.COL.gold[3])
+            t:AddLine(T("trainerClick"), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3], true)
             t:Show()
         end)
         b:SetScript("OnLeave", function() Tip():Hide() end)
         b:SetScript("OnClick", function(self)
             local d = self.t
-            if SetErrand and d.m > 0 then
-                SetErrand(d.m, d.x, d.y, d.n)
+            if Near.SetErrand and d.m > 0 then
+                Near.SetErrand(d.m, d.x, d.y, d.n)
                 say(T("trainerWP", d.n, d.label or ProfName(d.s)))
             elseif C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates and d.m > 0 then
                 pcall(C_Map.SetUserWaypoint, UiMapPoint.CreateFromCoordinates(d.m, d.x / 100, d.y / 100))
@@ -330,27 +339,27 @@ do
         WorldMapFrame._warpathTrainers = true
         local function toggle(lblKey, tipKey, get, set)
             local cb
-            cb = Chip(WorldMapFrame.ScrollContainer, function() set(not get()); cb.sync(); TrainerPinsRefresh(true) end)
-            function cb.sync() cb:SetState(Caps(T(lblKey)), get()) end
+            cb = Skin.Chip(WorldMapFrame.ScrollContainer, function() set(not get()); cb.sync(); TrainerPinsRefresh(true) end)
+            function cb.sync() cb:SetState(Skin.Caps(T(lblKey)), get()) end
             cb:SetScript("OnEnter", function(self)
-                local t = Tip(); t:SetOwner(self, "ANCHOR_RIGHT"); t:AddLine(T(tipKey), COL.white[1], COL.white[2], COL.white[3], true); t:Show()
+                local t = Tip(); t:SetOwner(self, "ANCHOR_RIGHT"); t:AddLine(T(tipKey), Skin.COL.white[1], Skin.COL.white[2], Skin.COL.white[3], true); t:Show()
             end)
             cb:SetScript("OnLeave", function() Tip():Hide() end)
             return cb
         end
         local cb = toggle("trainerMapBtn", "trainerMapTip", trainersShown, function(v) DB.trainerPins = v end)
-        local bar = MapBar()
+        local bar = Skin.MapBar()
         if bar then bar:Add(cb, 2) else cb:SetPoint("BOTTOMLEFT", 8, 34); cb:SetFrameStrata("HIGH") end
         local cb2 = toggle("trainerAllBtn", "trainerAllTip", function() return DB and DB.trainerAll and true or false end, function(v) if DB then DB.trainerAll = v end end)
         if bar then bar:Add(cb2, 2) else cb2:SetPoint("LEFT", cb, "RIGHT", 6, 0); cb2:SetFrameStrata("HIGH") end
         -- la carte peut etre prete avant tes reglages (DB) : on attend qu'ils soient charges
         local function sync() if not DB then return end; cb.sync(); cb2.sync() end
         sync()
-        WorldMapFrame:HookScript("OnShow", function() ChipScale(cb, cb2); sync(); TrainerPinsRefresh(true) end)
+        WorldMapFrame:HookScript("OnShow", function() Skin.ChipScale(cb, cb2); sync(); TrainerPinsRefresh(true) end)
         local acc = 0
         WorldMapFrame:HookScript("OnUpdate", function(_, el)
             acc = acc + el; if acc < 0.25 then return end; acc = 0
-            ChipScale(cb, cb2)
+            Skin.ChipScale(cb, cb2)
             TrainerPinsRefresh()
         end)
     end
@@ -365,11 +374,25 @@ do
         if e == "SKILL_LINES_CHANGED" or e == "TRADE_SKILL_SHOW" then ProfDetect(true); return end
         local function go()
             -- Intendance (premiere capitale, niveau 15 max) : elle inclut le maitre d'armes, donc pas de 2e question
-            local ok, qm = pcall(function() return CheckQuartermaster and CheckQuartermaster() end)
+            local ok, qm = pcall(function() return Quartermaster.CheckQuartermaster and Quartermaster.CheckQuartermaster() end)
             if ok and qm then return end
             pcall(CheckProfIntro); pcall(CheckProfQuests)
             if not (DB.qm or DB.qmPick) then pcall(CheckWeaponMaster) end
         end
         if C_Timer and C_Timer.After then C_Timer.After(4, go) else go() end
     end)
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Profs)
+do
+    local M = ns.Mod.Profs
+    M.NearestTrainer = NearestTrainer
+    M.PROF_KEY = PROF_KEY
+    M.PROF_ORDER = PROF_ORDER
+    M.ProfName = ProfName
+    M.ProfOn = ProfOn
+    M.ProfQuestList = ProfQuestList
+    M.ProfSet = ProfSet
+    M.TrainReminder = TrainReminder
+    M.TrainerPinsRefresh = TrainerPinsRefresh
 end

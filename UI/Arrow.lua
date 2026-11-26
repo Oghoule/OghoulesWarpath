@@ -4,6 +4,8 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Perf = ns.Mod.Perf -- v1.50 : module
+local Skin = ns.Mod.Skin -- v1.50 : module
 
 -- La fleche tourne vers la prochaine position du trajet (distTarget) a partir de ta position et de ton
 -- orientation. Hors instance seulement : en donjon et en raid, le jeu ne donne plus ces informations.
@@ -53,7 +55,7 @@ do
         gem = frame:CreateTexture(nil, "OVERLAY")
         gem:SetSize(64, 64); gem:SetPoint("TOP")
         gem:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\ArrowGem")
-        dist = FS(frame, 11, COL.gold, FONT, "CENTER"); dist:SetPoint("TOP", tex, "BOTTOM", 0, -2)
+        dist = Skin.FS(frame, 11, Skin.COL.gold, Skin.FONT, "CENTER"); dist:SetPoint("TOP", tex, "BOTTOM", 0, -2)
         -- deplacement (si la fenetre n'est pas verrouillee)
         frame:EnableMouse(true)
         frame:RegisterForDrag("LeftButton")
@@ -66,7 +68,7 @@ do
         end)
         frame:SetScript("OnEnter", function(self)
             Tip():SetOwner(self, "ANCHOR_BOTTOM"); Tip():AddLine(T("arrowTipShort"), 1, 1, 1, true)
-            Tip():AddLine(T("arrowTipKeys"), COL.soft[1], COL.soft[2], COL.soft[3], true); Tip():Show()
+            Tip():AddLine(T("arrowTipKeys"), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3], true); Tip():Show()
         end)
         frame:SetScript("OnLeave", function() Tip():Hide() end)
         -- v1.46 : Ctrl + molette = taille (sans Ctrl, la molette ne fait rien sur la fleche)
@@ -92,8 +94,8 @@ do
         if not menu then
             menu = CreateFrame("Frame", "WarpathArrowMenu", UIParent)
             menu:SetSize(196, 3 * 26 + 12); menu:SetFrameStrata("DIALOG"); menu:SetClampedToScreen(true)
-            local bg = menu:CreateTexture(nil, "BACKGROUND"); bg:SetColorTexture(COL.bg[1], COL.bg[2], COL.bg[3], 0.96); bg:SetAllPoints()
-            Border(menu, COL.accent, 0.6)
+            local bg = menu:CreateTexture(nil, "BACKGROUND"); bg:SetColorTexture(Skin.COL.bg[1], Skin.COL.bg[2], Skin.COL.bg[3], 0.96); bg:SetAllPoints()
+            Skin.Border(menu, Skin.COL.accent, 0.6)
             local items = {
                 { "arrowMenuOpts", function() if ns.UI and ns.UI.OpenOptionsTab then ns.UI.OpenOptionsTab(6) end end },
                 { "arrowReset", function() if ns.Arrow then ns.Arrow.Reset() end end },
@@ -104,7 +106,7 @@ do
             }
             menu.btns = {}
             for k, it in ipairs(items) do
-                local b = FlatButton(menu, 184, 24, function() menu:Hide(); it[2]() end)
+                local b = Skin.FlatButton(menu, 184, 24, function() menu:Hide(); it[2]() end)
                 b:SetPoint("TOP", menu, "TOP", 0, -6 - (k - 1) * 26)
                 b.key = it[1]
                 menu.btns[k] = b
@@ -115,7 +117,7 @@ do
             end)
             menu:SetScript("OnShow", function() idle = 0 end)
         end
-        for _, b in ipairs(menu.btns) do b:SetLabel(Caps(T(b.key))) end
+        for _, b in ipairs(menu.btns) do b:SetLabel(Skin.Caps(T(b.key))) end
         menu:ClearAllPoints(); menu:SetPoint("TOP", anchor, "BOTTOM", 0, -4)
         menu:Show()
     end
@@ -129,7 +131,7 @@ do
         if mode ~= "preview" then
             mode, lastD = "preview", nil
             tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\Arrow")
-            dist:SetText(Caps(T("arrowPreview")))
+            dist:SetText(Skin.Caps(T("arrowPreview")))
         end
         tex:SetRotation(0)
         gem:SetRotation(0); gem:SetVertexColor(0.80, 0.14, 0.18); gem:Show()
@@ -164,7 +166,7 @@ do
             if mode ~= "here" then
                 mode, lastD = "here", nil
                 tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\ArrowHere"); tex:SetRotation(0); gem:Hide()
-                dist:SetText(Caps(T("arrowHere")))
+                dist:SetText(Skin.Caps(T("arrowHere")))
             end
         else
             if mode ~= "arrow" then
@@ -176,7 +178,7 @@ do
             tex:SetRotation(ang); gem:SetRotation(ang)
             if math.abs(ang) < ON_COURSE then gem:SetVertexColor(0.80, 0.14, 0.18) else gem:SetVertexColor(0.55, 0.55, 0.55) end
             local di = math.floor(d + 0.5)
-            if di ~= lastD then lastD = di; dist:SetText(Caps(T("dist", di))) end
+            if di ~= lastD then lastD = di; dist:SetText(Skin.Caps(T("dist", di))) end
         end
         ApplyScale()
         frame:Show()
@@ -291,7 +293,7 @@ do
             fill = ic:GetParent():CreateTexture(nil, "ARTWORK", nil, -1)
             fill:SetAllPoints(ic)
             fill:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\IcoNavFill")
-            fill:SetVertexColor(COL.red[1], COL.red[2], COL.red[3])
+            fill:SetVertexColor(Skin.COL.red[1], Skin.COL.red[2], Skin.COL.red[3])
             fill:SetAlpha(0)
         end
         local ang, aim = 0, false
@@ -321,7 +323,7 @@ do
         acc = acc + el
         if acc < 0.04 then return end
         acc = 0
-        local m0 = PerfOn and PerfMem and PerfMem()                     -- v1.47 : /warpath perf
+        local m0 = PerfOn and Perf.PerfMem and Perf.PerfMem()                     -- v1.47 : /warpath perf
         local t0 = PerfOn and debugprofilestop and debugprofilestop()
         local ok = pcall(Update)
         if not ok and frame then frame:Hide() end
@@ -329,7 +331,7 @@ do
         if not pcall(UpdatePin) and pin then pin:Hide() end
         if not pcall(UpdateMapPin) and wpin then wpin:Hide() end
         pcall(UpdateDestIcon, 0.04)
-        if t0 and PerfMark then PerfMark("Fleche + cartes (25/s)", debugprofilestop() - t0, m0 and (PerfMem() - m0)) end
+        if t0 and Perf.PerfMark then Perf.PerfMark("Fleche + cartes (25/s)", debugprofilestop() - t0, m0 and (Perf.PerfMem() - m0)) end
     end)
 
     ns.Arrow = {

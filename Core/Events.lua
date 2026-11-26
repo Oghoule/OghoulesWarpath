@@ -4,6 +4,16 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+-- v1.50 : module ns.Mod.Events (publie en fin de fichier pour les autres fichiers)
+local ev
+local Commands = ns.Mod.Commands -- v1.50 : module
+local Profs = ns.Mod.Profs -- v1.50 : module
+local Window = ns.Mod.Window -- v1.50 : module
+local Flow = ns.Mod.Flow -- v1.50 : module
+local Near = ns.Mod.Near -- v1.50 : module
+local Est = ns.Mod.Est -- v1.50 : module
+local Route = ns.Mod.Route -- v1.50 : module
 
 ------------------------------------------------------------------
 -- Evenements
@@ -62,30 +72,30 @@ function OnEvent(self, event, ...)
         local _, r = UnitRace("player")
         State.myClass, State.myRace = c, r
         DB._class = c   -- pour etalonner le temps par monstre selon la classe (collecte.py)
-        pcall(ResolveNewMaps)
-        CreateUI()
+        pcall(Est.ResolveNewMaps)
+        Window.CreateUI()
         ns.Trace("bouton minicarte"); pcall(ns.UI.CreateMinimapButton)
         ns.Trace("options du jeu (Settings)"); pcall(ns.UI.RegisterBlizzardOptions)
         ns.Trace("connexion terminee")
-        if C_Timer and C_Timer.After then C_Timer.After(3, function() pcall(ShowWelcome) end) end
+        if C_Timer and C_Timer.After then C_Timer.After(3, function() pcall(Commands.ShowWelcome) end) end
         ScanLog()
         local key = DB.guide
         if key == "chain" then
-            Guides.chain = DB.chainQ and BuildChainGuide(DB.chainQ, DB.chainSelf) or nil
-            if not Guides.chain then key = DB.chainBack; DB.chainBack, DB.chainQ, DB.chainSelf = nil, nil, nil end
+            Core.Guides.chain = DB.chainQ and Est.BuildChainGuide(DB.chainQ, DB.chainSelf) or nil
+            if not Core.Guides.chain then key = DB.chainBack; DB.chainBack, DB.chainQ, DB.chainSelf = nil, nil, nil end
         end
-        if key == "chain" and Guides.chain then
+        if key == "chain" and Core.Guides.chain then
             -- une chaine etait en cours : on la garde
-        elseif IS_DUNGEON[key] and DB.main then
+        elseif Core.IS_DUNGEON[key] and DB.main then
             -- un donjon etait en cours : on le garde
-        elseif not key or not Guides[key] or not DB.manual then
-            key = AutoPick() or key
+        elseif not key or not Core.Guides[key] or not DB.manual then
+            key = Flow.AutoPick() or key
         end
         if not (key and SetGuide(key, true)) then
             say(T("noRace", tostring(r)))
             Refresh()
         else
-            say(T("login", Title(State.G), State.current, #State.steps))
+            say(T("login", Core.Title(State.G), State.current, #State.steps))
             if not next(DB.fp) then say(T("fpHint")) end
         end
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -113,12 +123,12 @@ function OnEvent(self, event, ...)
         if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then C_ChatInfo.RegisterAddonMessagePrefix(ns.COMM) end
         if C_Timer and C_Timer.NewTicker then
             C_Timer.NewTicker(900, function() if IsInGuild and IsInGuild() then ns.ShareDrops("GUILD") end end)
-            C_Timer.After(30, function() if IsInGuild and IsInGuild() then ns.ShareDrops("GUILD"); ns.SendVersion("GUILD", VERSION) end end)
+            C_Timer.After(30, function() if IsInGuild and IsInGuild() then ns.ShareDrops("GUILD"); ns.SendVersion("GUILD", Core.VERSION) end end)
         end
-        ns.Drops.Refresh(logById, EST)
+        ns.Drops.Refresh(Core.logById, Est.EST)
         if C_Timer and C_Timer.After then C_Timer.After(4, CheckDungeons); C_Timer.After(9, CheckClassQuests) else CheckDungeons() end
     elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
-        OnXPGain(...)
+        Est.OnXPGain(...)
     elseif event == "LOOT_OPENED" then
         if ns.Drops.Tracking() then pcall(ns.Drops.OnLootOpened) end
     elseif event == "BAG_UPDATE_DELAYED" then
@@ -129,7 +139,7 @@ function OnEvent(self, event, ...)
     elseif event == "CHAT_MSG_ADDON" then
         local prefix, msg, _, sender = ...
         if prefix == ns.COMM then
-            if type(msg) == "string" and msg:sub(1, 2) == "V|" then ns.OnVersion(msg:sub(3), sender, VERSION)
+            if type(msg) == "string" and msg:sub(1, 2) == "V|" then ns.OnVersion(msg:sub(3), sender, Core.VERSION)
             else ns.OnDropMessage(msg, sender) end
         end
     elseif event == "QUEST_DETAIL" or event == "QUEST_PROGRESS" or event == "QUEST_COMPLETE" or event == "GOSSIP_SHOW" or event == "QUEST_GREETING" then
@@ -146,37 +156,37 @@ function OnEvent(self, event, ...)
         if IsTradeskillTrainer then local ok, v = pcall(IsTradeskillTrainer); if ok and v then prof = true end end
         if not prof then DB.trainDue = nil end
         -- arrive chez l'entraineur vise : la fleche revient au guide
-        if DB.errand and ClearErrand then ClearErrand() end
+        if DB.errand and Near.ClearErrand then Near.ClearErrand() end
     elseif event == "PLAYER_REGEN_ENABLED" then
         ns.Comfort.UpdateItemButton()
     elseif event == "GROUP_ROSTER_UPDATE" then
         local n = GetNumGroupMembers and GetNumGroupMembers() or 0
         if n > 1 and n ~= (self.lastGroupN or 0) then
             local ch = (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
-            ns.ShareDrops(ch); ns.SendVersion(ch, VERSION)
+            ns.ShareDrops(ch); ns.SendVersion(ch, Core.VERSION)
         end
         self.lastGroupN = n
-        ScheduleAdvance()
+        Flow.ScheduleAdvance()
     elseif event == "PLAYER_LEVEL_UP" then
         local nl = ...
-        if type(nl) == "number" and nl % 2 == 0 then DB.trainDue = nl; if TrainReminder then pcall(TrainReminder) end end
-        ScheduleAdvance()
+        if type(nl) == "number" and nl % 2 == 0 then DB.trainDue = nl; if Profs.TrainReminder then pcall(Profs.TrainReminder) end end
+        Flow.ScheduleAdvance()
         if C_Timer and C_Timer.After then C_Timer.After(1.5, CheckDungeons); C_Timer.After(4, CheckClassQuests); C_Timer.After(2.5, function() pcall(CheckZoneLevel) end) else CheckDungeons(); pcall(CheckZoneLevel) end
     elseif event == "QUEST_TURNED_IN" then
         local id = ...
         if id then DB.done[id] = true end
         State.peek = nil
-        ScheduleAdvance()
+        Flow.ScheduleAdvance()
     elseif event == "UI_INFO_MESSAGE" then
         -- "Nouveau trajet aerien decouvert" : on apprend le point de vol tout de suite
         local _, msg = ...
         if type(msg) == "string" and ERR_NEWTAXIPATH and not (issecretvalue and issecretvalue(msg)) and msg == ERR_NEWTAXIPATH then
-            pcall(LearnFlightHere)
+            pcall(Route.LearnFlightHere)
         end
     elseif event == "TAXIMAP_OPENED" then
-        OnTaxiOpened()
+        Window.OnTaxiOpened()
     elseif event == "TAXIMAP_CLOSED" or event == "PLAYER_CONTROL_LOST" then
-        if event == "TAXIMAP_CLOSED" then OnTaxiClosed() end
+        if event == "TAXIMAP_CLOSED" then Window.OnTaxiClosed() end
         -- decollage : la fleche passe tout de suite a la vraie destination (plus au maitre de vol)
         local function retarget() State.lastWP = nil; Refresh(true) end
         if C_Timer and C_Timer.After then C_Timer.After(0.5, retarget); C_Timer.After(2, retarget) else retarget() end
@@ -187,13 +197,13 @@ function OnEvent(self, event, ...)
         Refresh(true)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         -- entree dans l'instance du donjon suivi : le journal du donjon prend le relais
-        pcall(OnInstanceChange)
+        pcall(Flow.OnInstanceChange)
         -- nouveau continent / nouvelle zone : on recalcule (et la fleche passe du zeppelin a la vraie cible)
-        ScheduleAdvance()
+        Flow.ScheduleAdvance()
         Refresh(true)
     else
         if event == "QUEST_ACCEPTED" then State.peek = nil end
-        ScheduleAdvance()
+        Flow.ScheduleAdvance()
     end
 end
 
@@ -205,3 +215,9 @@ ev:SetScript("OnEvent", function(self, event, ...)
         say(T("errInternal", tostring(err)), "error")
     end
 end)
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Events)
+do
+    local M = ns.Mod.Events
+    M.ev = ev
+end

@@ -4,6 +4,13 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local DungeonSheet = ns.Mod.DungeonSheet -- v1.50 : module
+-- v1.50 : module ns.Mod.Comfort (publie en fin de fichier pour les autres fichiers)
+local ApplyPreset, QuestUnlocks, StyleGet, StyleSkip
+local Skin = ns.Mod.Skin -- v1.50 : module
+local Flow = ns.Mod.Flow -- v1.50 : module
+local Est = ns.Mod.Est -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local ALL_NEEDED
 
@@ -25,15 +32,15 @@ local function GuideQuests()
         if s.t == "accept" and i >= from and i <= from + 12 and State.doneCache[i] ~= "done" and State.doneCache[i] ~= "skip" then
             for _, id in ipairs(ids) do if id then acc[id] = true end end
         elseif s.t == "turnin" then
-            for _, id in ipairs(ids) do if id and logById[id] == true then turn[id] = true end end
+            for _, id in ipairs(ids) do if id and Core.logById[id] == true then turn[id] = true end end
         end
     end
     return acc, turn
 end
 local function TitleMatch(title, set)
     for id in pairs(set) do
-        local e = EST[id]
-        if title and ((e and e.n == title) or QuestTitle(id) == title) then return id end
+        local e = Est.EST[id]
+        if title and ((e and e.n == title) or Core.QuestTitle(id) == title) then return id end
     end
 end
 local function OnQuestFrame(event)
@@ -87,7 +94,7 @@ local function LevelInfo()
     if el < 300 or sess.gained <= 0 then return nil end
     local rate = sess.gained * 3600 / el
     local left = (UnitXPMax("player") or 0) - (UnitXP("player") or 0)
-    return T("infoLevel", FormatNum(rate), FmtTime(left / rate * 3600))
+    return T("infoLevel", Est.FormatNum(rate), FmtTime(left / rate * 3600))
 end
 
 -- vols : on apprend la duree de chaque trajet la premiere fois
@@ -124,8 +131,8 @@ local itemBtn, itemWanted
 local function StepItem()
     if not State.steps or not State.current or not State.steps[State.current] then return nil end
     local s = State.steps[State.current]
-    for _, id in ipairs(Ids(s)) do
-        local e = EST[id]
+    for _, id in ipairs(Core.Ids(s)) do
+        local e = Est.EST[id]
         for _, it in ipairs(e and e.u or {}) do
             local cnt = (C_Item and C_Item.GetItemCount and C_Item.GetItemCount(it)) or (GetItemCount and GetItemCount(it)) or 0
             -- (Forever ne renvoie pas toujours le sort de l'objet : l'objet a utiliser de la quete suffit)
@@ -204,7 +211,7 @@ end
 local function UpdateInfo()
     if not f then return end
     if not rawget(f, "infoLine") then
-        f.infoLine = FS(f, 10, COL.gold, FONT, "LEFT"); f.infoLine:SetWidth(INNER)
+        f.infoLine = Skin.FS(f, 10, Skin.COL.gold, Skin.FONT, "LEFT"); f.infoLine:SetWidth(Skin.INNER)
     end
     local parts = {}
     local fl = FlightInfo(); if fl then parts[#parts + 1] = fl end
@@ -213,7 +220,7 @@ local function UpdateInfo()
     local txt = table.concat(parts, "\n")
     local was = f.infoLine:IsShown()
     f.infoLine:SetText(txt); f.infoLine:SetShown(txt ~= "")
-    if was ~= (txt ~= "") then Layout() end
+    if was ~= (txt ~= "") then Skin.Layout() end
     UpdateItemButton()
 end
 ns.Comfort = { OnQuestFrame = OnQuestFrame, TrackXP = TrackXP, UpdateInfo = UpdateInfo, OnLanded = OnLanded,
@@ -222,7 +229,7 @@ ns.Comfort = { OnQuestFrame = OnQuestFrame, TrackXP = TrackXP, UpdateInfo = Upda
     ItemDiag = function()
         local s = State.steps and State.steps[State.current]
         local it
-        for _, id in ipairs(s and Ids(s) or {}) do local e = EST[id]; if e and e.u then it = e.u[1]; break end end
+        for _, id in ipairs(s and Core.Ids(s) or {}) do local e = Est.EST[id]; if e and e.u then it = e.u[1]; break end end
         if not it then return "-" end
         local cnt = (C_Item and C_Item.GetItemCount and C_Item.GetItemCount(it)) or 0
         local sp = C_Item and C_Item.GetItemSpell and C_Item.GetItemSpell(it)
@@ -255,7 +262,7 @@ function ApplyPreset(name)
     local st = StyleGet()
     for k, v in pairs(p) do st[k] = v end
     styleCache = nil
-    if Advance then Advance() end
+    if Flow.Advance then Flow.Advance() end
 end
 
 -- donnees par guide : quetes qui debloquent la suite, detours
@@ -264,9 +271,9 @@ local function GuideData()
     if styleCache and styleCache.G == State.G then return styleCache end
     local needed, pos, byQ = {}, {}, {}
     for i, s in ipairs(State.steps or {}) do
-        local ids = Ids(s)
+        local ids = Core.Ids(s)
         for _, id in ipairs(ids) do
-            local e = EST[id]
+            local e = Est.EST[id]
             if e then
                 for _, p in ipairs(e.p or {}) do needed[p] = true end
                 for _, p in ipairs(e.p1 or {}) do needed[p] = true end
@@ -280,10 +287,10 @@ local function GuideData()
     -- une quete qui debloque une quete d'un AUTRE guide (ex. Barrens -> Stonetalon) est aussi protegee
     if not ALL_NEEDED then
         ALL_NEEDED = {}
-        for _, g in pairs(Guides or {}) do
+        for _, g in pairs(Core.Guides or {}) do
             for _, st in ipairs(g.steps or {}) do
-                for _, id in ipairs(Ids(st)) do
-                    local e = EST[id]
+                for _, id in ipairs(Core.Ids(st)) do
+                    local e = Est.EST[id]
                     if e then
                         for _, p in ipairs(e.p or {}) do ALL_NEEDED[p] = true end
                         for _, p in ipairs(e.p1 or {}) do ALL_NEEDED[p] = true end
@@ -325,7 +332,7 @@ local function LowRate(gd, id)
     local ok, e = pcall(Estimate, { id }, false)
     local res = false
     if ok and e and e.perHour and e.perHour > 0 then
-        local grind = MobXP(p, p, 0) * 3600 / KillTime()
+        local grind = Est.MobXP(p, p, 0) * 3600 / Est.KillTime()
         res = e.perHour < grind * 0.6
     end
     gd.rate[key] = res
@@ -342,13 +349,13 @@ end
 local function InGroup() return (IsInGroup and IsInGroup()) or ((GetNumGroupMembers and GetNumGroupMembers() or 0) > 0) end
 
 function StyleSkip(i, s)
-    if not DB or not State.steps or IS_DUNGEON[DB.guide] or DB.guide == "chain" or s.t ~= "accept" then return false end
+    if not DB or not State.steps or Core.IS_DUNGEON[DB.guide] or DB.guide == "chain" or s.t ~= "accept" then return false end
     local st = StyleGet()
     local gd = GuideData()
-    local ids = Ids(s)
+    local ids = Core.Ids(s)
     if #ids == 0 then return false end
     for _, id in ipairs(ids) do
-        local e = EST[id]
+        local e = Est.EST[id]
         if not e or gd.needed[id] then return false end
         local drop = (e.el and (st.elite == "never" or (st.elite == "group" and not InGroup())))
             or (e.es and st.noEscort)
@@ -362,23 +369,32 @@ end
 
 -- Etape "Monte au niveau X" : proposer le donjon de ton niveau (une fois par etape)
 function SuggestDungeonForLevel()
-    if not DB or not State.steps or IS_DUNGEON[DB.guide] or DB.guide == "chain" or State.asking or not StaticPopup_Show then return end
+    if not DB or not State.steps or Core.IS_DUNGEON[DB.guide] or DB.guide == "chain" or State.asking or not StaticPopup_Show then return end
     local st = StyleGet()
     if st.xpMode ~= "dungeon" and st.xpMode ~= "both" then return end
     local s = State.steps[State.current]
     if not s or s.t ~= "level" or (UnitLevel("player") or 0) >= (s.level or 0) then return end
     DB.lvlAsked = DB.lvlAsked or {}
-    local key = SeenKey(State.current)
+    local key = Core.SeenKey(State.current)
     if DB.lvlAsked[key] then return end
     local lvl = UnitLevel("player") or 1
     local best
-    for _, d in ipairs(DUNGEONS) do
-        if Guides[d.key] and lvl >= d.min and lvl <= d.max and DB.dAnswer[d.key] ~= "no" and not DungeonDone(d.key) and DungeonOpen(d.key) then
+    for _, d in ipairs(Core.DUNGEONS) do
+        if Core.Guides[d.key] and lvl >= d.min and lvl <= d.max and DB.dAnswer[d.key] ~= "no" and not Flow.DungeonDone(d.key) and Flow.DungeonOpen(d.key) then
             if not best or d.min > best.min then best = d end
         end
     end
     if not best then return end
     DB.lvlAsked[key] = true
     State.asking = best
-    ns.Trace("popup WARPATH_DUNGEON"); Popup("WARPATH_DUNGEON", T("dAskXP", s.level, DungeonName(best), best.min, best.max) .. ((DungeonAskLine and DungeonAskLine(best.key)) or DungeonReqText(best.key)))
+    ns.Trace("popup WARPATH_DUNGEON"); Popup("WARPATH_DUNGEON", T("dAskXP", s.level, Flow.DungeonName(best), best.min, best.max) .. ((DungeonSheet.DungeonAskLine and DungeonSheet.DungeonAskLine(best.key)) or Flow.DungeonReqText(best.key)))
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Comfort)
+do
+    local M = ns.Mod.Comfort
+    M.ApplyPreset = ApplyPreset
+    M.QuestUnlocks = QuestUnlocks
+    M.StyleGet = StyleGet
+    M.StyleSkip = StyleSkip
 end

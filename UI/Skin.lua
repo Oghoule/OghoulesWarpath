@@ -4,6 +4,17 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
+-- v1.50 : module ns.Mod.Skin (publie en fin de fichier pour les autres fichiers)
+local Border, COL, Caps, Chip, ChipScale, DISPLAY, Diamond, DiamondCheck, Divider, DungeonLogActive
+local DungeonLogList, FONT, FS, FadeIn, FadeOut, FlatButton, Glyph, GoldFrame, HEX, HeadButton, INNER, Layout
+local MapBar, PAD, PopupVisible, ScaleGrip, SectionHead, Shine, Spaced, Tex, TitledRule, Toast, Upper
+local WarpathName
+local Flow = ns.Mod.Flow -- v1.50 : module
+local Near = ns.Mod.Near -- v1.50 : module
+local Est = ns.Mod.Est -- v1.50 : module
+local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local ACCENTS, DungeonLogHide, DungeonLogRender, DungeonLore, FIXED_H, MAPBAR, MIN_H, SKIP_ICON, STEP_ICON
 local STEP_TINT, SetChain, SetHeader, SetObjRows, SetRoute, SetSkip, SetUpcoming, SplitPlace, adviceArgs
@@ -262,7 +273,7 @@ function Layout()
     -- Intendance : icone de l'en-tete en capitale (pas pendant une tournee ni dans un donjon)
     local qb = rawget(f, "qmBtn")
     if qb then
-        local inCity = QMCity and QMCity() and not DB.qm and not (IS_DUNGEON and IS_DUNGEON[DB.guide] and DungeonLogActive and DungeonLogActive())
+        local inCity = Quartermaster.QMCity and Quartermaster.QMCity() and not DB.qm and not (Core.IS_DUNGEON and Core.IS_DUNGEON[DB.guide] and DungeonLogActive and DungeonLogActive())
         qb:SetShown(inCity and true or false)
         -- icones de l'en-tete, de droite a gauche : « - », sac (en capitale), « ? », engrenage (v1.46, accroche
         -- au « ? ») ; le titre s'arrete avant
@@ -434,7 +445,7 @@ function UpdateDistance()
     if adviceArgs and Advice and GetTime and GetTime() - (adviceT or 0) > 10 then
         local here = PlayerWP()
         local p = advicePos
-        local still = here and p and p[3] == here[3] and Dist(p[1], p[2], here[1], here[2]) < 30
+        local still = here and p and p[3] == here[3] and Route.Dist(p[1], p[2], here[1], here[2]) < 30
         if not still or GetTime() - (adviceT or 0) > 60 then   -- immobile : une fois par minute (recharge de la pierre)
             adviceT, advicePos = GetTime(), here
             local ok, adv = pcall(Advice, adviceArgs[1], adviceArgs[2])
@@ -444,7 +455,7 @@ function UpdateDistance()
     local me = PlayerWP()
     local w = distTarget and WP(distTarget[1], distTarget[2], distTarget[3])
     if me and w and me[3] == w[3] then
-        f.dist:SetText(T("dist", math.floor(Dist(me[1], me[2], w[1], w[2]) + 0.5)))
+        f.dist:SetText(T("dist", math.floor(Route.Dist(me[1], me[2], w[1], w[2]) + 0.5)))
     else
         f.dist:SetText("")
     end
@@ -452,13 +463,13 @@ function UpdateDistance()
     if not State.peek and State.steps and me and not autoGoBusy then
         local i = State.focus or State.current
         local s = State.steps[i]
-        if s and s.t == "go" and s.m and s.x and not State.doneCache[i] and not IS_DUNGEON[DB.guide] then
+        if s and s.t == "go" and s.m and s.x and not State.doneCache[i] and not Core.IS_DUNGEON[DB.guide] then
             local g = WP(s.m, s.x, s.y)
-            if g and g[3] == me[3] and Dist(me[1], me[2], g[1], g[2]) < 20 then
+            if g and g[3] == me[3] and Route.Dist(me[1], me[2], g[1], g[2]) < 20 then
                 autoGoBusy = true
-                DB.seen[SeenKey(i)] = true
+                DB.seen[Core.SeenKey(i)] = true
                 State.focus = nil; State.lastWP = nil
-                pcall(Advance); Refresh(true)
+                pcall(Flow.Advance); Refresh(true)
                 autoGoBusy = false
             end
         end
@@ -560,12 +571,12 @@ function RefreshInner(forceWP)
     local i = State.peek or State.focus or State.current
     if f.nowBtn then
         local away = (State.peek or State.focus) and State.steps[State.current] and (State.peek or State.focus) ~= State.current
-        if away then f.nowBtn.label:SetText(T("backNow", State.current, (QName(State.steps[State.current]) and QName(State.steps[State.current]) ~= "") and QName(State.steps[State.current]) or (StepText(State.steps[State.current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
+        if away then f.nowBtn.label:SetText(T("backNow", State.current, (Core.QName(State.steps[State.current]) and Core.QName(State.steps[State.current]) ~= "") and Core.QName(State.steps[State.current]) or (Core.StepText(State.steps[State.current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
         f.nowBtn:SetShown(away and true or false)
     end
     local s = State.steps[i]
     if not s then
-        SetHeader(Title(State.G), T("finished"), 1)
+        SetHeader(Core.Title(State.G), T("finished"), 1)
         if f.badge then f.badge:Hide(); f.qsub:Hide(); f.dest:Hide() end
         f.summary = T("endGuide")
         f.kind:Hide(); f.qtitle:Hide(); f.text:SetText(T("endGuide")); f.text:Show()
@@ -574,14 +585,14 @@ function RefreshInner(forceWP)
         SetSkip("ok")
         UpdateDistance(); Layout()
     else
-        local zone = Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "")
-        if IS_DUNGEON[DB.guide] then zone = zone:gsub("^[^:]+:%s*", "") end
+        local zone = Core.Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "")
+        if Core.IS_DUNGEON[DB.guide] then zone = zone:gsub("^[^:]+:%s*", "") end
         SetHeader(zone, T("stepOf", i, n), i / n)
         local st = State.peek and State.doneCache[i]
         -- prise impossible tant qu'un prerequis du journal n'est pas fini : on guide vers ce prerequis
-        local det = (not State.peek) and ((TrainDetour and TrainDetour(s)) or (PrereqDetour and PrereqDetour(s))) or nil
+        local det = (not State.peek) and ((Near.TrainDetour and Near.TrainDetour(s)) or (Route.PrereqDetour and Route.PrereqDetour(s))) or nil
         local g = det and { t = det.done and "turnin" or "do", id = det.id, m = det.m, x = det.x, y = det.y,
-                            zone = MAPNAME[det.m] or s.zone, quest = det.name } or s
+                            zone = Est.MAPNAME[det.m] or s.zone, quest = det.name } or s
         -- grotte (entree/sortie) ou objet au sol le plus proche : la fleche vise ce point
         local sp = (not State.peek and (not det or DB.errand or DB.qm) and StepPoint) and StepPoint(s) or nil
         if sp then g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest } end
@@ -608,44 +619,44 @@ function RefreshInner(forceWP)
         -- texte complet (journal de debug et tests)
         f.summary = (fl and (T("takeFlight", fl.from.name, fl.to.name) .. "\n") or "")
             .. (tr and (T(tr.kind == "boat" and "takeBoat" or "takeZep", tr.dest, T(tr.where)) .. "\n") or "")
-            .. (st == "done" and (CHECK .. " ") or st == "skip" and (T("skipped") .. " ") or "")
-            .. (PREFIX[s.t] or "") .. (s.optional and (" " .. T("optional")) or "") .. (s.woven and (" " .. T("wovenTag")) or "")
-            .. (s.quest and (" " .. QName(s)) or "")
-            .. (chainOf[i] and ("\n" .. T("chainLbl", QuestTitle(chainOf[i].qid) or chainOf[i].name, chainOf[i].pos, chainOf[i].len)) or "")
-            .. "\n" .. StepText(s)
+            .. (st == "done" and (Core.CHECK .. " ") or st == "skip" and (T("skipped") .. " ") or "")
+            .. (Route.PREFIX[s.t] or "") .. (s.optional and (" " .. T("optional")) or "") .. (s.woven and (" " .. T("wovenTag")) or "")
+            .. (s.quest and (" " .. Core.QName(s)) or "")
+            .. (Core.chainOf[i] and ("\n" .. T("chainLbl", Core.QuestTitle(Core.chainOf[i].qid) or Core.chainOf[i].name, Core.chainOf[i].pos, Core.chainOf[i].len)) or "")
+            .. "\n" .. Core.StepText(s)
         -- type d'etape + etat
-        local kc = PCOL[s.t] or "cdbb8e"
+        local kc = Route.PCOL[s.t] or "cdbb8e"
         local nq = (s.quest and type(s.id) == "table") and #s.id or 1
         kc = "cdbb8e"
         -- v1.45 : entree d'un donjon : « Aller a Blackfathom Deeps » plutot que « Aller » seul
-        local kindTxt = (s.t == "go" and IS_DUNGEON[DB.guide] and zone ~= "") and T("goDg", zone) or T(s.t)
+        local kindTxt = (s.t == "go" and Core.IS_DUNGEON[DB.guide] and zone ~= "") and T("goDg", zone) or T(s.t)
         f.kind:SetText("|cff" .. kc .. Caps(kindTxt) .. "|r" .. (nq > 1 and ("  |cff8c7f62·|r  |cff" .. kc .. Caps(T("nQuests", nq)) .. "|r") or "")
             .. (s.optional and ("   |cff8c7f62" .. T("optional") .. "|r") or "")
             .. (s.woven and ("   |cffcdbb8e" .. Caps(T("wovenTag")) .. "|r") or "")   -- v1.47 : etape d'une chaine integree
-            .. (st == "done" and ("  " .. CHECK .. " |cff9cc7a8" .. T("stepDone") .. "|r")
+            .. (st == "done" and ("  " .. Core.CHECK .. " |cff9cc7a8" .. T("stepDone") .. "|r")
                 or st == "skip" and ("   |cff8c7f62" .. T("skipped") .. "|r")
                 or State.peek and ("   |cffd69a66" .. T("stepTodo") .. "|r") or "")
             .. ((not State.peek and State.focus) and ("   |cffcdbb8e" .. T("chosen") .. "|r") or "")
             .. ((not State.peek and not State.focus and nearKind and i == State.current) and ("   |cff9cc7a8" .. T(nearKind == "pass" and "nearPass" or "nearNear") .. "|r") or ""))
         -- rendement estime (quete + monstres) compare au simple farm de monstres de ton niveau
         f.rateTip = nil
-        if (s.t == "do" or (s.optional and s.t == "accept")) and type(s.id) == "number" and EST[s.id] then
+        if (s.t == "do" or (s.optional and s.t == "accept")) and type(s.id) == "number" and Est.EST[s.id] then
             local e = Estimate({ s.id }, false)
             if e.secs > 0 and e.perHour > 0 then
                 local p = UnitLevel("player") or 1
-                local grind = MobXP(p, p, 0) * 3600 / KillTime()
+                local grind = Est.MobXP(p, p, 0) * 3600 / Est.KillTime()
                 local tag = (e.perHour >= grind * 1.3) and ("  |cff9cc7a8" .. T("rateGood") .. "|r")
                     or (e.perHour < grind * 0.7) and ("  |cffd69a66" .. T("rateBad") .. "|r") or ""
                 f.kind:SetText(f.kind:GetText() .. tag)
-                f.rateTip = T("xpRate", FormatNum(e.perHour))
+                f.rateTip = T("xpRate", Est.FormatNum(e.perHour))
             end
         end
         f.kind:Show()
-        local qn = s.quest and QName(s)
+        local qn = s.quest and Core.QName(s)
         if qn and qn ~= "" then
             -- niveau de la quete, colore selon la difficulte (gris / vert / jaune / orange / rouge)
             local qid = type(s.id) == "number" and s.id or (type(s.id) == "table" and s.id[1])
-            local ql = qid and EST[qid] and EST[qid].l
+            local ql = qid and Est.EST[qid] and Est.EST[qid].l
             if f.badge then
                 if ql and ql > 0 then
                     local c = GetQuestDifficultyColor and GetQuestDifficultyColor(ql)
@@ -664,8 +675,8 @@ function RefreshInner(forceWP)
                 if s.t == "accept" and type(s.id) == "table" and #s.id > 1 then
                     local have, miss = 0, {}
                     for _, id in ipairs(s.id) do
-                        if logById[id] ~= nil or Rendue(id) or DB.ignored[id] then have = have + 1
-                        else miss[#miss + 1] = (QuestTitle and QuestTitle(id)) or (EST[id] and EST[id].n) or tostring(id) end
+                        if Core.logById[id] ~= nil or Rendue(id) or DB.ignored[id] then have = have + 1
+                        else miss[#miss + 1] = (Core.QuestTitle and Core.QuestTitle(id)) or (Est.EST[id] and Est.EST[id].n) or tostring(id) end
                     end
                     if have > 0 and #miss > 0 then
                         f.qsub:SetText((f.qsub:GetText() or "") .. "\n|cffd69a66" .. T("grpMissing", have, #s.id, table.concat(miss, ", ")) .. "|r")
@@ -679,16 +690,16 @@ function RefreshInner(forceWP)
         end
         -- etape "faire" : objectifs en direct (le texte complet passe dans l'infobulle du titre)
         local live, lead, orows
-        if LiveObjectives then live, lead, orows = LiveObjectives(s) end
+        if Near.LiveObjectives then live, lead, orows = Near.LiveObjectives(s) end
         f.objPlain = live
         if orows and #orows > 0 then SetObjRows(orows); live = "" end
         -- prendre / rendre : le PNJ et son lieu vont dans le bloc destination (texte court d'une ligne)
-        local st0 = StepText(s) or ""
+        local st0 = Core.StepText(s) or ""
         if not live and not det and (s.t == "accept" or s.t == "turnin") and not st0:find("\n") and #st0 <= 80 and st0 ~= "" then
             lead = st0
         end
         local body = live or (lead and "" or st0)
-        f.qtitleTip = live and StepText(s) or nil
+        f.qtitleTip = live and Core.StepText(s) or nil
         -- astuce de quete (Tips.lua)
         f.tipText = nil
         if DB.tips ~= false and ns.Tips and s.t ~= "note" then
@@ -700,8 +711,8 @@ function RefreshInner(forceWP)
         -- taux de drop des objets encore a trouver (tes mesures + groupe/guilde, sinon Questie)
         if s.t == "do" or (det and not det.done) then
             local lines = {}
-            for _, q in ipairs(det and { det.id } or Ids(s)) do
-                if logById[q] == false and EST[q] then
+            for _, q in ipairs(det and { det.id } or Core.Ids(s)) do
+                if Core.logById[q] == false and Est.EST[q] then
                     for _, dr in ipairs(Estimate({ q }, false).drops) do
                       -- deja affiche a cote des monstres dans « Cibles de l'objectif » : pas de doublon ici
                       if not (dr.mobs and DB.targets ~= false) then
@@ -717,7 +728,7 @@ function RefreshInner(forceWP)
         end
         -- donjon : un objectif a faire apres l'entree se fait avec le groupe (les monstres pres de l'entree sont
         -- souvent elites, meme hors du portail)
-        if s.t == "do" and IS_DUNGEON[DB.guide] and s.m then
+        if s.t == "do" and Core.IS_DUNGEON[DB.guide] and s.m then
             local ent
             for j = 1, n do if State.steps[j].t == "go" then ent = j; break end end
             if ent and i > ent then body = "|cffd69a66" .. T("dgGroup") .. "|r\n\n" .. body end
@@ -726,19 +737,19 @@ function RefreshInner(forceWP)
         elseif det then body = "|cffd69a66" .. T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
         -- quetes pas encore prises faute de niveau, quetes laissees pour plus tard, et la suite
         if not State.peek then
-            local lw = LevelWaitLines and LevelWaitLines(s) or {}
-            if #lw > 0 then body = body .. "\n\n" .. ListBlock(T("lvlWaitHdr"), lw, "d69a66") end
-            local hn = HubNotes and HubNotes(i)
+            local lw = Near.LevelWaitLines and Near.LevelWaitLines(s) or {}
+            if #lw > 0 then body = body .. "\n\n" .. Near.ListBlock(T("lvlWaitHdr"), lw, "d69a66") end
+            local hn = Near.HubNotes and Near.HubNotes(i)
             if hn then body = body .. "\n\n" .. hn end
-            local tg = TurninGroup and TurninGroup(i)
+            local tg = Near.TurninGroup and Near.TurninGroup(i)
             if tg then body = tg .. "\n\n" .. body end
-            local ag = AcceptGroup and AcceptGroup(i)
+            local ag = Near.AcceptGroup and Near.AcceptGroup(i)
             if ag then body = ag .. "\n\n" .. body end
-            local fu = FollowUpAccepts and FollowUpAccepts(i)
+            local fu = Near.FollowUpAccepts and Near.FollowUpAccepts(i)
             if fu then body = body .. "\n\n" .. fu end
             local ow = OnTheWay and OnTheWay(i)
             if ow then body = body .. "\n\n" .. ow end
-            local dt = DeathTip and DeathTip(i)
+            local dt = Near.DeathTip and Near.DeathTip(i)
             -- conseil de mort : dans l'infobulle du titre, une seule ligne dans la fenetre
             if dt then
                 local had = type(rawget(f, "tipText")) == "string"
@@ -747,7 +758,7 @@ function RefreshInner(forceWP)
             end
         end
         -- donjon : toutes les quetes en main, on marche sur l'entree
-        if s.t == "go" and IS_DUNGEON[DB.guide] and not State.peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
+        if s.t == "go" and Core.IS_DUNGEON[DB.guide] and not State.peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
         body = body:gsub("^%s+", "")
         f.text:SetText(body); f.text:SetShown(body ~= "")
         -- itineraire : au plus 3 etapes (vol, zeppelin/bateau, puis l'objectif)
@@ -788,13 +799,13 @@ function RefreshInner(forceWP)
             elseif sp and sp.kind == "zone" then nm, extra = sp.name ~= "" and sp.name or nm, T("zoneCamp", sp.idx or 1, sp.n or 2)
             elseif sp and sp.kind == "enter" then extra = T("caveEnter") elseif sp and sp.kind == "exit" then extra = T("caveExit"):lower() end
             if fl then nm, extra = fl.from.name, T("flight") .. " > " .. fl.to.name
-            elseif tr then nm, extra = MAPNAME[tr.from[1]] or nm, T(tr.kind == "boat" and "boat" or "zep") .. " > " .. tr.dest end
-            if f.destName then f.destName:SetText(nm ~= "" and nm or (MAPNAME[first.m] or "")) end
+            elseif tr then nm, extra = Est.MAPNAME[tr.from[1]] or nm, T(tr.kind == "boat" and "boat" or "zep") .. " > " .. tr.dest end
+            if f.destName then f.destName:SetText(nm ~= "" and nm or (Est.MAPNAME[first.m] or "")) end
             local cx, cy = first.x, first.y
             if fl then cx, cy = fl.from.x, fl.from.y elseif tr then cx, cy = tr.from[2], tr.from[3] end
             -- v1.41 (audit) : la precision seulement ; les coordonnees passent dans l'infobulle du bloc
             f.coord:SetText(extra or ""); f.coord:SetShown(extra ~= nil and extra ~= "")
-            f.destCoord = string.format("%.1f, %.1f", cx, cy) .. ((MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) and ("  ·  " .. MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) or "")
+            f.destCoord = string.format("%.1f, %.1f", cx, cy) .. ((Est.MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) and ("  ·  " .. Est.MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) or "")
             if f.dest then f.dest:Show() end
         else
             distTarget = nil
@@ -819,15 +830,15 @@ function RefreshInner(forceWP)
             for j = 1, n do if State.steps[j].t == "go" then entrance = j; break end end
             -- apres l'entree : seulement les remises (les objectifs du donjon sont dans le journal du donjon)
             for j = (entrance or n + 1), n do
-                if Applies(State.steps[j]) and j ~= i and State.steps[j].t ~= "do" and not State.doneCache[j] then seq[#seq + 1] = j end
+                if Core.Applies(State.steps[j]) and j ~= i and State.steps[j].t ~= "do" and not State.doneCache[j] then seq[#seq + 1] = j end
             end
         else
             local j = i
             -- etape choisie par proximite : l'etape du guide qu'on a devancee reste en tete de la liste
             if not State.peek and not State.focus and State.baseCurrent and State.baseCurrent < i then seq[1] = State.baseCurrent; j = State.baseCurrent end
             while #seq < 4 do
-                j = NextApplicable(j)
-                if j == i then j = NextApplicable(j) end
+                j = Core.NextApplicable(j)
+                if j == i then j = Core.NextApplicable(j) end
                 if j > n then break end
                 seq[#seq + 1] = j
             end
@@ -840,31 +851,31 @@ function RefreshInner(forceWP)
             if State.doneCache[j] then
                 passed = passed + 1
             else
-                local nm = QName(t) or StepText(t):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 45)
+                local nm = Core.QName(t) or Core.StepText(t):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 45)
                 local verb = T(t.t) or ""
                 verb = verb ~= "" and (Upper(verb:sub(1, 1)) .. verb:sub(2):lower() .. " ") or ""
-                local label = verb .. (chainOf[j] and ("|cffa99cc0" .. nm .. "|r") or nm)
+                local label = verb .. (Core.chainOf[j] and ("|cffa99cc0" .. nm .. "|r") or nm)
                 local right
                 local w = me and t.m and t.x and WP(t.m, t.x, t.y)
-                if w and w[3] == me[3] then right = T("dist", math.floor(Dist(me[1], me[2], w[1], w[2]) + 0.5)) end
+                if w and w[3] == me[3] then right = T("dist", math.floor(Route.Dist(me[1], me[2], w[1], w[2]) + 0.5)) end
                 items[#items + 1] = { idx = j, text = label, icon = STEP_ICON[t.t], tint = STEP_TINT[t.t], right = right }
             end
         end
         f.list:SetText(#items > 0 and (Caps(T("thenLbl")) .. (dynOrder and ("   |cffcdbb8e" .. T("optimized") .. "|r") or "")) or "")
         SetUpcoming(items, passed)
         -- chaine : cliquer ramene a la premiere etape de la chaine qui reste a faire
-        local ch = chainOf[i]
+        local ch = Core.chainOf[i]
         local firstTodo
         if ch then
             for _, j in ipairs(ch.idx) do
-                if Applies(State.steps[j]) and not State.doneCache[j] then firstTodo = j; break end
+                if Core.Applies(State.steps[j]) and not State.doneCache[j] then firstTodo = j; break end
             end
         end
         f.chainBtn.target = (firstTodo and firstTodo ~= i) and firstTodo or nil
         SetChain(ch)
-        if not State.peek and not State.focus and DB.dgOut and DB.dgOut[DB.guide] and InDgInstance() then
+        if not State.peek and not State.focus and DB.dgOut and DB.dgOut[DB.guide] and Flow.InDgInstance() then
             SetSkip("dgBack")
-        elseif Restorable(i) then
+        elseif Flow.Restorable(i) then
             SetSkip("restore")
             f.kind:SetText(f.kind:GetText() .. "   |cffd69a66" .. T("restoreHint") .. "|r")
         else
@@ -875,9 +886,9 @@ function RefreshInner(forceWP)
         f.lockBtn.list = locks
         local li = locks[1]
         if li then
-            local need = ChainFor(State.steps[li].id) or {}
+            local need = Est.ChainFor(State.steps[li].id) or {}
             f.lockBtn.idx = li
-            f.lockBtn.label:SetText("|cffd69a66" .. T("lockLine", QName(State.steps[li]) or "?") .. "|r  |cff8c7f62"
+            f.lockBtn.label:SetText("|cffd69a66" .. T("lockLine", Core.QName(State.steps[li]) or "?") .. "|r  |cff8c7f62"
                 .. T("lockNeed", #need) .. (#locks > 1 and ("  (+" .. (#locks - 1) .. ")") or "") .. "|r")
             f.lockBtn:Show()
         else
@@ -929,8 +940,8 @@ function RetargetLight(sp)
     if now - (c.t or 0) > 10 then return false end      -- une vraie mise a jour de temps en temps (vols, conseils)
     local g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest }
     distTarget = { sp.m, sp.x, sp.y, c.area }
-    if f.destName then f.destName:SetText((g.zone and g.zone ~= "") and g.zone or (MAPNAME[sp.m] or "")) end
-    f.destCoord = string.format("%.1f, %.1f", sp.x, sp.y) .. (MAPNAME[sp.m] and ("  ·  " .. MAPNAME[sp.m]) or "")
+    if f.destName then f.destName:SetText((g.zone and g.zone ~= "") and g.zone or (Est.MAPNAME[sp.m] or "")) end
+    f.destCoord = string.format("%.1f, %.1f", sp.x, sp.y) .. (Est.MAPNAME[sp.m] and ("  ·  " .. Est.MAPNAME[sp.m]) or "")
     State.lastWP = sp.kind .. sp.x .. ":" .. sp.y .. ">" .. State.current
     SetWaypoint(g)
     UpdateDistance()
@@ -1372,7 +1383,7 @@ function DungeonLore(zone)
     return T("dgAssemble", name, zone)
 end
 function DungeonLogActive()
-    if not (DB and State.steps and IS_DUNGEON[DB.guide]) then return false end
+    if not (DB and State.steps and Core.IS_DUNGEON[DB.guide]) then return false end
     if DB.dgOut and DB.dgOut[DB.guide] then return false end
     local ent = DgEntrance()
     if not ent or not State.doneCache[ent] or State.current <= ent then return false end
@@ -1380,7 +1391,7 @@ function DungeonLogActive()
     return s ~= nil and s.t ~= "turnin"
 end
 local function QProg(q)
-    if logById[q] == true then return CHECK end
+    if Core.logById[q] == true then return Core.CHECK end
     local have, need = 0, 0
     if C_QuestLog and C_QuestLog.GetQuestObjectives then
         local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
@@ -1396,15 +1407,15 @@ function DungeonLogList()
     local ent = DgEntrance(); if not ent then return out end
     for j = ent + 1, #State.steps do
         local s = State.steps[j]
-        if Applies(s) and (s.t == "do" or s.t == "accept" or s.t == "turnin") then
-            for _, q in ipairs(Ids(s)) do
+        if Core.Applies(s) and (s.t == "do" or s.t == "accept" or s.t == "turnin") then
+            for _, q in ipairs(Core.Ids(s)) do
                 if not seen[q] and not Rendue(q) and not (DB.ignored and DB.ignored[q]) then
-                    if logById[q] ~= nil then
+                    if Core.logById[q] ~= nil then
                         seen[q] = true
-                        out[#out + 1] = { q = q, name = QuestTitle(q) or (EST[q] and EST[q].n) or s.quest or ("#" .. q), prog = QProg(q), done = logById[q] == true }
+                        out[#out + 1] = { q = q, name = Core.QuestTitle(q) or (Est.EST[q] and Est.EST[q].n) or s.quest or ("#" .. q), prog = QProg(q), done = Core.logById[q] == true }
                     elseif s.t == "accept" then
                         seen[q] = true
-                        out[#out + 1] = { q = q, name = QuestTitle(q) or (EST[q] and EST[q].n) or s.quest or ("#" .. q), prog = "", later = true, acc = s }
+                        out[#out + 1] = { q = q, name = Core.QuestTitle(q) or (Est.EST[q] and Est.EST[q].n) or s.quest or ("#" .. q), prog = "", later = true, acc = s }
                     end
                 end
             end
@@ -1412,16 +1423,16 @@ function DungeonLogList()
     end
     return out
 end
-local function HasQ(s, q) for _, id in ipairs(Ids(s)) do if id == q then return true end end return false end
+local function HasQ(s, q) for _, id in ipairs(Core.Ids(s)) do if id == q then return true end end return false end
 local function QDetails(row)
     local q = row.q
     local ent = DgEntrance() or 0
     local lines = {}
-    if row.later then lines[#lines + 1] = "|cff8c7f62" .. T("dgStartsIn") .. "|r  " .. StepText(row.acc) end
+    if row.later then lines[#lines + 1] = "|cff8c7f62" .. T("dgStartsIn") .. "|r  " .. Core.StepText(row.acc) end
     -- v1.41 : quete dans ton journal : une ligne par objectif (monstre ou objet) avec son compteur, plutot que
     -- le long texte de l'etape (« tue 7 Deviate Ravagers, 7 Deviate Vipers... »). Les objectifs finis sont grises.
     local objLines = {}
-    if logById[q] ~= nil and C_QuestLog and C_QuestLog.GetQuestObjectives then
+    if Core.logById[q] ~= nil and C_QuestLog and C_QuestLog.GetQuestObjectives then
         local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
         if ok and type(objs) == "table" then
             for _, o in ipairs(objs) do
@@ -1441,10 +1452,10 @@ local function QDetails(row)
     else
         for j = ent + 1, #State.steps do
             local s = State.steps[j]
-            if s.t == "do" and Applies(s) and HasQ(s, q) then lines[#lines + 1] = StepText(s); break end
+            if s.t == "do" and Core.Applies(s) and HasQ(s, q) then lines[#lines + 1] = Core.StepText(s); break end
         end
     end
-    if EST[q] and logById[q] == false then
+    if Est.EST[q] and Core.logById[q] == false then
         for _, dr in ipairs(Estimate({ q }, false).drops) do
             lines[#lines + 1] = "|cff8c7f62" .. T("dropLbl") .. " :|r " .. (dr.name or "?") .. " |cffffd100" .. math.floor(dr.rate * 100 + 0.5) .. " %|r"
         end
@@ -1453,7 +1464,7 @@ local function QDetails(row)
     if DB.tips ~= false and tip then lines[#lines + 1] = "|cffd6b866" .. T("tipLbl") .. "|r  " .. ((Lang() == "en") and tip[2] or tip[1]) end
     for j = ent + 1, #State.steps do
         local s = State.steps[j]
-        if s.t == "turnin" and Applies(s) and HasQ(s, q) then lines[#lines + 1] = "|cff8c7f62" .. T("dgTurnin") .. "|r  " .. StepText(s); break end
+        if s.t == "turnin" and Core.Applies(s) and HasQ(s, q) then lines[#lines + 1] = "|cff8c7f62" .. T("dgTurnin") .. "|r  " .. Core.StepText(s); break end
     end
     return table.concat(lines, "\n\n")
 end
@@ -1481,7 +1492,7 @@ end
 function DungeonLogRender()
     SetObjRows(nil)
     local list = DungeonLogList()
-    local zone = Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", ""):gsub("^[^:]+:%s*", "")
+    local zone = Core.Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", ""):gsub("^[^:]+:%s*", "")
     local done = 0
     for _, r in ipairs(list) do if r.done then done = done + 1 end end
     local nq = 0; for _, r in ipairs(list) do if not r.later then nq = nq + 1 end end
@@ -1515,4 +1526,43 @@ function DungeonLogRender()
     SetSkip("dgExit")
     if ns.Targets then ns.Targets.Update(State.steps[State.current]) end
     Layout()
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Skin)
+do
+    local M = ns.Mod.Skin
+    M.Border = Border
+    M.COL = COL
+    M.Caps = Caps
+    M.Chip = Chip
+    M.ChipScale = ChipScale
+    M.DISPLAY = DISPLAY
+    M.Diamond = Diamond
+    M.DiamondCheck = DiamondCheck
+    M.Divider = Divider
+    M.DungeonLogActive = DungeonLogActive
+    M.DungeonLogList = DungeonLogList
+    M.FONT = FONT
+    M.FS = FS
+    M.FadeIn = FadeIn
+    M.FadeOut = FadeOut
+    M.FlatButton = FlatButton
+    M.Glyph = Glyph
+    M.GoldFrame = GoldFrame
+    M.HEX = HEX
+    M.HeadButton = HeadButton
+    M.INNER = INNER
+    M.Layout = Layout
+    M.MapBar = MapBar
+    M.PAD = PAD
+    M.PopupVisible = PopupVisible
+    M.ScaleGrip = ScaleGrip
+    M.SectionHead = SectionHead
+    M.Shine = Shine
+    M.Spaced = Spaced
+    M.Tex = Tex
+    M.TitledRule = TitledRule
+    M.Toast = Toast
+    M.Upper = Upper
+    M.WarpathName = WarpathName
 end

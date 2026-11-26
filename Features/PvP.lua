@@ -7,6 +7,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : module ns.Mod.PvP (publie en fin de fichier pour les autres fichiers)
+local PvPReport
+local Chronicle = ns.Mod.Chronicle -- v1.50 : module
+local Skin = ns.Mod.Skin -- v1.50 : module
 
 do
     local function L(fr, en) return (Lang and Lang() == "en") and en or fr end
@@ -83,7 +87,7 @@ do
         local e = { m = m, x = x, y = y, z = zoneName(m), when = stamp(), me = UnitLevel("player"),
                     lvl = en.lvl, cl = en.cl, ct = en.ct, rc = en.rc, nm = en.nm }
         table.insert(p.k, e); trim(p.k)
-        if ChronAdd then pcall(ChronAdd, "pk") end
+        if Chronicle.ChronAdd then pcall(Chronicle.ChronAdd, "pk") end
         pending[#pending + 1] = e
         if not (UnitAffectingCombat and UnitAffectingCombat("player")) then finish() end
         if DB.pvpShot and Screenshot and C_Timer then C_Timer.After(0.3, function() pcall(Screenshot) end) end
@@ -101,7 +105,7 @@ do
         table.insert(p.d, { m = m, x = x, y = y, z = zoneName(m), when = stamp(), me = UnitLevel("player"),
                             lvl = en.lvl, cl = en.cl, ct = en.ct, rc = en.rc, nm = en.nm })
         trim(p.d)
-        if ChronAdd then pcall(ChronAdd, "pd") end
+        if Chronicle.ChronAdd then pcall(Chronicle.ChronAdd, "pd") end
         if WarpathPvPRefresh then WarpathPvPRefresh() end
     end
 
@@ -135,19 +139,19 @@ do
     end
     local function tooltip(owner, list, death)
         Tip():SetOwner(owner, "ANCHOR_RIGHT")
-        local hc = death and COL.soft or { 0.76, 0.29, 0.24 }
-        Tip():AddLine(Caps(death and L("Tué par l'Alliance", "Killed by the Alliance") or L("Victoire sur l'Alliance", "Victory over the Alliance")), hc[1], hc[2], hc[3])
-        if #list > 1 then Tip():AddLine(string.format(death and L("%d morts ici", "%d deaths here") or L("%d victoires ici", "%d victories here"), #list), COL.accent[1], COL.accent[2], COL.accent[3]) end
+        local hc = death and Skin.COL.soft or { 0.76, 0.29, 0.24 }
+        Tip():AddLine(Skin.Caps(death and L("Tué par l'Alliance", "Killed by the Alliance") or L("Victoire sur l'Alliance", "Victory over the Alliance")), hc[1], hc[2], hc[3])
+        if #list > 1 then Tip():AddLine(string.format(death and L("%d morts ici", "%d deaths here") or L("%d victoires ici", "%d victories here"), #list), Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3]) end
         for i = #list, math.max(1, #list - 3), -1 do
             local e = list[i]
             Tip():AddLine(" ")
-            Tip():AddLine(e.when .. " - " .. (e.z or ""), COL.gold[1], COL.gold[2], COL.gold[3])
-            Tip():AddLine(who(e), COL.white[1], COL.white[2], COL.white[3])
+            Tip():AddLine(e.when .. " - " .. (e.z or ""), Skin.COL.gold[1], Skin.COL.gold[2], Skin.COL.gold[3])
+            Tip():AddLine(who(e), Skin.COL.white[1], Skin.COL.white[2], Skin.COL.white[3])
             if not death then
                 Tip():AddLine(string.format(L("Toi : niveau %s. Combat %s%s.", "You: level %s. Fight %s%s."), e.me or "?", diff(e),
-                    (e.hp and string.format(L(", %d%% de vie", ", %d%% health"), e.hp) or "") .. (e.dur and string.format(L(", %d s", ", %d s"), e.dur) or "")), COL.soft[1], COL.soft[2], COL.soft[3], true)
+                    (e.hp and string.format(L(", %d%% de vie", ", %d%% health"), e.hp) or "") .. (e.dur and string.format(L(", %d s", ", %d s"), e.dur) or "")), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3], true)
             else
-                Tip():AddLine(string.format(L("Toi : niveau %s.", "You: level %s."), e.me or "?"), COL.soft[1], COL.soft[2], COL.soft[3])
+                Tip():AddLine(string.format(L("Toi : niveau %s.", "You: level %s."), e.me or "?"), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3])
             end
         end
         Tip():Show()
@@ -170,7 +174,7 @@ do
                 end
             end
             b.tex = b:CreateTexture(nil, "OVERLAY"); b.tex:SetAllPoints()
-            b.n = FS(b, 9, COL.accent, FONT, "LEFT"); b.n:SetPoint("BOTTOMLEFT", b, "BOTTOMRIGHT", -2, -2)
+            b.n = Skin.FS(b, 9, Skin.COL.accent, Skin.FONT, "LEFT"); b.n:SetPoint("BOTTOMLEFT", b, "BOTTOMRIGHT", -2, -2)
             b:SetScript("OnEnter", function(self) tooltip(self, self.list, self.death) end)
             b:SetScript("OnLeave", function() Tip():Hide() end)
             b:SetScript("OnClick", function(self) tooltip(self, self.list, self.death) end)
@@ -211,7 +215,7 @@ do
                 for _, t in ipairs(b.x) do t:SetShown(not death) end
                 if death then
                     b.tex:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull"); b.tex:SetDesaturated(true)
-                    b.tex:SetVertexColor(COL.soft[1], COL.soft[2], COL.soft[3], 0.85)
+                    b.tex:SetVertexColor(Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3], 0.85)
                 end
                 b.n:SetText(#c > 1 and #c or "")
                 local sz = (#c > 1) and 22 or 18
@@ -228,26 +232,26 @@ do
         if not (WorldMapFrame and WorldMapFrame.ScrollContainer) or WorldMapFrame._warpathPvP then return end
         WorldMapFrame._warpathPvP = true
         local cb_sync
-        local cb = Chip(WorldMapFrame.ScrollContainer, function()
+        local cb = Skin.Chip(WorldMapFrame.ScrollContainer, function()
             if WarpathDropDB then WarpathDropDB._pvpShow = not shown() end
             cb_sync(); WarpathPvPRefresh(true)
         end)
-        if MapBar() then MapBar():Add(cb, 1) else cb:SetPoint("BOTTOMLEFT", 8, 8); cb:SetFrameStrata("HIGH") end
+        if Skin.MapBar() then Skin.MapBar():Add(cb, 1) else cb:SetPoint("BOTTOMLEFT", 8, 8); cb:SetFrameStrata("HIGH") end
         -- le libelle est remis a chaque affichage de la carte : il suit la langue choisie dans les options
-        cb_sync = function() cb:SetState(Caps(L("Trophées de guerre", "War Trophies")), shown()) end
+        cb_sync = function() cb:SetState(Skin.Caps(L("Trophées de guerre", "War Trophies")), shown()) end
         cb.SetChecked = function() cb_sync() end
         cb_sync()
         cb:SetScript("OnEnter", function(self)
             Tip():SetOwner(self, "ANCHOR_RIGHT")
-            Tip():AddLine(L("X rouges : tes victoires sur l'Alliance. Têtes grises : là où l'Alliance t'a tué.", "Red X: your victories over the Alliance. Grey skulls: where the Alliance killed you."), COL.white[1], COL.white[2], COL.white[3], true)
+            Tip():AddLine(L("X rouges : tes victoires sur l'Alliance. Têtes grises : là où l'Alliance t'a tué.", "Red X: your victories over the Alliance. Grey skulls: where the Alliance killed you."), Skin.COL.white[1], Skin.COL.white[2], Skin.COL.white[3], true)
             Tip():Show()
         end)
         cb:SetScript("OnLeave", function() Tip():Hide() end)
-        WorldMapFrame:HookScript("OnShow", function() ChipScale(cb); cb:SetChecked(shown()); WarpathPvPRefresh(true) end)
+        WorldMapFrame:HookScript("OnShow", function() Skin.ChipScale(cb); cb:SetChecked(shown()); WarpathPvPRefresh(true) end)
         local acc = 0
         WorldMapFrame:HookScript("OnUpdate", function(_, el)
             acc = acc + el; if acc < 0.2 then return end; acc = 0
-            ChipScale(cb)
+            Skin.ChipScale(cb)
             WarpathPvPRefresh()
         end)
     end
@@ -274,4 +278,10 @@ do
             say(L("/warpath pvp photo on|off, /warpath pvp test, /warpath pvp clear", "/warpath pvp shot on|off, /warpath pvp test, /warpath pvp clear"))
         end
     end
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.PvP)
+do
+    local M = ns.Mod.PvP
+    M.PvPReport = PvPReport
 end

@@ -7,6 +7,11 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Chronicle = ns.Mod.Chronicle -- v1.50 : module
+-- v1.50 : module ns.Mod.Journal (publie en fin de fichier pour les autres fichiers)
+local JournalReport
+local Est = ns.Mod.Est -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local FmtDur
 
@@ -52,7 +57,7 @@ do
         local j, g, s = slot(); if not j then return end
         j.a = j.a + TICK; g.a = g.a + TICK; s.a = s.a + TICK; sessA = sessA + TICK
         g.l1 = UnitLevel("player")
-        if ChronTick then ChronTick(TICK) end
+        if Chronicle.ChronTick then Chronicle.ChronTick(TICK) end
     end
 
     -- petite ligne discrete au bas de la fenetre du guide : XP/h actif de la session
@@ -75,7 +80,7 @@ do
             -- pied : niveau | XP/h actif | temps avant le niveau suivant (au rythme actif)
             lv:SetText(T("footLvl", lvl, math.floor((cur or 0) * 100 / math.max(1, mx or 1))))
             -- v1.41 (audit) : sans donnees encore (debut de seance), « calcul… » au lieu de « — XP/h » et « Niv. 25 dans — »
-            fr:SetText(rate > 0 and T("footXph", FormatNum(math.floor(rate))) or T("footCalc"))
+            fr:SetText(rate > 0 and T("footXph", Est.FormatNum(math.floor(rate))) or T("footCalc"))
             local left = (mx or 0) - (cur or 0)
             ss:SetText(rate > 0 and T("footNext", lvl + 1, FmtDur and FmtDur(left / rate * 3600) or (math.floor(left / rate * 60 + 0.5) .. " min")) or "")
             -- detail au survol du pied
@@ -93,7 +98,7 @@ do
             if d > 0 then
                 local j, g, s = slot()
                 if j then j.xp = j.xp + d; g.xp = g.xp + d; s.xp = s.xp + d; sessXP = sessXP + d end
-                if ChronAdd then ChronAdd("xp", d) end
+                if Chronicle.ChronAdd then Chronicle.ChronAdd("xp", d) end
                 act()
             end
         end
@@ -115,18 +120,24 @@ do
     if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(TICK, function() tick(); line() end) end
 
     local function hm(s) s = math.floor(s or 0); return string.format("%dh%02d", math.floor(s / 3600), math.floor(s % 3600 / 60)) end
-    local function rate(xp, a) return (a or 0) > 60 and FormatNum(math.floor(xp * 3600 / a)) or "-" end
+    local function rate(xp, a) return (a or 0) > 60 and Est.FormatNum(math.floor(xp * 3600 / a)) or "-" end
 
     function JournalReport(arg)
         local j = J(); if not j then return end
         if arg == "reset" then DB.jr = nil; sessA, sessXP = 0, 0; say(T("jrReset")); return end
         say(T("jrHead"))
-        say(T("jrLine", T("jrSession"), hm(sessA), FormatNum(sessXP), rate(sessXP, sessA)))
-        say(T("jrLine", T("jrTotal"), hm(j.a), FormatNum(j.xp), rate(j.xp, j.a)))
+        say(T("jrLine", T("jrSession"), hm(sessA), Est.FormatNum(sessXP), rate(sessXP, sessA)))
+        say(T("jrLine", T("jrTotal"), hm(j.a), Est.FormatNum(j.xp), rate(j.xp, j.a)))
         local g = DB.guide and j.g[DB.guide]
         -- v1.50 : titre du guide (avant : G[DB.guide], toujours vide, donc la cle "stv1" s'affichait)
-        local gd = Guides and Guides[DB.guide]
-        if g then say(T("jrLine", (gd and (Lang and Lang() == "en" and gd.title_en or gd.title)) or DB.guide, hm(g.a), FormatNum(g.xp), rate(g.xp, g.a))) end
+        local gd = Core.Guides and Core.Guides[DB.guide]
+        if g then say(T("jrLine", (gd and (Lang and Lang() == "en" and gd.title_en or gd.title)) or DB.guide, hm(g.a), Est.FormatNum(g.xp), rate(g.xp, g.a))) end
         say(T("jrHelp"))
     end
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Journal)
+do
+    local M = ns.Mod.Journal
+    M.JournalReport = JournalReport
 end

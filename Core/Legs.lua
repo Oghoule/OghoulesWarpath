@@ -8,6 +8,9 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+local Route = ns.Mod.Route -- v1.50 : module
+-- v1.50 : module ns.Mod.Legs (publie en fin de fichier pour les autres fichiers)
+local LegPoint
 
 local ON_LEG = 120   -- yards : au-dela, tu n'es sur aucun trajet prevu
 local NEAR_GOAL = 40 -- yards : assez pres de l'objectif, on le vise directement
@@ -48,7 +51,7 @@ local function segDist(x, y, a, b)
     local vx, vy = b[1] - a[1], b[2] - a[2]
     local L = vx * vx + vy * vy
     local t = L > 0 and math.max(0, math.min(1, ((x - a[1]) * vx + (y - a[2]) * vy) / L)) or 0
-    return Dist(x, y, a[1] + t * vx, a[2] + t * vy), t
+    return Route.Dist(x, y, a[1] + t * vx, a[2] + t * vy), t
 end
 
 -- le point a viser pour l'etape s, ou nil (pas de trajet, ou tu en es trop loin)
@@ -61,7 +64,7 @@ function LegPoint(s, me)
         local pts = leg.pts
         if leg.c == me[3] then
             local goal = pts[#pts]
-            if Dist(me[1], me[2], goal[1], goal[2]) <= NEAR_GOAL then return nil end
+            if Route.Dist(me[1], me[2], goal[1], goal[2]) <= NEAR_GOAL then return nil end
             for i = 1, #pts - 1 do
                 local d, t = segDist(me[1], me[2], pts[i], pts[i + 1])
                 if d <= ON_LEG and (not best or d < best.d) then best = { d = d, pts = pts, i = i, t = t } end
@@ -71,8 +74,14 @@ function LegPoint(s, me)
     if not best then return nil end
     local pts, k = best.pts, best.i + 1
     -- point deja atteint : le suivant
-    while k < #pts and Dist(me[1], me[2], pts[k][1], pts[k][2]) <= PASSED do k = k + 1 end
+    while k < #pts and Route.Dist(me[1], me[2], pts[k][1], pts[k][2]) <= PASSED do k = k + 1 end
     if k >= #pts then return nil end -- plus rien entre toi et l'objectif : la fleche normale suffit
     local p = pts[k]
     return { m = p[3], x = p[4], y = p[5], name = T("legVia"), kind = "leg" }
+end
+
+-- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Legs)
+do
+    local M = ns.Mod.Legs
+    M.LegPoint = LegPoint
 end

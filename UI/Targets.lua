@@ -4,6 +4,9 @@ local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Skin = ns.Mod.Skin -- v1.50 : module
+local Est = ns.Mod.Est -- v1.50 : module
 
 -- Une ligne cliquable par PNJ utile a l'etape (donneur, a qui rendre, monstres, maitre de vol).
 -- Chaque ligne est un bouton securise de Blizzard qui lance "/targetexact Nom" : c'est TON clic qui
@@ -51,15 +54,15 @@ do
         if p then panel:SetScale(p[4] or 1); panel:SetPoint(p[1], UIParent, p[1], p[2], p[3]) else panel:SetPoint("CENTER", UIParent, "CENTER", -300, -120) end
         -- clic droit : la recoller sous la fenetre du guide
         panel:SetScript("OnMouseUp", function(_, btn) if btn == "RightButton" then ns.Targets.Reset() end end)
-        local bg = Tex(panel, COL.bg, 0.85, "BACKGROUND"); bg:SetAllPoints()
-        local top = Tex(panel, COL.line); top:SetHeight(1); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT")
-        local bot = Tex(panel, COL.line); bot:SetHeight(1); bot:SetPoint("BOTTOMLEFT"); bot:SetPoint("BOTTOMRIGHT")
+        local bg = Skin.Tex(panel, Skin.COL.bg, 0.85, "BACKGROUND"); bg:SetAllPoints()
+        local top = Skin.Tex(panel, Skin.COL.line); top:SetHeight(1); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT")
+        local bot = Skin.Tex(panel, Skin.COL.line); bot:SetHeight(1); bot:SetPoint("BOTTOMLEFT"); bot:SetPoint("BOTTOMRIGHT")
         -- v1.41 (uniformisation) : en-tete fin (26 px) comme les autres fenetres : bande, losange rouge, titre, « ? »
-        local hbg = Tex(panel, COL.panel or COL.bg, 1, "BORDER"); hbg:SetHeight(HDR); hbg:SetPoint("TOPLEFT", 0, -1); hbg:SetPoint("TOPRIGHT", 0, -1)
-        local hln = Tex(panel, COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -HDR); hln:SetPoint("TOPRIGHT", 0, -HDR)
-        local gem = Diamond(panel, 7, COL.red); gem:SetPoint("LEFT", panel, "TOPLEFT", 10, -HDR / 2)
-        title = FS(panel, 10, COL.white, FONT, "LEFT"); title:SetPoint("LEFT", panel, "TOPLEFT", 22, -HDR / 2)
-        local help = HeadButton(panel, "?"); help:SetPoint("RIGHT", panel, "TOPRIGHT", -5, -HDR / 2)
+        local hbg = Skin.Tex(panel, Skin.COL.panel or Skin.COL.bg, 1, "BORDER"); hbg:SetHeight(HDR); hbg:SetPoint("TOPLEFT", 0, -1); hbg:SetPoint("TOPRIGHT", 0, -1)
+        local hln = Skin.Tex(panel, Skin.COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -HDR); hln:SetPoint("TOPRIGHT", 0, -HDR)
+        local gem = Skin.Diamond(panel, 7, Skin.COL.red); gem:SetPoint("LEFT", panel, "TOPLEFT", 10, -HDR / 2)
+        title = Skin.FS(panel, 10, Skin.COL.white, Skin.FONT, "LEFT"); title:SetPoint("LEFT", panel, "TOPLEFT", 22, -HDR / 2)
+        local help = Skin.HeadButton(panel, "?"); help:SetPoint("RIGHT", panel, "TOPRIGHT", -5, -HDR / 2)
         help:SetScript("OnEnter", function(self)
             Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("helpHead"))
             for k = 1, 4 do Tip():AddLine("|cffccba8f" .. T("tgtHelpK" .. k) .. "|r  " .. T("tgtHelpV" .. k), 1, 1, 1, true) end
@@ -79,7 +82,7 @@ do
         local grip = CreateFrame("Button", nil, panel)
         grip:SetSize(12, 12); grip:SetPoint("BOTTOMRIGHT", -1, 1); grip:SetFrameLevel((panel:GetFrameLevel() or 1) + 10)
         local gt = grip:CreateTexture(nil, "OVERLAY"); gt:SetAllPoints()
-        gt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up"); gt:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3])
+        gt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up"); gt:SetVertexColor(Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3])
         local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
         grip:SetScript("OnMouseDown", function()
             if DB.locked or (InCombatLockdown and InCombatLockdown()) then return end
@@ -95,22 +98,22 @@ do
             b:SetPoint("TOPLEFT", 4, -HDR - 3 - (i - 1) * RH); b:SetPoint("TOPRIGHT", -4, -HDR - 3 - (i - 1) * RH)
             b:RegisterForClicks("AnyUp", "AnyDown")
             b:SetAttribute("type", "macro")
-            local hl = Tex(b, COL.accent, 0.12, "HIGHLIGHT"); hl:SetAllPoints()
+            local hl = Skin.Tex(b, Skin.COL.accent, 0.12, "HIGHLIGHT"); hl:SetAllPoints()
             -- icone du jeu (reconnue au premier coup d'oeil) dans un cadre au style de l'addon
             b.box = CreateFrame("Frame", nil, b); b.box:SetSize(16, 16); b.box:SetPoint("LEFT", 1, 0)
-            local boxBg = Tex(b.box, COL.faint, 0.55, "BACKGROUND"); boxBg:SetAllPoints()
+            local boxBg = Skin.Tex(b.box, Skin.COL.faint, 0.55, "BACKGROUND"); boxBg:SetAllPoints()
             b.edge = {}
             for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-                local e = Tex(b.box, COL.line)
+                local e = Skin.Tex(b.box, Skin.COL.line)
                 if side == "TOP" or side == "BOTTOM" then e:SetHeight(1); e:SetPoint(side .. "LEFT"); e:SetPoint(side .. "RIGHT")
                 else e:SetWidth(1); e:SetPoint("TOP" .. side); e:SetPoint("BOTTOM" .. side) end
                 b.edge[#b.edge + 1] = e
             end
             b.icon = b.box:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(12, 12); b.icon:SetPoint("CENTER")
             -- taux de drop toujours colle au bord droit, le nom prend le reste
-            b.pct = FS(b, 11, { 1, 0.82, 0 }, FONT, "RIGHT"); b.pct:SetPoint("RIGHT", -2, 0)
-            b.fs = FS(b, 11, COL.white, FONT, "LEFT"); b.fs:SetPoint("LEFT", b.box, "RIGHT", 6, 0); b.fs:SetPoint("RIGHT", b.pct, "LEFT", -6, 0)
-            if i > 1 then local sep = Tex(b, COL.faint, 0.8); sep:SetHeight(1); sep:SetPoint("TOPLEFT", 20, 0); sep:SetPoint("TOPRIGHT", 0, 0) end
+            b.pct = Skin.FS(b, 11, { 1, 0.82, 0 }, Skin.FONT, "RIGHT"); b.pct:SetPoint("RIGHT", -2, 0)
+            b.fs = Skin.FS(b, 11, Skin.COL.white, Skin.FONT, "LEFT"); b.fs:SetPoint("LEFT", b.box, "RIGHT", 6, 0); b.fs:SetPoint("RIGHT", b.pct, "LEFT", -6, 0)
+            if i > 1 then local sep = Skin.Tex(b, Skin.COL.faint, 0.8); sep:SetHeight(1); sep:SetPoint("TOPLEFT", 20, 0); sep:SetPoint("TOPRIGHT", 0, 0) end
             if b.fs.SetWordWrap then b.fs:SetWordWrap(false) end
             b:SetScript("OnEnter", function(self)
                 Tip():SetOwner(self, "ANCHOR_RIGHT")
@@ -187,19 +190,19 @@ do
         if State.flightPlan and State.flightPlan.from and ns.FlightNodeNpc then add(ns.FlightNodeNpc[State.flightPlan.from.key], "fly") end
         local groups = {}   -- un groupe par objectif : on les prend tour a tour, pour que chaque objectif ait sa place
         if s then
-            for _, qid in ipairs(Ids(s)) do
-                local e = EST[qid]
+            for _, qid in ipairs(Core.Ids(s)) do
+                local e = Est.EST[qid]
                 if e then
                     if s.t == "accept" then for _, g in ipairs(e.g or {}) do add(g, "giver") end
                     elseif s.t == "turnin" then for _, g in ipairs(e.en or {}) do add(g, "turnin") end
-                    elseif s.t == "do" and logById[qid] ~= true then
+                    elseif s.t == "do" and Core.logById[qid] ~= true then
                         -- tuer, utiliser un objet sur, ou parler : l'icone le dit
                         local tt = type(e.t) == "string" and e.t:lower() or ""
                         local kk = e.u and "use" or ((tt:find("^speak") or tt:find("^talk")) and "talk") or "mob"
                         for _, k in ipairs(e.k or {}) do if not killDone(qid, k[1]) then groups[#groups + 1] = { { k[1], kk } } end end
                         for _, d in ipairs(e.d or {}) do
                             if #d >= 7 and not itemDone(d[1], d[2]) then
-                                local rate, how = DropRate(d)
+                                local rate, how = Est.DropRate(d)
                                 local per = ns.QuestieDropNpc and ns.QuestieDropNpc[d[1]]
                                 local g = {}
                                 for j = 7, #d do
@@ -237,19 +240,19 @@ do
         shownKey = key
         if off then if panel then panel:Hide() end; return end
         Create()
-        title:SetText(Caps(T("tgtTitle")))
+        title:SetText(Skin.Caps(T("tgtTitle")))
         for i, b in ipairs(rows) do
             local t = L[i]
             if t then
                 b.name = t.name; b.kind = t.kind
                 b:SetAttribute("macrotext", "/targetexact " .. t.name)
                 b.icon:SetTexture(ICON[t.kind])
-                local KC = { giver = COL.accent, turnin = COL.green, mob = COL.red, use = COL.gold, talk = COL.accent, fly = COL.gold, inn = COL.soft, buy = COL.gold }
-                local c = KC[t.kind] or COL.line
+                local KC = { giver = Skin.COL.accent, turnin = Skin.COL.green, mob = Skin.COL.red, use = Skin.COL.gold, talk = Skin.COL.accent, fly = Skin.COL.gold, inn = Skin.COL.soft, buy = Skin.COL.gold }
+                local c = KC[t.kind] or Skin.COL.line
                 for _, e in ipairs(b.edge) do e:SetColorTexture(c[1], c[2], c[3], 1) end
                 -- nos icones (blanches) prennent la couleur du cadre ; celles du jeu gardent leurs couleurs
                 local own = t.kind == "giver" or t.kind == "turnin" or t.kind == "mob"
-                local ic = own and (t.kind == "mob" and COL.accent or c) or { 1, 1, 1 }
+                local ic = own and (t.kind == "mob" and Skin.COL.accent or c) or { 1, 1, 1 }
                 if b.icon.SetVertexColor then b.icon:SetVertexColor(ic[1], ic[2], ic[3]) end
                 b.fs:SetText(t.name); b.pct:SetText(t.pct and (t.pct .. " %") or "")
                 b:Show()
