@@ -274,8 +274,38 @@ function ListHas(list, value)
     return false
 end
 
+-- v1.52 : parcours choisi : "scout" (Éclaireur, classique, par defaut) ou "warband" (Bande de guerre, donjons
+-- imbriques). Une etape avec s.route ne compte que dans ce parcours.
+function Core.Parcours()
+    return (State.DB and State.DB.route == "warband") and "warband" or "scout"
+end
+
+-- v1.52 : quetes du 1er passage d'un donjon, lues dans son guide (de l'entree « go » jusqu'a la note facultative
+-- du 2e passage) : dq = toutes, dqo = celles prises dehors avant l'entree (non facultatives). En cache.
+local dsCache = {}
+function Core.DungeonStepQuests(key)
+    local c = dsCache[key]
+    if c then return c[1], c[2] end
+    local dq, dqo, seen = {}, {}, {}
+    local g = Core.Guides and Core.Guides[key]
+    local inside = false
+    for _, s in ipairs(g and g.steps or {}) do
+        if s.t == "go" then inside = true
+        elseif inside and s.t == "note" and s.optional then break   -- debut du 2e passage
+        elseif s.id and (s.t == "accept" or s.t == "do" or s.t == "turnin") then
+            for _, q in ipairs(Ids(s)) do
+                if not seen[q] then seen[q] = true; dq[#dq + 1] = q end
+                if not inside and s.t == "accept" and not s.optional then dqo[#dqo + 1] = q end
+            end
+        end
+    end
+    dsCache[key] = { dq, dqo }
+    return dq, dqo
+end
+
 function Applies(s)
     return s and ListHas(s.class, State.myClass) and ListHas(s.race, State.myRace)
+        and (not s.route or s.route == Core.Parcours())
 end
 
 -- Cle d'une etape INDEPENDANTE de sa position dans le guide : type + quetes (ou empreinte du texte) + rang parmi
@@ -436,6 +466,29 @@ function Core.StepDone(i, anchor)
             end
         end
         return skip and "skip" or false
+    end
+    -- v1.52 : etape « Donjon » (parcours Bande de guerre) : faite quand tu ressors du donjon (Flow : dsDone),
+    -- quand toutes ses quetes du 1er passage sont finies ou rendues, ou avec OK. Sautee si aucune de ses quetes
+    -- prises dehors n'est dans ton journal ni encore a prendre plus haut (rien a y faire).
+    if s.t == "dungeon" then
+        if State.DB.seen[SeenKey(i)] then return "done" end
+        local k = s.dg
+        if State.DB.dsDone and State.DB.dsDone[k] then return "done" end
+        local dq, dqo = Core.DungeonStepQuests(k)
+        local all, inLog = #dq > 0, false
+        for _, q in ipairs(dq) do
+            if not (Core.Rendue(q) or logById[q] == true or State.DB.ignored[q]) then all = false end
+            if logById[q] ~= nil then inLog = true end
+        end
+        if all then return "done" end
+        local entered = State.DB.dsIn and State.DB.dsIn[k]
+        if #dqo > 0 and not inLog and not entered then
+            local ahead = false
+            for _, q in ipairs(dqo) do if State.pendingAccept[q] then ahead = true end end
+            if not ahead then return "skip" end
+        end
+        if i < anchor and not entered then return "skip" end
+        return false
     end
     -- entree d'un donjon : faite seulement quand tu entres vraiment dans l'instance (ou OK a la main)
     if s.t == "go" and IS_DUNGEON[State.DB.guide] then

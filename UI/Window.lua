@@ -749,6 +749,9 @@ ns.E = {
     ProfQuestList = function() return Profs.ProfQuestList() end, ProfOn = function(id) return Profs.ProfOn(id) end,
     ProfSet = function(id, v) Profs.ProfSet(id, v) end, ProfDetect = function() return Profs.ProfDetect(true) end,
     AskProf = function(q) Flow.AskChain(q, true, "prof") end,
+    -- v1.52 : quetes speciales (Features/Special.lua, charge apres ce fichier)
+    SpecialList = function() return ns.Mod.Special.List and ns.Mod.Special.List() or {} end,
+    AskSpecial = function(k) if ns.Mod.Special.Ask then ns.Mod.Special.Ask(k, true) end end,
     -- v1.46 : fiche de donjon (Features/DungeonSheet.lua, charge apres ce fichier)
     DungeonName = function(d) return Flow.DungeonName(d) end,
     DungeonIdeal = function(k) return Flow.DungeonIdeal and Flow.DungeonIdeal(k) end,   -- v1.47 : n'est plus dans _G (DECL)

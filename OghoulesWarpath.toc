@@ -42,6 +42,7 @@ UI\Skin.lua
 Core\Flow.lua
 UI\Window.lua
 Features\Comfort.lua
+Features\Special.lua
 UI\Arrow.lua
 UI\Targets.lua
 Features\Hearth.lua

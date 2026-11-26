@@ -5,7 +5,6 @@ ns.Skipped = {
     { 861, 46.0, 63.4, 8589934770, 10, "The Hunter's Way" },
   },
   [1413] = {
-    { 865, 62.4, 37.6, 0, 13, "Raptor Horns" },
     { 896, 63.4, 38.5, 0, 13, "Miner's Fortune" },
     { 959, 63.1, 37.6, 0, 14, "Trouble at the Docks" },
     { 1069, 62.4, 37.6, 0, 15, "Deepmoss Spider Eggs" },

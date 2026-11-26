@@ -12,6 +12,13 @@ D.CHAIN = {
 D.CHAIN.Undead = D.CHAIN.Scourge
 -- Skyborne cote Horde (nouvelle race de Forever) : Zephras Isle, puis le meme parcours que les autres
 D.CHAIN.Skyborne = { "zephras", "barrens", "stonetalon", "ashenvale", "sbarrens", "hillsbrad", "needles", "desolace", "dustwallow", "stv1", "arathi", "riverglades", "stv2", "dustwallow2", "feralas", "tanaris", "hinterlands", "searing", "azshara", "tanaris2", "ungoro", "felwood", "steppes", "wpl", "epl", "winterspring", "hyjal", "silithus" }
+-- v1.52 : zones sautees par le parcours Bande de guerre (donjons imbriques), cle de guide -> true.
+-- A remplir avec le contenu du parcours (etude_donjons.md, outils) ; verifier qu'aucune quete d'une autre
+-- zone n'en depend (prerequis) avant d'en ajouter une.
+D.WARBAND_SKIP = {
+    stonetalon = true,   -- 20-23 : remplacee par Ruins of Lordaeron + Shadowfang Keep (2026-11-26, etude_donjons)
+    sbarrens = true,     -- 25-27 : remplacee par Blackfathom Deeps + Razorfen Kraul ; aucune quete plus loin n'en depend
+}
 -- Notes ecrites a la main pour l'etape « Faire » des chaines de quetes (guide « chain ») : { fr, en }
 D.CHAINNOTES = {
     -- A Moon-Kissed Blade (paladin, Diplomatic Incident) : lieux confirmes par l'auteur le 2026-11-24

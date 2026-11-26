@@ -259,6 +259,43 @@ function Comfort.SuggestDungeonForLevel()
     ns.Trace("popup WARPATH_DUNGEON"); Skin.Popup("WARPATH_DUNGEON", Core.T("dAskXP", s.level, Flow.DungeonName(best), best.min, best.max) .. ((DungeonSheet.DungeonAskLine and DungeonSheet.DungeonAskLine(best.key)) or Flow.DungeonReqText(best.key)))
 end
 
+-- v1.52 : Cozy Sleeping Bag (fin d'une chaine des guides) : +3 % sur toute l'XP pendant 2 h ; on renouvelle le bonus en se
+-- couchant 1 min dedans. Rappel toutes les 10 min au plus, hors combat et hors instance, si tu as le sac et que le bonus
+-- est absent ou finit dans moins de 10 min. Case « Rappel du sac de couchage » (Comportement), DB.bagRemind.
+local BAG_ITEM, BAG_SOON, BAG_EVERY = 211527, 600, 600
+local bagLast = -BAG_EVERY
+local function BagAura()
+    if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
+    -- le nom du bonus n'est pas connu sur Forever : nom du sort de l'objet, nom de l'objet (traduits par le jeu), ou anglais
+    local sname = C_Item and C_Item.GetItemSpell and C_Item.GetItemSpell(BAG_ITEM)
+    local iname = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(BAG_ITEM)
+    for i = 1, 40 do
+        local a = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
+        if not a then break end
+        local n = a.name or ""
+        if (sname and n == sname) or (iname and n == iname) or n:find("Cozy", 1, true) or n:find("Sleeping Bag", 1, true) then return a end
+    end
+end
+function Comfort.BagCheck()
+    if not State.DB or State.DB.bagRemind == false then return end
+    if (UnitLevel and UnitLevel("player") or 60) >= 60 then return end
+    if (InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player")) then return end
+    if IsInInstance and IsInInstance() then return end
+    if not (C_Item and C_Item.GetItemCount and (C_Item.GetItemCount(BAG_ITEM) or 0) > 0) then return end
+    local now = GetTime and GetTime() or 0
+    if now - bagLast < BAG_EVERY then return end
+    local ok, a = pcall(BagAura)
+    if not ok then return end
+    local left = a and a.expirationTime and a.expirationTime > 0 and (a.expirationTime - now) or nil
+    if a and (not left or left > BAG_SOON) then return end
+    bagLast = now
+    local msg = a and Core.T("bagSoon", math.max(1, math.floor(left / 60))) or Core.T("bagMissing")
+    if Skin.Toast then Skin.Toast(Core.T("bagHead"), msg) else Core.say(msg) end
+end
+if not WARPATH_TEST and C_Timer and C_Timer.NewTicker then
+    C_Timer.NewTicker(60, function() pcall(Comfort.BagCheck) end)
+end
+
 -- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Comfort)
 do
     local M = ns.Mod.Comfort

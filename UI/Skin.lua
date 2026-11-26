@@ -767,6 +767,13 @@ function Skin.RefreshInner(forceWP)
         end
         -- donjon : toutes les quetes en main, on marche sur l'entree
         if s.t == "go" and Core.IS_DUNGEON[State.DB.guide] and not State.peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
+        -- v1.52 : etape « Donjon » (parcours Bande de guerre) : le donjon, ses quetes en main, cherche un groupe
+        if s.t == "dungeon" and s.dg then
+            local dq = Core.DungeonStepQuests(s.dg)
+            local have = 0
+            for _, q in ipairs(dq) do if Core.logById[q] ~= nil then have = have + 1 end end
+            body = "|cffd6b866" .. Core.T("dsInfo", Flow.DungeonName(s.dg), have) .. "|r\n\n" .. body
+        end
         body = body:gsub("^%s+", "")
         Core.f.text:SetText(body); Core.f.text:SetShown(body ~= "")
         -- itineraire : au plus 3 etapes (vol, zeppelin/bateau, puis l'objectif)
@@ -886,7 +893,7 @@ function Skin.RefreshInner(forceWP)
             SetSkip("restore")
             Core.f.kind:SetText(Core.f.kind:GetText() .. "   |cffd69a66" .. Core.T("restoreHint") .. "|r")
         else
-            SetSkip((s.t == "note" or s.t == "go" or s.t == "level") and "ok" or "ignore")
+            SetSkip((s.t == "note" or s.t == "go" or s.t == "level" or s.t == "dungeon") and "ok" or "ignore")
         end
         -- quete sautee faute de prerequis : on la montre, cliquable
         local locks = (not State.peek) and Est.LockCandidates() or {}
@@ -1455,6 +1462,8 @@ function DungeonLogRender()
     SetObjRows(nil)
     local list = Flow.DungeonLogList()
     local zone = Core.Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", ""):gsub("^[^:]+:%s*", "")
+    local ds = Flow.DsActive and Flow.DsActive()   -- v1.52 : etape « Donjon » : nom du donjon, pas de la zone
+    if ds then zone = Flow.DungeonName(ds.dg):gsub("%s*%b()", "") end
     local done = 0
     for _, r in ipairs(list) do if r.done then done = done + 1 end end
     local nq = 0; for _, r in ipairs(list) do if not r.later then nq = nq + 1 end end

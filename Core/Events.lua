@@ -83,8 +83,10 @@ function Events.OnEvent(self, event, ...)
         Core.ScanLog()
         local key = State.DB.guide
         if key == "chain" then
-            Core.Guides.chain = State.DB.chainQ and Est.BuildChainGuide(State.DB.chainQ, State.DB.chainSelf) or nil
-            if not Core.Guides.chain then key = State.DB.chainBack; State.DB.chainBack, State.DB.chainQ, State.DB.chainSelf = nil, nil, nil end
+            -- v1.52 : quete speciale (Features/Special.lua) : son guide sp_<nom>, sinon une chaine ordinaire
+            if State.DB.chainSpecial and ns.Mod.Special.Guide then Core.Guides.chain = ns.Mod.Special.Guide(State.DB.chainSpecial)
+            else Core.Guides.chain = State.DB.chainQ and Est.BuildChainGuide(State.DB.chainQ, State.DB.chainSelf) or nil end
+            if not Core.Guides.chain then key = State.DB.chainBack; State.DB.chainBack, State.DB.chainQ, State.DB.chainSelf, State.DB.chainSpecial = nil, nil, nil, nil end
         end
         if key == "chain" and Core.Guides.chain then
             -- une chaine etait en cours : on la garde

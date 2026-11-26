@@ -500,11 +500,40 @@ local function CreateOptions()
         local none = FS(pg, 11, COL.soft, FONT, "LEFT"); none:SetWidth(CW); none:SetPoint("TOPLEFT", 0, -22)
         local ask = CheckRow(pg, CW, "askClass", function() return not DB.noClassAsk end, function(v) DB.noClassAsk = not v end)
         ask:SetPoint("TOPLEFT", 0, -18 - 3 * 30 - 10)
+        -- v1.52 : quetes speciales (Cozy Sleeping Bag...) : un clic ouvre la proposition (« Faire maintenant »)
+        local spHdr = SmallHeader(pg, "specialHdr")
+        local spRows = {}
+        for k = 1, 2 do
+            local b = FlatButton(pg, CW, 26, function(self) if self.k then E.AskSpecial(self.k) end end)
+            b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 12, 0)
+            if b.fs.SetFont then b.fs:SetFont(FONT, 11, "") end
+            b.lv = FS(b, 9, COL.gold, FONT, "RIGHT"); b.lv:SetPoint("RIGHT", -12, 0)
+            b.glow = GlowRow(b)
+            spRows[k] = b
+        end
         optRows[#optRows + 1] = function()
             local list = E.ClassQuestList()
             local me = UnitLevel and UnitLevel("player") or 0
             none:SetText(#list == 0 and T("classNone") or ""); none:SetShown(#list == 0)
             ask:ClearAllPoints(); ask:SetPoint("TOPLEFT", 0, -18 - math.max(1, math.min(#list, 12)) * 30 - 12)
+            local sy = -18 - math.max(1, math.min(#list, 12)) * 30 - 12 - ROW_H - 12
+            local sp = E.SpecialList()
+            spHdr:ClearAllPoints(); spHdr:SetPoint("TOPLEFT", 0, sy); spHdr:SetShown(#sp > 0)
+            for k, b in ipairs(spRows) do
+                local c = sp[k]
+                if c then
+                    b:ClearAllPoints(); b:SetPoint("TOPLEFT", 0, sy - 18 - (k - 1) * 30)
+                    b.k = (c.state ~= "done") and c.key or nil
+                    b.fs:SetText(c.name)
+                    local col = (c.state == "done") and COL.gold or ((me >= c.lvl) and COL.white or COL.soft)
+                    if b.fs.SetTextColor then b.fs:SetTextColor(col[1], col[2], col[3]) end
+                    b.lv:SetText(c.state == "done" and T("classDone") or (c.state == "doing" and T("spStateDoing", c.n, c.total)) or T("classLvl", c.lvl))
+                    b.glow:SetOn(c.state ~= "done" and me >= c.lvl)
+                    b:Show()
+                else
+                    b.k = nil; b.glow:SetOn(false); b:Hide()
+                end
+            end
             for k, b in ipairs(rows) do
                 local c = list[k]
                 if c then
@@ -731,7 +760,7 @@ local function CreateOptions()
         end
         -- AUTOMATISATION
         sec("secAuto")
-        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "dgPickOpt", "dgPick" } }) do
+        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "dgPickOpt", "dgPick" }, { "bagOpt", "bagRemind" } }) do
             row(flag(o[1], o[2], true))
         end
         row(CheckRow(pg, CW, "shareOpt", function() return WarpathDropDB and WarpathDropDB._share ~= false end,

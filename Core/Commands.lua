@@ -46,6 +46,22 @@ SlashCmdList["WARPATH"] = function(msg)
         Window.ShowGuide(State.DB.shown == false)
     elseif cmd == "compact" or cmd == "mini" then
         Window.ToggleMini()
+    elseif cmd == "parcours" or cmd == "path" then
+        -- v1.52 : parcours Bande de guerre (warband, donjons imbriques) / Eclaireur (scout, classique) ;
+        -- en attendant le choix dans les options. Changer de parcours ne perd rien (tout est recalcule).
+        local a = (arg or ""):lower()
+        local want = (a == "warband" or a == "bande") and "warband" or ((a == "scout" or a == "eclaireur" or a == "éclaireur") and "scout") or nil
+        local name = function(r) return Core.T(r == "warband" and "routeWarband" or "routeScout") end
+        if want then
+            State.DB.route = (want == "warband") and "warband" or nil
+            Core.say(Core.T("routeSet", name(want)))
+            Core.say(Core.T(want == "warband" and "routeWarbandTip" or "routeScoutTip"))
+            State.lastWP = nil
+            if State.DB.guide and Core.Guides[State.DB.guide] then Flow.SetGuide(State.DB.guide, true) end
+            Skin.Refresh(true)
+        else
+            Core.say(Core.T("routeUsage", name(Core.Parcours())))
+        end
     elseif cmd == "intendance" or cmd == "quartermaster" or cmd == "qm" then
         if arg == "stop" or arg == "quitter" or arg == "quit" then Quartermaster.QMQuit() else Quartermaster.QMOpen() end
     elseif cmd == "skip" or cmd == "ignore" then
@@ -311,6 +327,8 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.52", fr = "Cozy Sleeping Bag (+3 % sur toute l'XP) : la chaîne est dans le guide, dès le sud de Camp Taurajo (vers 19), puis Westfall, Stonetalon, Loch Modan et Arathi, chaque morceau placé là où ton trajet passe. Ensuite, le guide te rappelle de te coucher 1 min dans le sac quand le bonus (2 h) est absent ou presque fini ; case « Rappel du sac de couchage » dans Comportement. Nouveau : les quêtes spéciales (Options > Classe) : la chaîne du sac y est, avec « Y aller » pour la faire tout de suite en détour (le guide te ramène ensuite à ta zone) ; en Éclaireur, le guide te la propose quand tu es dans une capitale à zeppelins.",
+      en = "Cozy Sleeping Bag (+3% to all XP): the chain is in the guide, starting south of Camp Taurajo (around 19), then Westfall, Stonetalon, Loch Modan and Arathi, each part placed where your route goes. Afterwards, the guide reminds you to lie in the bag for 1 min when the bonus (2 h) is missing or almost over; \"Sleeping bag reminder\" box under Behavior. New: special quests (Options > Class): the bag chain is there, with \"Go now\" to do it right away as a detour (the guide then takes you back to your zone); on the Scout route, the guide suggests it when you are in a zeppelin city." },
     { v = "1.52", fr = "Guides de donjon rangés par passage : tout ce qui se fait en une visite d'abord ; les quêtes qui demandent de ressortir puis de revenir (collier d'Uldaman, princesse et Angerforge à Blackrock Depths, Kirtonos à Scholomance…) sont regroupées en « 2e passage » ou « 3e passage », facultatifs. Ajout des quêtes qui se rendent dans le donjon (restes du paladin et Platinum Discs à Uldaman, Commander Gor'shak et Dark Iron Legacy à Blackrock Depths, etc.).",
       en = "Dungeon guides organised by run: everything doable in one visit first; quests that need you to leave and come back (Uldaman necklace, the princess and Angerforge in Blackrock Depths, Kirtonos in Scholomance...) are grouped as optional \"Run 2\" or \"Run 3\". Added the quests turned in inside the dungeon (paladin remains and Platinum Discs in Uldaman, Commander Gor'shak and Dark Iron Legacy in Blackrock Depths, etc.)." },
     { v = "1.51", fr = "Guides 44-58 revus pour l'XP à l'heure. Quêtes élites ajoutées pour les groupes (cachées avec le style « Élites : jamais ») : Bring Me His Head et Death to the Executioner (Riverglades), Ley of the Land (Azshara), Ursius of the Shardtooth et Brumeran of the Chillwind (Winterspring). Moins de farm d'objets rares : Bristle Hills Bandits et A Taste of the Sea (Riverglades) et les messages aux Wildhammer (Hinterlands) deviennent facultatifs ; Gahz'ridian (Tanaris) est retirée.",
