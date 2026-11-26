@@ -585,12 +585,24 @@ function Skin.RefreshInner(forceWP)
         SetHeader(zone, Core.T("stepOf", i, n), i / n)
         local st = State.peek and State.doneCache[i]
         -- prise impossible tant qu'un prerequis du journal n'est pas fini : on guide vers ce prerequis
-        local det = (not State.peek) and ((Near.TrainDetour and Near.TrainDetour(s)) or (Route.PrereqDetour and Route.PrereqDetour(s))) or nil
-        local g = det and { t = det.done and "turnin" or "do", id = det.id, m = det.m, x = det.x, y = det.y,
+        -- v1.51 : ou quete de donjon (ou de sa chaine) a prendre / rendre en passant
+        local det = (not State.peek) and ((Near.TrainDetour and Near.TrainDetour(s)) or (Near.DungeonPickup and Near.DungeonPickup(s))
+            or (Route.PrereqDetour and Route.PrereqDetour(s))) or nil
+        local g = det and { t = (det.pick and not det.turn) and "accept" or (det.done and "turnin" or "do"), id = det.id, m = det.m, x = det.x, y = det.y,
                             zone = Est.MAPNAME[det.m] or s.zone, quest = det.name } or s
         -- grotte (entree/sortie) ou objet au sol le plus proche : la fleche vise ce point
         local sp = (not State.peek and (not det or State.DB.errand or State.DB.qm) and Near.StepPoint) and Near.StepPoint(s) or nil
         if sp then g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest } end
+        -- v1.51 : entraineur ou quete de donjon en passant : memes points de passage que le guide (porte de ville,
+        -- grotte ou quartier de ville, tunnel, entree de grotte), calcules en direct vers le PNJ
+        if not sp and det and (det.pick or det.train) and Near.StepPoint then
+            local fake = { t = g.t, id = det.pick and det.id or nil, m = det.m, x = det.x, y = det.y, quest = det.name }
+            local okP, p = pcall(Near.StepPoint, fake)
+            if okP and p then
+                sp = p
+                g = { t = g.t, id = g.id, m = p.m, x = p.x, y = p.y, zone = p.name or g.zone, quest = g.quest }
+            end
+        end
         if Core.f.caveBtn then
             local cave = sp and (sp.kind == "enter" or sp.kind == "exit")
             if cave then Core.f.caveBtn.label:SetText("|cff8c7f62" .. Core.T("caveWrong") .. "|r") end
@@ -729,6 +741,7 @@ function Skin.RefreshInner(forceWP)
             if ent and i > ent then body = "|cffd69a66" .. Core.T("dgGroup") .. "|r\n\n" .. body end
         end
         if det and det.train then body = "|cffd69a66" .. Core.T("trainStep", det.name) .. "|r\n\n" .. body
+        elseif det and det.pick then body = "|cffd69a66" .. Core.T(det.turn and "dgPickTurn" or "dgPickStep", det.name, det.dg) .. "|r\n\n" .. body
         elseif det then body = "|cffd69a66" .. Core.T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
         -- quetes pas encore prises faute de niveau, quetes laissees pour plus tard, et la suite
         if not State.peek then
@@ -785,7 +798,6 @@ function Skin.RefreshInner(forceWP)
             end
             if sp and sp.kind == "farm" then nm, extra = sp.name, Core.T("farmSub", sp.lmin, sp.lmax, sp.n)
             elseif sp and sp.kind == "pass" then extra = Core.T("tunnelVia")
-            elseif sp and sp.kind == "trail" then extra = Core.T(sp.out and "trailOutSub" or "trailInSub")
             elseif sp and sp.kind == "gate" then extra = Core.T("gateVia")
             elseif sp and sp.kind == "citycave" then nm, extra = sp.name or nm, Core.T("caveEnter")
             elseif sp and sp.kind == "errand" then nm, extra = sp.name or nm, Core.T("errandSub")
@@ -922,7 +934,7 @@ function Skin.RefreshInner(forceWP)
     if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
 end
 
--- v1.46 : en marchant, seul le point vise bouge (objet le plus proche, fil d'Ariane, grotte...) : on deplace
+-- v1.46 : en marchant, seul le point vise bouge (objet le plus proche, chemin, grotte...) : on deplace
 -- la fleche et le bloc destination sans reconstruire la fenetre ni recalculer les vols. Avant, Refresh(true)
 -- toutes les 2 s faisait sauter l'image. Renvoie false si une mise a jour complete est necessaire.
 local LIGHT_KINDS = { obj = true, trail = true, pass = true, gate = true, enter = true, exit = true, corpse = true }

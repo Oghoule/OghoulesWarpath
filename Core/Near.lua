@@ -6,7 +6,6 @@ local ADDON, ns = ...
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
 local Near = ns.Mod.Near -- v1.50 : module
-local Trail = ns.Mod.Trail -- v1.50 : module
 local Style = ns.Mod.Style -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
@@ -15,7 +14,7 @@ local Skin = ns.Mod.Skin -- v1.50 : module
 local Flow = ns.Mod.Flow -- v1.50 : module
 -- v1.50 : module ns.Mod.Near (publie en fin de fichier pour les autres fichiers)
 local AcceptGroup, CaveDiag, ClearErrand, DeathTip, FollowUpAccepts, ForgetCave, HubNotes, LevelWaitLines
-local ListBlock, LiveObjectives, PassageCmd, SetErrand, TrainDetour, TurninGroup
+local ListBlock, LiveObjectives, PassageCmd, SetErrand, TrainDetour, TurninGroup, DungeonPickup
 local Est = ns.Mod.Est -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
 local Legs = ns.Mod.Legs -- v1.50 : module
@@ -149,13 +148,22 @@ function Near.NearTick()
     local sp
     local ok, pk = pcall(function()
         sp = Near.StepPoint(State.steps[State.current])
-        return (sp and (sp.kind .. sp.m .. ":" .. sp.x .. ":" .. sp.y) or "") .. (TrainDetour(State.steps[State.current]) and "T" or "")
+        local cur = State.steps[State.current]
+        local dp = DungeonPickup(cur)
+        local td = TrainDetour(cur)
+        -- v1.51 : point de passage vers le PNJ de l'entraineur / de la quete en passant (porte, grotte...)
+        local det = td or dp
+        local vp = det and Near.StepPoint({ t = "accept", id = dp and dp.id or nil, m = det.m, x = det.x, y = det.y })
+        return (sp and (sp.kind .. sp.m .. ":" .. sp.x .. ":" .. sp.y) or "") .. (dp and ("P" .. dp.id) or "")
+            .. (vp and ("V" .. vp.kind .. vp.m .. ":" .. vp.x .. ":" .. vp.y) or "") .. (td and "T" or "")
     end)
     if ok and pk ~= lastPointKey then
+        -- v1.51 : quete de donjon en passant apparue ou partie : tout reconstruire (autre etape affichee)
+        local pickChanged = (pk:match("P%d+") or "") ~= (lastPointKey:match("P%d+") or "")
         lastPointKey = pk
         -- v1.46 : seul le point a bouge (meme etape, meme genre) : la fleche se deplace sans tout reconstruire
         local okL, light = false, false
-        if pk:sub(-1) ~= "T" and Skin.RetargetLight then okL, light = pcall(Skin.RetargetLight, sp) end
+        if pk:sub(-1) ~= "T" and not pickChanged and not pk:find("P%d") and Skin.RetargetLight then okL, light = pcall(Skin.RetargetLight, sp) end
         if not (okL and light) then State.lastWP = nil; Skin.Refresh(true) end
         return
     end
@@ -702,9 +710,6 @@ function Near.StepPoint(s)
     -- etape dont le PNJ est dans une grotte de la ville (ex. Apothecary Zamah, Pools of Vision)
     local cc = s.m and s.x and Near.CityCavePoint(s.m, s.x, s.y, nil, me)
     if cc then return cc end
-    -- v1.42 : chemin garde (fil d'Ariane, Trail.lua) : la fleche le suit
-    local tp = Trail.TrailPoint and Trail.TrailPoint(s, me)
-    if tp then return tp end
     -- point de passage (tunnel, rampe, pont...) : l'entree tant que tu es du mauvais cote, puis l'objectif
     if s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept") then
         for _, q in ipairs(Core.Ids(s)) do
@@ -826,6 +831,88 @@ function TrainDetour(s)
     if d > (trainLatch == State.DB.trainDue and TRAIN_R * 1.5 or TRAIN_R) then return nil end
     trainLatch = State.DB.trainDue
     return { id = 0, done = true, train = true, m = e[1], x = e[2], y = e[3], name = e[4] }
+end
+
+-- v1.51 : quetes de donjon en passant. Une quete d'un guide de donjon, ou n'importe quelle quete de sa chaine
+-- (prerequis, a tous les niveaux de la chaine), dont le PNJ est a moins de 40 m : etape temporaire « prends-la »
+-- (ou « rends-la » si elle est finie dans ton journal). Le niveau requis de la quete suffit comme filtre.
+-- OK = on ne la propose plus (DB.dgPickSkip). Jamais en donjon, en chasse (Faire / Monte au niveau), ni si la
+-- quete est dans le guide en cours (il s'en occupe deja), ni avec un journal presque plein (35 quetes).
+-- Grandes villes (Orgrimmar, Thunder Bluff, Undercity), ou se donnent beaucoup de quetes de donjon : toute la
+-- ville compte (le PNJ le plus proche d'abord, un a la fois).
+local PICK_R, PICK_LOG = 60, 35
+local PICK_CITY = { [1454] = true, [1456] = true, [1458] = true }
+local pickList        -- { [quete] = titre du donjon } : quetes des guides de donjon + toute leur chaine
+local pickLatch
+local function buildPickList()
+    pickList = {}
+    local EST = Est.EST or {}
+    local function add(id, dg, depth)
+        if depth > 12 or pickList[id] then return end
+        local e = EST[id]; if not e then return end
+        pickList[id] = dg
+        for _, p in ipairs(e.p or {}) do add(p, dg, depth + 1) end
+        for _, p in ipairs(e.p1 or {}) do add(p, dg, depth + 1) end
+    end
+    for key, g in pairs(ns.Guides or {}) do
+        if Core.IS_DUNGEON[key] and g.steps then
+            local dg = (Core.Lang() == "en" and g.title_en or g.title or key):gsub("^[^:]+:%s*", "")
+            for _, s in ipairs(g.steps) do
+                if s.id and (s.t == "accept" or s.t == "do" or s.t == "turnin") then
+                    for _, id in ipairs(Core.Ids(s)) do add(id, dg, 0) end
+                end
+            end
+        end
+    end
+end
+local function pickReady(id, e, lvl)
+    if Core.logById[id] ~= nil or Core.Rendue(id) then return false end
+    if (e.r or 0) > lvl or e.it or not e.s or not Est.QAvailable(id) then return false end
+    for _, p in ipairs(e.p or {}) do if not Core.Rendue(p) then return false end end
+    if e.p1 then
+        local ok = false
+        for _, p in ipairs(e.p1) do if Core.Rendue(p) then ok = true; break end end
+        if not ok then return false end
+    end
+    return true
+end
+function DungeonPickup(s)
+    if not (State.DB and State.steps and State.DB.dgPick ~= false) or Core.IS_DUNGEON[State.DB.guide] then return nil end
+    if IsInInstance then local inI = IsInInstance(); if inI then return nil end end
+    if not s or s.t == "do" or s.t == "level" then return nil end
+    if not pickList then buildPickList() end
+    local me = Route.PlayerWP(); if not me then return nil end
+    local nLog = 0
+    for _ in pairs(Core.logById) do nLog = nLog + 1 end
+    local here = {}
+    for _, t in ipairs(State.steps) do
+        if t.id then for _, id in ipairs(Core.Ids(t)) do here[id] = true end end
+    end
+    local skip = State.DB.dgPickSkip or {}
+    local lvl = UnitLevel("player") or 1
+    local zMe = me[4] and Route.ZoneOf and Route.ZoneOf(me[4])
+    local city = zMe and PICK_CITY[zMe] and zMe or nil
+    local best, bd
+    for id, dg in pairs(pickList) do
+        local e = Est.EST[id]
+        if e and not here[id] and not skip[id] then
+            local p, turn
+            if Core.logById[id] == true then p, turn = e.e, true
+            elseif nLog < PICK_LOG and pickReady(id, e, lvl) then p = e.s end
+            local w = p and Route.WP(p[1], p[2], p[3])
+            if w and w[3] == me[3] then
+                local d = Route.Dist(w[1], w[2], me[1], me[2])
+                local r = (pickLatch == id) and PICK_R * 1.5 or PICK_R
+                if city and Route.ZoneOf(p[1]) == city then r = math.huge end
+                if d <= r and (not bd or d < bd) then
+                    best, bd = { id = id, done = true, pick = true, turn = turn, m = p[1], x = p[2], y = p[3],
+                                 name = Core.QuestTitle(id) or e.n or ("#" .. id), dg = dg }, d
+                end
+            end
+        end
+    end
+    pickLatch = best and best.id or nil
+    return best
 end
 
 -- En chemin : objets de quete encore a ramasser (semes un peu partout) pres du trajet vers l'etape en cours
@@ -994,4 +1081,5 @@ do
     M.SetErrand = SetErrand
     M.TrainDetour = TrainDetour
     M.TurninGroup = TurninGroup
+    M.DungeonPickup = DungeonPickup
 end

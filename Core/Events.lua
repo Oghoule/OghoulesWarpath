@@ -52,6 +52,8 @@ function Events.OnEvent(self, event, ...)
         State.DB.lockHide = State.DB.lockHide or {}
         local fresh = WarpathDropDB == nil
         WarpathDropDB = WarpathDropDB or {}
+        -- v1.51 : fil d'Ariane retire : ses chemins gardes ne servent plus
+        WarpathDropDB._trail, WarpathDropDB._trailNo = nil, nil
         -- v1.02 : anglais par defaut ; une installation qui existait deja reste en francais
         if WarpathDropDB._lang == nil then
             WarpathDropDB._lang = (fresh and State.DB._new) and "en" or (State.DB.lang or "fr")

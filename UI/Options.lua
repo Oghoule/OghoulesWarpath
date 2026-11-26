@@ -689,7 +689,6 @@ local function CreateOptions()
         row(CheckRow(pg, CW, "gameWP", function() return DB.gameWP ~= false end,
             function(v) DB.gameWP = v; E.PlaceWaypointAgain() end))
         row(flag("smartArrowOpt", "smartArrow", true))
-        row(flag("trailOpt", "trailAsk", true))
         y = ScaleRow(pg, y, "arrowScale", function() return DB.arrowScale or 1 end, function(v) DB.arrowScale = v end)
         y = y - 8
         -- CARTES
@@ -732,7 +731,7 @@ local function CreateOptions()
         end
         -- AUTOMATISATION
         sec("secAuto")
-        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" } }) do
+        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "dgPickOpt", "dgPick" } }) do
             row(flag(o[1], o[2], true))
         end
         row(CheckRow(pg, CW, "shareOpt", function() return WarpathDropDB and WarpathDropDB._share ~= false end,

@@ -815,6 +815,13 @@ function Ignore()
         State.lastWP = nil; Skin.Refresh(true)
         return
     end
+    -- v1.51 : quete de donjon en passant : OK = on ne la propose plus
+    local dp = not State.peek and not State.focus and Near.DungeonPickup and Near.DungeonPickup(State.steps[State.current])
+    if dp then
+        State.DB.dgPickSkip = State.DB.dgPickSkip or {}; State.DB.dgPickSkip[dp.id] = true
+        State.lastWP = nil; Skin.Refresh(true)
+        return
+    end
     -- journal quitte par erreur, toujours dans l'instance : on le fait revenir
     if not State.peek and not State.focus and State.DB.dgOut and State.DB.dgOut[State.DB.guide] and InDgInstance() then
         State.DB.dgOut[State.DB.guide] = nil

@@ -139,7 +139,7 @@ CHAIN, MAXLVL, DUNGEONS, IS_DUNGEON = Core.D.CHAIN, Core.D.MAXLVL, Core.D.DUNGEO
 IS_DUNGEON_SET = IS_DUNGEON
 
 ICON = "Interface\\AddOns\\OghoulesWarpath\\Media\\Warpath64"
-VERSION = "1.50"
+VERSION = "1.51"
 MINLVL, MAIN_ORDER = Core.D.MINLVL, Core.D.MAIN_ORDER
 -- v1.41 (audit) : coche de l'addon (case cochee doree, comme les objectifs) au lieu de la coche verte du jeu
 CHECK = "|TInterface\\AddOns\\OghoulesWarpath\\Media\\BoxDone:12:12|t"

@@ -2,7 +2,6 @@
 local ADDON, ns = ...
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
-local Trail = ns.Mod.Trail -- v1.50 : module
 local Window = ns.Mod.Window -- v1.50 : module
 local Style = ns.Mod.Style -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
@@ -899,7 +898,7 @@ wpTicker:SetScript("OnUpdate", function(_, dt)
     wpElapsed = 0
     local m0 = Perf.PerfOn and Perf.PerfMem and Perf.PerfMem()                     -- v1.47 : /warpath perf
     local t0 = Perf.PerfOn and debugprofilestop and debugprofilestop()
-    if State.DB then pcall(Route.LearnGates); pcall(Trail.TrailTick); pcall(FlightRecheck) end
+    if State.DB then pcall(Route.LearnGates); pcall(FlightRecheck) end
     if t0 and Perf.PerfMark then Perf.PerfMark("Seconde : passages, fil, vols", debugprofilestop() - t0, m0 and (Perf.PerfMem() - m0)) end
     if not (State.DB and State.DB.wp and Route.desiredWP) then return end
     if not (C_Map and C_Map.HasUserWaypoint) or C_Map.HasUserWaypoint() then return end

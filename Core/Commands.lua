@@ -18,7 +18,6 @@ local Flow = ns.Mod.Flow -- v1.50 : module
 local Near = ns.Mod.Near -- v1.50 : module
 local Est = ns.Mod.Est -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
-local Trail = ns.Mod.Trail -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local ListGuides, ShowNews
 
@@ -159,8 +158,6 @@ SlashCmdList["WARPATH"] = function(msg)
             id = s and s.id, text = s and Core.StepText(s), map = mapID, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10,
             lvl = UnitLevel("player"), race = State.myRace, class = State.myClass, note = arg ~= "" and arg or nil }
         Core.say(Core.T("bugSaved", #b))
-    elseif cmd == "chemin" or cmd == "path" or cmd == "trail" then
-        Trail.TrailCmd(arg)
     elseif cmd == "passage" or cmd == "pass" then
         Near.PassageCmd(arg)
     elseif cmd == "diag" and arg ~= "plus" and arg ~= "more" then
@@ -314,6 +311,12 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.51", fr = "Guides 44-58 revus pour l'XP à l'heure. Quêtes élites ajoutées pour les groupes (cachées avec le style « Élites : jamais ») : Bring Me His Head et Death to the Executioner (Riverglades), Ley of the Land (Azshara), Ursius of the Shardtooth et Brumeran of the Chillwind (Winterspring). Moins de farm d'objets rares : Bristle Hills Bandits et A Taste of the Sea (Riverglades) et les messages aux Wildhammer (Hinterlands) deviennent facultatifs ; Gahz'ridian (Tanaris) est retirée.",
+      en = "Level 44-58 guides reviewed for XP per hour. Elite quests added for groups (hidden with the \"Elites: never\" play style): Bring Me His Head and Death to the Executioner (Riverglades), Ley of the Land (Azshara), Ursius of the Shardtooth and Brumeran of the Chillwind (Winterspring). Less rare-item farming: Bristle Hills Bandits and A Taste of the Sea (Riverglades) and the Wildhammer messages (Hinterlands) become optional; Gahz'ridian (Tanaris) is removed." },
+    { v = "1.51", fr = "Quêtes de donjon en passant : quand tu passes près d'un PNJ qui donne une quête de donjon, ou une quête de sa chaîne (à n'importe quelle étape), le guide te la fait prendre, ou rendre si elle est finie. À Orgrimmar, Thunder Bluff et Undercity, toute la ville compte (la plus proche d'abord). OK pour ne plus la proposer ; case « Quêtes de donjon en passant » dans Comportement.",
+      en = "Dungeon quests on the way: when you pass near an NPC who gives a dungeon quest, or any quest of its chain (at any step), the guide has you pick it up, or turn it in if it is complete. In Orgrimmar, Thunder Bluff and Undercity, the whole city counts (closest first). OK to stop suggesting it; \"Dungeon quests on the way\" checkbox in Behavior." },
+    { v = "1.51", fr = "Fil d'Ariane retiré : l'addon ne propose plus de garder un chemin après un détour. La flèche contourne déjà les obstacles grâce aux chemins calculés à l'avance (1.50).",
+      en = "Breadcrumb trail removed: the addon no longer offers to keep a path after a detour. The arrow already goes around obstacles thanks to the paths computed ahead of time (1.50)." },
     { v = "1.50", fr = "Flèche plus futée : elle contourne maintenant les montagnes, falaises et grottes sur les trajets du guide, grâce à des chemins calculés à l'avance avec les cartes de marche de Shortest Path Forever (Cillian Berragan). Rien à installer, aucun calcul en jeu.",
       en = "Smarter arrow: it now goes around mountains, cliffs and caves on the guide's routes, using paths computed ahead of time from Shortest Path Forever's walking maps (Cillian Berragan). Nothing to install, no calculation in game." },
     { v = "1.50", fr = "Temps actif (/warpath temps) : le guide en cours s'affiche avec son titre, et non plus avec son code interne.",

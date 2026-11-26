@@ -13,9 +13,9 @@ local PerfMark, PerfMem, PerfStart
 
 Perf.PerfOn = false
 
-local NAMES = { "UpdateDistance", "NearTick", "NearPick", "StepPoint", "TrailPoint", "CaveTrack", "Refresh",
+local NAMES = { "UpdateDistance", "NearTick", "NearPick", "StepPoint", "CaveTrack", "Refresh",
     "RefreshInner", "RetargetLight", "UpdateMini", "HearthPlace", "Advice", "BestFlight", "TravelCost", "Walk",
-    "TransportFor", "KnownFlights", "Estimate", "LockCandidates", "Compute", "ScanLog", "LearnGates", "TrailTick",
+    "TransportFor", "KnownFlights", "Estimate", "LockCandidates", "Compute", "ScanLog", "LearnGates",
     "PlaceNative", "SetWaypoint", "ClearWaypoint", "CheckDungeonLeft", "PlayerWP", "WP", "OnTheWay" }
 local TABLES = { { "Comfort", "UpdateInfo" }, { "Targets", "Update" }, { "Targets", "Refresh" } }
 
