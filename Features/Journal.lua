@@ -5,6 +5,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local FmtDur
 
 do
     local TICK, GRACE = 2, 45
@@ -33,7 +37,7 @@ do
         local j = J(); if not j then return end
         local g = DB.guide or "?"
         j.g[g] = j.g[g] or { a = 0, xp = 0, l0 = UnitLevel("player") }
-        local k = g .. ":" .. (current or 0)
+        local k = g .. ":" .. (State.current or 0)
         j.s[k] = j.s[k] or { a = 0, xp = 0 }
         return j, j.g[g], j.s[k]
     end
@@ -120,7 +124,9 @@ do
         say(T("jrLine", T("jrSession"), hm(sessA), FormatNum(sessXP), rate(sessXP, sessA)))
         say(T("jrLine", T("jrTotal"), hm(j.a), FormatNum(j.xp), rate(j.xp, j.a)))
         local g = DB.guide and j.g[DB.guide]
-        if g then say(T("jrLine", (G[DB.guide] and (Lang and Lang() == "en" and G[DB.guide].title_en or G[DB.guide].title)) or DB.guide, hm(g.a), FormatNum(g.xp), rate(g.xp, g.a))) end
+        -- v1.50 : titre du guide (avant : G[DB.guide], toujours vide, donc la cle "stv1" s'affichait)
+        local gd = Guides and Guides[DB.guide]
+        if g then say(T("jrLine", (gd and (Lang and Lang() == "en" and gd.title_en or gd.title)) or DB.guide, hm(g.a), FormatNum(g.xp), rate(g.xp, g.a))) end
         say(T("jrHelp"))
     end
 end

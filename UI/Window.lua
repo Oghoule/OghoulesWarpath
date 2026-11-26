@@ -2,6 +2,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local MINI_PAD, MINI_W, NodeKeyFor, distElapsed, taxiGlow, wpElapsed, wpTicker
 
 ------------------------------------------------------------------
 -- Fenetre (sous la minimap par defaut)
@@ -166,8 +170,8 @@ function CreateUI()
     -- clic sur l'en-tete (le crochet) d'une etape passee ou validee a la main : on l'annule
     if f.kindRow.EnableMouse then f.kindRow:EnableMouse(true) end
     f.kindRow:SetScript("OnMouseUp", function()
-        local i = peek or focus or current
-        if steps and i and Restorable(i) then Restore(i) end
+        local i = State.peek or State.focus or State.current
+        if State.steps and i and Restorable(i) then Restore(i) end
     end)
     -- v1.41 (audit, proposition A) : chaine et quetes bloquees = deux pastilles a droite de la ligne du type
     -- d'etape (detail au survol, meme clic qu'avant) au lieu de deux lignes pleines
@@ -247,7 +251,7 @@ function CreateUI()
         f.chainBtn.gems[k] = g
     end
     f.chainBtn:SetScript("OnClick", function(self)
-        if self.target then focus = self.target; peek = nil; lastWP = nil; Refresh(true) end
+        if self.target then State.focus = self.target; State.peek = nil; State.lastWP = nil; Refresh(true) end
     end)
     f.chainBtn:SetScript("OnEnter", function(self)
         if not self.target then return end
@@ -336,10 +340,10 @@ function CreateUI()
         local i = self.idx
         if not i then return end
         if button == "RightButton" then
-            DB.lockHide[steps[i].id] = true
+            DB.lockHide[State.steps[i].id] = true
             Refresh()
         else
-            AskChain(steps[i].id)
+            AskChain(State.steps[i].id)
         end
     end)
     f.lockBtn:SetScript("OnEnter", function(self)
@@ -348,7 +352,7 @@ function CreateUI()
         for _, i in ipairs(self.list or {}) do
             local miss = {}
             for _, q in ipairs(blockedBy[i] or {}) do miss[#miss + 1] = (EST[q] and EST[q].n) or tostring(q) end
-            Tip():AddLine((QName(steps[i]) or "?") .. "  |cff8c7f62(" .. table.concat(miss, ", ") .. ")|r", 0.84, 0.60, 0.40)
+            Tip():AddLine((QName(State.steps[i]) or "?") .. "  |cff8c7f62(" .. table.concat(miss, ", ") .. ")|r", 0.84, 0.60, 0.40)
         end
         Tip():AddLine(T("lockTip"), 0.66, 0.60, 0.48, true)
         Tip():Show()
@@ -405,12 +409,12 @@ function CreateUI()
         b.fs = fs
         local h = Tex(b, COL.accent, 0.08, "HIGHLIGHT"); h:SetAllPoints()
         b:SetScript("OnClick", function(self)
-            if self.idx then focus = self.idx; peek = nil; lastWP = nil; Refresh(true) end
+            if self.idx then State.focus = self.idx; State.peek = nil; State.lastWP = nil; Refresh(true) end
         end)
         b:SetScript("OnEnter", function(self)
             Tip():SetOwner(self, "ANCHOR_LEFT")
             Tip():AddLine(T("clickGo"))
-            local st = self.idx and steps and steps[self.idx]
+            local st = self.idx and State.steps and State.steps[self.idx]
             if st and st.t == "do" and type(st.id) == "number" and EST[st.id] then
                 local e = Estimate({ st.id }, false)
                 Tip():AddLine(T("estTip", FormatNum(e.xp), FormatNum(e.qxp), FormatNum(e.mxp), math.max(1, math.floor(e.secs / 60 + 0.5)), FormatNum(e.perHour)), 0.8, 0.73, 0.56, true)
@@ -616,7 +620,7 @@ function UpdateMini()
     local qs = QMPanelState and QMPanelState() or nil
     local qpanel = qs and shown and not dl and (qs == "pick" or not DB.mini) and qs or nil
     -- v1.41 : le mode compact marche aussi dans le journal de donjon (les quetes du donjon et leur progression)
-    local on = DB.mini and shown and steps and not qpanel and true or false
+    local on = DB.mini and shown and State.steps and not qpanel and true or false
     f:SetShown(shown and not on and not qpanel)
     mf:SetShown(on)
     if QMShowPanel then QMShowPanel(qpanel) end
@@ -633,7 +637,7 @@ function UpdateMini()
                 lines[#lines + 1] = { text = r.name or "", count = cnt, done = r.done }
             end
         end
-        if #lines == 0 then lines[1] = { verb = Caps(T("dgLog")), text = Title and G and Title(G) or "" } end
+        if #lines == 0 then lines[1] = { verb = Caps(T("dgLog")), text = Title and State.G and Title(State.G) or "" } end
     end
     -- objectifs de l'etape (ceux de la grande fenetre), sinon une ligne : type d'etape + PNJ ou lieu
     for k = 1, ((qs2 or dl) and 0 or rawget(f, "nObj") or 0) do
@@ -641,7 +645,7 @@ function UpdateMini()
         if w and w.kind == "obj" then lines[#lines + 1] = { text = w.name:GetText() or "", count = w.count:GetText() or "", done = w.done } end
     end
     if #lines == 0 then
-        local s = steps[peek or focus or current]
+        local s = State.steps[State.peek or State.focus or State.current]
         if s then
             local nm = (s.t ~= "do" and f.dest and f.dest:IsShown() and f.destName:GetText()) or (s.t ~= "do" and s.quest and QName(s)) or ""
             if nm == "" and StepText then nm = (StepText(s) or ""):gsub("\n.*", "") end
@@ -651,12 +655,12 @@ function UpdateMini()
     -- en-tete : nom de la quete (cliquable), sinon Intendance / donjon / guide
     local head, click = nil, false
     if qs2 then head = T("qmTitle")
-    elseif dl then head = Title and G and Title(G) or ""
+    elseif dl then head = Title and State.G and Title(State.G) or ""
     else
-        local s = steps[peek or focus or current]
+        local s = State.steps[State.peek or State.focus or State.current]
         local qn = s and s.quest and QName(s)
         if qn and qn ~= "" then head = qn:match("^(.-) %+ ") or qn; click = true
-        else head = Title and G and Title(G) or "" end
+        else head = Title and State.G and Title(State.G) or "" end
     end
     head = (head or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     mf.questClick = click
@@ -713,17 +717,17 @@ ns.E = {
     T = T, Title = Title, Lang = Lang, say = say, Refresh = Refresh, SetGuide = SetGuide,
     StartDungeon = StartDungeon, StopDungeon = StopDungeon, ClearWaypoint = ClearWaypoint,
     AutoPick = AutoPick, AllDone = AllDone,
-    ClassQuestList = function() return ClassQuestList() end, DungeonLeft = function(k) return DungeonLeft(k) end,PlaceWaypointAgain = function() if steps and current and steps[current] then pcall(SetWaypoint, steps[current]) end end, StyleGet = function() return StyleGet() end,
+    ClassQuestList = function() return ClassQuestList() end, DungeonLeft = function(k) return DungeonLeft(k) end,PlaceWaypointAgain = function() if State.steps and State.current and State.steps[State.current] then pcall(SetWaypoint, State.steps[State.current]) end end, StyleGet = function() return StyleGet() end,
     ApplyPreset = function(n) local ok, err = pcall(ApplyPreset, n); if not ok then say(T("errInternal", tostring(err)), "error") end end, StyleChanged = function() styleCache = nil; local ok, err = pcall(Advance); if not ok then say(T("errInternal", tostring(err)), "error") end; Refresh(true) end, AskClass = function(q) AskChain(q, true) end, ChronShow = function(k) ChronShow(k) end, BugWindow = function() BugWindow() end,
     Guides = Guides, ICON = ICON, VERSION = VERSION, CHECK = CHECK,
     MAIN_ORDER = MAIN_ORDER, IS_DUNGEON = IS_DUNGEON, DUNGEONS = DUNGEONS, MINLVL = MINLVL, MAXLVL = MAXLVL,
     DB = function() return DB end,
     Frame = function() return f end,
-    Guide = function() return G end,
-    Steps = function() return steps end,
-    Current = function() return current end,
-    Race = function() return myRace end,
-    ResetWP = function() lastWP = nil end,
+    Guide = function() return State.G end,
+    Steps = function() return State.steps end,
+    Current = function() return State.current end,
+    Race = function() return State.myRace end,
+    ResetWP = function() State.lastWP = nil end,
     ShowGuide = function(v) ShowGuide(v) end,
     WarpathName = WarpathName,
     Tip = function() return Tip() end, GuideStatus = function(k) return GuideStatus(k) end,
@@ -780,16 +784,16 @@ function OnTaxiOpened()
         for k in pairs(DB.fp) do snap[k] = true end
         DB.fpLinksKnown = DB.fpLinksKnown or {}
         DB.fpLinksKnown[here] = snap
-        lastWP = nil
+        State.lastWP = nil
     end
     -- v1.45 : on recalcule le vol conseille APRES avoir lu la carte (points et liaisons a jour), puis on surligne.
     -- Avant : le surlignage (et le vol automatique) suivait l'ancien conseil, calcule sans les points que la carte
     -- venait de montrer (Ratchet -> Brackenwall au lieu de Camp Taurajo pour RFK, 2026-11-23).
     Refresh(true)
-    if flightPlan then
+    if State.flightPlan then
         for i = 1, NumTaxiNodes() do
             local kind = TaxiNodeGetType and TaxiNodeGetType(i)
-            if kind == "REACHABLE" and NodeKeyFor(TaxiNodeName and TaxiNodeName(i)) == flightPlan.to.key then target = i; break end
+            if kind == "REACHABLE" and NodeKeyFor(TaxiNodeName and TaxiNodeName(i)) == State.flightPlan.to.key then target = i; break end
         end
     end
     if target then
@@ -824,7 +828,7 @@ function OnTaxiOpened()
             taxiGlow:SetFrameLevel((btn:GetFrameLevel() or 1) + 5)
             taxiGlow:Show()
         end
-        say(T("flyTo", flightPlan.to.name))
+        say(T("flyTo", State.flightPlan.to.name))
         -- v1.45 : vol automatique retire (vol conseille faux, Ratchet -> Brackenwall). v1.47 (demande de l'auteur) :
         -- de retour en option a cocher (DB.flyAuto, decochee par defaut, nouvelle cle : l'ancienne autoFly etait
         -- cochee par defaut). Il suit le conseil recalcule ci-dessus. Garde-fous de la v1.41 : 0,4 s, carte encore
@@ -856,7 +860,7 @@ end
 -- depuis le dernier calcul (hors combat, hors vol), on rafraichit ; la fleche ne bouge que si le vol conseille change.
 local flyCheck = { t = 0, pos = nil }
 local function FlightRecheck()
-    if not DB or DB.useFlights == false or peek then return end
+    if not DB or DB.useFlights == false or State.peek then return end
     if (UnitOnTaxi and UnitOnTaxi("player")) or (InCombatLockdown and InCombatLockdown()) then return end
     local now = GetTime and GetTime() or 0
     if now - flyCheck.t < 5 then return end

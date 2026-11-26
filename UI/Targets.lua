@@ -2,6 +2,8 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
 
 -- Une ligne cliquable par PNJ utile a l'etape (donneur, a qui rendre, monstres, maitre de vol).
 -- Chaque ligne est un bouton securise de Blizzard qui lance "/targetexact Nom" : c'est TON clic qui
@@ -182,7 +184,7 @@ do
         end
         if currentAdvice and currentAdvice.kind == "bind" then add(currentAdvice.npc, "inn") end
         if currentAdvice and currentAdvice.kind == "buy" then add(currentAdvice.npc, "buy") end
-        if flightPlan and flightPlan.from and ns.FlightNodeNpc then add(ns.FlightNodeNpc[flightPlan.from.key], "fly") end
+        if State.flightPlan and State.flightPlan.from and ns.FlightNodeNpc then add(ns.FlightNodeNpc[State.flightPlan.from.key], "fly") end
         local groups = {}   -- un groupe par objectif : on les prend tour a tour, pour que chaque objectif ait sa place
         if s then
             for _, qid in ipairs(Ids(s)) do

@@ -2,6 +2,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local ListGuides, ShowNews
 
 ------------------------------------------------------------------
 -- Commandes
@@ -50,14 +54,14 @@ SlashCmdList["WARPATH"] = function(msg)
     elseif cmd == "prev" then
         Peek(-1)
     elseif cmd == "now" or cmd == "sync" then
-        peek = nil; if optCache then optCache.key = nil end; Advance(); Refresh(true)
-        if steps then
-            if current > #steps then say(T("doneByQuests", Title(G)))
-            else say(T("stepNow", current, #steps)) end
+        State.peek = nil; if optCache then optCache.key = nil end; Advance(); Refresh(true)
+        if State.steps then
+            if State.current > #State.steps then say(T("doneByQuests", Title(State.G)))
+            else say(T("stepNow", State.current, #State.steps)) end
         end
     elseif cmd == "trajet" or cmd == "route" then
         -- detail du trajet vers l'etape affichee : a pied (chemin reel) contre le meilleur vol connu
-        local st = steps and steps[peek or focus or current]
+        local st = State.steps and State.steps[State.peek or State.focus or State.current]
         local here = PlayerWP()
         local dest = st and st.m and st.x and WP(st.m, st.x, st.y)
         if not (here and dest) then say(T("routeNone")); return end
@@ -69,8 +73,8 @@ SlashCmdList["WARPATH"] = function(msg)
         else say(T("routeNoFly")) end
     elseif cmd == "goto" then
         local n = tonumber(arg)
-        if steps and n and n >= 1 and n <= #steps then
-            peek = (n ~= current) and n or nil; Refresh(true)
+        if State.steps and n and n >= 1 and n <= #State.steps then
+            State.peek = (n ~= State.current) and n or nil; Refresh(true)
         else
             say(T("gotoHelp"))
         end
@@ -109,7 +113,7 @@ SlashCmdList["WARPATH"] = function(msg)
     elseif cmd == "wp" then
         DB.wp = not DB.wp
         if not DB.wp then ClearWaypoint() end
-        lastWP = nil
+        State.lastWP = nil
         Refresh(true)
         say(DB.wp and T("wpOn") or T("wpOff"))
     elseif cmd == "here" then
@@ -138,7 +142,7 @@ SlashCmdList["WARPATH"] = function(msg)
         if #b >= 100 then table.remove(b, 1) end
         b[#b + 1] = { when = date and date("%Y-%m-%d %H:%M") or "", v = VERSION, guide = g, step = i,
             id = s and s.id, text = s and StepText(s), map = mapID, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10,
-            lvl = UnitLevel("player"), race = myRace, class = myClass, note = arg ~= "" and arg or nil }
+            lvl = UnitLevel("player"), race = State.myRace, class = State.myClass, note = arg ~= "" and arg or nil }
         say(T("bugSaved", #b))
     elseif cmd == "chemin" or cmd == "path" or cmd == "trail" then
         TrailCmd(arg)
@@ -147,8 +151,8 @@ SlashCmdList["WARPATH"] = function(msg)
     elseif cmd == "diag" and arg ~= "plus" and arg ~= "more" then
         -- version courte : ce qui sert a comprendre un souci en jeu (grotte, position, specialisation)
         local function yn(v) return v and ("|cff9cc7a8" .. T("yes") .. "|r") or ("|cffc24a3e" .. T("no") .. "|r") end
-        local zone = G and Title(G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "") or "?"
-        say(T("dgxHead", VERSION, zone, current or 0, steps and #steps or 0))
+        local zone = State.G and Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "") or "?"
+        say(T("dgxHead", VERSION, zone, State.current or 0, State.steps and #State.steps or 0))
         local c = CaveDiag and CaveDiag() or {}
         say("|cffcdbb8e" .. T("dgxCave") .. "|r")
         say("   " .. T("dgxWhere", c.indoors and ("|cff9cc7a8" .. T("diagIn") .. "|r") or T("diagOut")))
@@ -195,7 +199,7 @@ SlashCmdList["WARPATH"] = function(msg)
         local pm, px, py = PlayerPos()
         say(T("diagPos", tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?", indoors and T("diagIn") or T("diagOut"),
             yn(PlayerWP() ~= nil)))
-        local s = steps and steps[current]
+        local s = State.steps and State.steps[State.current]
         local q = s and Ids(s)[1]
         local objs = q and C_QuestLog and C_QuestLog.GetQuestObjectives and select(2, pcall(C_QuestLog.GetQuestObjectives, q))
         local o1 = type(objs) == "table" and objs[1]
@@ -260,9 +264,9 @@ end
 do
     local raw = SlashCmdList["WARPATH"]
     SlashCmdList["WARPATH"] = function(msg)
-        inCommand = true
+        State.inCommand = true
         local ok, err = pcall(raw, msg)
-        inCommand = false
+        State.inCommand = false
         if not ok then say(T("errInternal", tostring(err)), "error") end
     end
 end
@@ -297,6 +301,8 @@ end
 local NEWS = {
     { v = "1.50", fr = "Flèche plus futée : elle contourne maintenant les montagnes, falaises et grottes sur les trajets du guide, grâce à des chemins calculés à l'avance avec les cartes de marche de Shortest Path Forever (Cillian Berragan). Rien à installer, aucun calcul en jeu.",
       en = "Smarter arrow: it now goes around mountains, cliffs and caves on the guide's routes, using paths computed ahead of time from Shortest Path Forever's walking maps (Cillian Berragan). Nothing to install, no calculation in game." },
+    { v = "1.50", fr = "Temps actif (/warpath temps) : le guide en cours s'affiche avec son titre, et non plus avec son code interne.",
+      en = "Active time (/warpath time): the current guide now shows its title instead of its internal code." },
     { v = "1.49", fr = "Guide plus malin : il ne t'interrompt plus en pleine chasse pour aller voir ton entraîneur (il attend ta prochaine quête au camp) et ne te ramène plus de loin vers lui ; il ne saute plus les quêtes d'un camp quand il te fait d'abord rendre une autre quête du même camp ; une quête devenue disponible à ton nouveau niveau ne te fait plus revenir en arrière (proposée quand tu repasses près du PNJ, sauf si elle ouvre une suite) ; la flèche va d'abord au chef quand une étape demande de le tuer (ex. Chief Sharptusk Thornmantle). Fenêtre de ciblage et bouton d'objet : plus d'action bloquée si un combat commence pendant que tu les déplaces.",
       en = "Smarter guide: it no longer interrupts your hunting to send you to your trainer (it waits for your next quest at camp) and no longer drags you back to them from far away; it no longer skips a camp's quests when it has you turn in another quest of the same camp first; a quest your new level just unlocked no longer drags you back (offered when you pass by the NPC again, unless it opens a follow-up); the arrow goes to the boss first when a step asks you to kill one (e.g. Chief Sharptusk Thornmantle). Targeting window and item button: no more blocked action if combat starts while you are moving them." },
     { v = "1.48", fr = "Bouton d'objet de quête déplaçable : Maj + glisser pour le placer où tu veux (hors combat), Maj + clic droit pour le recoller à côté du guide. Avec Maj, un clic n'utilise pas l'objet.",

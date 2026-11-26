@@ -12,6 +12,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local TrailBreak
 
 local STEP = 15          -- distance entre deux points du brouillon
 local KEEP_SECS = 300    -- 5 minutes de marche gardees en memoire
@@ -154,13 +158,13 @@ local function TrailKeep()
     refused()[candidate.key] = nil
     say(T("trailKept", #candidate.p / 3))
     candidate, cache = nil, nil
-    lastWP = nil; Refresh(true)
+    State.lastWP = nil; Refresh(true)
 end
 
 -- arrivee a l'objectif de l'etape en cours : proposer de garder le chemin s'il a fait un grand detour
 local function checkArrival(here)
     if not (DB and DB.trailAsk ~= false and DB.smartArrow ~= false) then return end
-    local s = steps and steps[current]
+    local s = State.steps and State.steps[State.current]
     if not (s and s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept")) then return end
     local g = WP(s.m, s.x, s.y)
     if not (g and g[3] == here[3]) then return end
@@ -290,7 +294,7 @@ function TrailCmd(arg)
         refused()[bestK] = true        -- ne pas le reproposer au meme endroit
         cache = nil; wipe(prog)
         say(T("trailCleared"))
-        lastWP = nil; Refresh(true)
+        State.lastWP = nil; Refresh(true)
     elseif arg == "liste" or arg == "list" then
         local n = 0
         for _, v in pairs(t) do

@@ -2,6 +2,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local HearthCD
 
 -- Un seul conseil a la fois sous l'etape (le plus utile d'abord) :
 --   1. journal presque plein (Forever : 40 quetes max) -> quoi abandonner
@@ -52,9 +56,9 @@ do
     local function Upcoming(i, from, horizon)
         local out, eta, prev = {}, 0, from
         local known = Known()
-        for j = i, math.min(#steps, i + LOOK) do
-            local s = steps[j]
-            if s and Applies(s) and not doneCache[j] and s.m and s.x then
+        for j = i, math.min(#State.steps, i + LOOK) do
+            local s = State.steps[j]
+            if s and Applies(s) and not State.doneCache[j] and s.m and s.x then
                 local w = WP(s.m, s.x, s.y)
                 if w then
                     local c = prev and TravelCost(prev, w, known)
@@ -103,9 +107,9 @@ do
         if n < LOG_WARN then return nil end
         -- quetes encore utiles pour la suite du guide
         local needed = {}
-        for j = i, #steps do
-            local s = steps[j]
-            if s and not doneCache[j] then for _, id in ipairs(Ids(s)) do needed[id] = true end end
+        for j = i, #State.steps do
+            local s = State.steps[j]
+            if s and not State.doneCache[j] then for _, id in ipairs(Ids(s)) do needed[id] = true end end
         end
         local me = UnitLevel("player") or 1
         local cand = {}
@@ -134,9 +138,9 @@ do
         local here = PlayerWP()
         if not here or not ns.Vendors then return nil end
         local seen = {}
-        for j = i, math.min(#steps, i + SHOP_LOOK) do
-            local s = steps[j]
-            if s and Applies(s) and not doneCache[j] and (s.t == "accept" or s.t == "do" or s.t == "turnin") then
+        for j = i, math.min(#State.steps, i + SHOP_LOOK) do
+            local s = State.steps[j]
+            if s and Applies(s) and not State.doneCache[j] and (s.t == "accept" or s.t == "do" or s.t == "turnin") then
                 for _, q in ipairs(Ids(s)) do
                     local e = EST[q]
                     for _, b in ipairs((e and e.b) or {}) do
@@ -229,7 +233,7 @@ do
 
     -- quete de l'etape ratee (escorte, delai) : la reprendre chez le donneur
     local function FailAdvice(i)
-        local s = steps and steps[i]
+        local s = State.steps and State.steps[i]
         if not s or not (C_QuestLog and C_QuestLog.IsFailed) then return nil end
         for _, id in ipairs(Ids(s)) do
             if logById[id] ~= nil and C_QuestLog.IsFailed(id) then

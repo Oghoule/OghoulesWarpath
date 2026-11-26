@@ -2,6 +2,12 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local ACCENTS, DungeonLogHide, DungeonLogRender, DungeonLore, FIXED_H, MAPBAR, MIN_H, SKIP_ICON, STEP_ICON
+local STEP_TINT, SetChain, SetHeader, SetObjRows, SetRoute, SetSkip, SetUpcoming, SplitPlace, adviceArgs
+local advicePos, adviceT, autoGoBusy, lightCtx
 
 ------------------------------------------------------------------
 -- Habillage "cinematique" : noir, filets fins, losanges, capitales espacees
@@ -443,15 +449,15 @@ function UpdateDistance()
         f.dist:SetText("")
     end
     -- etape "va a" : validee toute seule quand tu arrives (moins de 20 m), comme si tu cliquais OK
-    if not peek and steps and me and not autoGoBusy then
-        local i = focus or current
-        local s = steps[i]
-        if s and s.t == "go" and s.m and s.x and not doneCache[i] and not IS_DUNGEON[DB.guide] then
+    if not State.peek and State.steps and me and not autoGoBusy then
+        local i = State.focus or State.current
+        local s = State.steps[i]
+        if s and s.t == "go" and s.m and s.x and not State.doneCache[i] and not IS_DUNGEON[DB.guide] then
             local g = WP(s.m, s.x, s.y)
             if g and g[3] == me[3] and Dist(me[1], me[2], g[1], g[2]) < 20 then
                 autoGoBusy = true
                 DB.seen[SeenKey(i)] = true
-                focus = nil; lastWP = nil
+                State.focus = nil; State.lastWP = nil
                 pcall(Advance); Refresh(true)
                 autoGoBusy = false
             end
@@ -535,7 +541,7 @@ function RefreshInner(forceWP)
     if not f then return end
     SetObjRows(nil)
     f.name:SetText(Caps(WarpathName()))
-    if not steps then
+    if not State.steps then
         SetHeader("", "", 0); f.summary = T("noGuide")
         if f.badge then f.badge:Hide(); f.qsub:Hide(); f.dest:Hide() end
         f.kind:Hide(); f.qtitle:Hide(); f.text:SetText(T("noGuide")); f.text:Show()
@@ -543,60 +549,60 @@ function RefreshInner(forceWP)
         distTarget = nil; Layout()
         return
     end
-    local n = #steps
-    if not peek and not focus and DungeonLogActive() then
+    local n = #State.steps
+    if not State.peek and not State.focus and DungeonLogActive() then
         DungeonLogRender()
         if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
         return
     end
     DungeonLogHide()
     if f.caveBtn then f.caveBtn:Hide() end
-    local i = peek or focus or current
+    local i = State.peek or State.focus or State.current
     if f.nowBtn then
-        local away = (peek or focus) and steps[current] and (peek or focus) ~= current
-        if away then f.nowBtn.label:SetText(T("backNow", current, (QName(steps[current]) and QName(steps[current]) ~= "") and QName(steps[current]) or (StepText(steps[current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
+        local away = (State.peek or State.focus) and State.steps[State.current] and (State.peek or State.focus) ~= State.current
+        if away then f.nowBtn.label:SetText(T("backNow", State.current, (QName(State.steps[State.current]) and QName(State.steps[State.current]) ~= "") and QName(State.steps[State.current]) or (StepText(State.steps[State.current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
         f.nowBtn:SetShown(away and true or false)
     end
-    local s = steps[i]
+    local s = State.steps[i]
     if not s then
-        SetHeader(Title(G), T("finished"), 1)
+        SetHeader(Title(State.G), T("finished"), 1)
         if f.badge then f.badge:Hide(); f.qsub:Hide(); f.dest:Hide() end
         f.summary = T("endGuide")
         f.kind:Hide(); f.qtitle:Hide(); f.text:SetText(T("endGuide")); f.text:Show()
         f.coord:SetText(""); f.coord:Hide(); f.list:SetText(""); SetUpcoming({}); SetRoute({}); SetChain(nil)
-        ClearWaypoint(); lastWP = nil; distTarget = nil
+        ClearWaypoint(); State.lastWP = nil; distTarget = nil
         SetSkip("ok")
         UpdateDistance(); Layout()
     else
-        local zone = Title(G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "")
+        local zone = Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "")
         if IS_DUNGEON[DB.guide] then zone = zone:gsub("^[^:]+:%s*", "") end
         SetHeader(zone, T("stepOf", i, n), i / n)
-        local st = peek and doneCache[i]
+        local st = State.peek and State.doneCache[i]
         -- prise impossible tant qu'un prerequis du journal n'est pas fini : on guide vers ce prerequis
-        local det = (not peek) and ((TrainDetour and TrainDetour(s)) or (PrereqDetour and PrereqDetour(s))) or nil
+        local det = (not State.peek) and ((TrainDetour and TrainDetour(s)) or (PrereqDetour and PrereqDetour(s))) or nil
         local g = det and { t = det.done and "turnin" or "do", id = det.id, m = det.m, x = det.x, y = det.y,
                             zone = MAPNAME[det.m] or s.zone, quest = det.name } or s
         -- grotte (entree/sortie) ou objet au sol le plus proche : la fleche vise ce point
-        local sp = (not peek and (not det or DB.errand or DB.qm) and StepPoint) and StepPoint(s) or nil
+        local sp = (not State.peek and (not det or DB.errand or DB.qm) and StepPoint) and StepPoint(s) or nil
         if sp then g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest } end
         if f.caveBtn then
             local cave = sp and (sp.kind == "enter" or sp.kind == "exit")
             if cave then f.caveBtn.label:SetText("|cff8c7f62" .. T("caveWrong") .. "|r") end
             f.caveBtn:SetShown(cave and true or false)
         end
-        local tr = (not peek) and TransportFor(g) or nil
+        local tr = (not State.peek) and TransportFor(g) or nil
         -- vol conseille pour la prochaine etape du trajet (vers le transport, ou vers l'objectif)
         local fl
-        local prevFl = flightPlan
-        flightPlan = nil
-        if not peek and DB.useFlights ~= false and not (UnitOnTaxi and UnitOnTaxi("player")) then
+        local prevFl = State.flightPlan
+        State.flightPlan = nil
+        if not State.peek and DB.useFlights ~= false and not (UnitOnTaxi and UnitOnTaxi("player")) then
             local here = PlayerWP()
             local leg = tr and WP(tr.from[1], tr.from[2], tr.from[3]) or (g.m and g.x and WP(g.m, g.x, g.y))
             if here and leg then
                 -- le vol deja conseille n'est garde que pour la meme destination (v1.45)
                 local legKey = math.floor(leg[1]) .. ":" .. math.floor(leg[2])
                 fl = BestFlight(here, leg, KnownFlights(), (prevFl and prevFl.dest == legKey) and prevFl or nil)
-                if fl then fl.dest = legKey; flightPlan = fl end
+                if fl then fl.dest = legKey; State.flightPlan = fl end
             end
         end
         -- texte complet (journal de debug et tests)
@@ -618,9 +624,9 @@ function RefreshInner(forceWP)
             .. (s.woven and ("   |cffcdbb8e" .. Caps(T("wovenTag")) .. "|r") or "")   -- v1.47 : etape d'une chaine integree
             .. (st == "done" and ("  " .. CHECK .. " |cff9cc7a8" .. T("stepDone") .. "|r")
                 or st == "skip" and ("   |cff8c7f62" .. T("skipped") .. "|r")
-                or peek and ("   |cffd69a66" .. T("stepTodo") .. "|r") or "")
-            .. ((not peek and focus) and ("   |cffcdbb8e" .. T("chosen") .. "|r") or "")
-            .. ((not peek and not focus and nearKind and i == current) and ("   |cff9cc7a8" .. T(nearKind == "pass" and "nearPass" or "nearNear") .. "|r") or ""))
+                or State.peek and ("   |cffd69a66" .. T("stepTodo") .. "|r") or "")
+            .. ((not State.peek and State.focus) and ("   |cffcdbb8e" .. T("chosen") .. "|r") or "")
+            .. ((not State.peek and not State.focus and nearKind and i == State.current) and ("   |cff9cc7a8" .. T(nearKind == "pass" and "nearPass" or "nearNear") .. "|r") or ""))
         -- rendement estime (quete + monstres) compare au simple farm de monstres de ton niveau
         f.rateTip = nil
         if (s.t == "do" or (s.optional and s.t == "accept")) and type(s.id) == "number" and EST[s.id] then
@@ -713,13 +719,13 @@ function RefreshInner(forceWP)
         -- souvent elites, meme hors du portail)
         if s.t == "do" and IS_DUNGEON[DB.guide] and s.m then
             local ent
-            for j = 1, n do if steps[j].t == "go" then ent = j; break end end
+            for j = 1, n do if State.steps[j].t == "go" then ent = j; break end end
             if ent and i > ent then body = "|cffd69a66" .. T("dgGroup") .. "|r\n\n" .. body end
         end
         if det and det.train then body = "|cffd69a66" .. T("trainStep", det.name) .. "|r\n\n" .. body
         elseif det then body = "|cffd69a66" .. T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
         -- quetes pas encore prises faute de niveau, quetes laissees pour plus tard, et la suite
-        if not peek then
+        if not State.peek then
             local lw = LevelWaitLines and LevelWaitLines(s) or {}
             if #lw > 0 then body = body .. "\n\n" .. ListBlock(T("lvlWaitHdr"), lw, "d69a66") end
             local hn = HubNotes and HubNotes(i)
@@ -741,7 +747,7 @@ function RefreshInner(forceWP)
             end
         end
         -- donjon : toutes les quetes en main, on marche sur l'entree
-        if s.t == "go" and IS_DUNGEON[DB.guide] and not peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
+        if s.t == "go" and IS_DUNGEON[DB.guide] and not State.peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
         body = body:gsub("^%s+", "")
         f.text:SetText(body); f.text:SetShown(body ~= "")
         -- itineraire : au plus 3 etapes (vol, zeppelin/bateau, puis l'objectif)
@@ -810,15 +816,15 @@ function RefreshInner(forceWP)
             end
             if not after then seq = {} for _, j in ipairs(dynOrder) do if j ~= i then seq[#seq + 1] = j end end end
             local entrance
-            for j = 1, n do if steps[j].t == "go" then entrance = j; break end end
+            for j = 1, n do if State.steps[j].t == "go" then entrance = j; break end end
             -- apres l'entree : seulement les remises (les objectifs du donjon sont dans le journal du donjon)
             for j = (entrance or n + 1), n do
-                if Applies(steps[j]) and j ~= i and steps[j].t ~= "do" and not doneCache[j] then seq[#seq + 1] = j end
+                if Applies(State.steps[j]) and j ~= i and State.steps[j].t ~= "do" and not State.doneCache[j] then seq[#seq + 1] = j end
             end
         else
             local j = i
             -- etape choisie par proximite : l'etape du guide qu'on a devancee reste en tete de la liste
-            if not peek and not focus and baseCurrent and baseCurrent < i then seq[1] = baseCurrent; j = baseCurrent end
+            if not State.peek and not State.focus and State.baseCurrent and State.baseCurrent < i then seq[1] = State.baseCurrent; j = State.baseCurrent end
             while #seq < 4 do
                 j = NextApplicable(j)
                 if j == i then j = NextApplicable(j) end
@@ -830,8 +836,8 @@ function RefreshInner(forceWP)
         local me = PlayerWP()
         for _, j in ipairs(seq) do
             if #items >= 4 then break end
-            local t = steps[j]
-            if doneCache[j] then
+            local t = State.steps[j]
+            if State.doneCache[j] then
                 passed = passed + 1
             else
                 local nm = QName(t) or StepText(t):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 45)
@@ -851,12 +857,12 @@ function RefreshInner(forceWP)
         local firstTodo
         if ch then
             for _, j in ipairs(ch.idx) do
-                if Applies(steps[j]) and not doneCache[j] then firstTodo = j; break end
+                if Applies(State.steps[j]) and not State.doneCache[j] then firstTodo = j; break end
             end
         end
         f.chainBtn.target = (firstTodo and firstTodo ~= i) and firstTodo or nil
         SetChain(ch)
-        if not peek and not focus and DB.dgOut and DB.dgOut[DB.guide] and InDgInstance() then
+        if not State.peek and not State.focus and DB.dgOut and DB.dgOut[DB.guide] and InDgInstance() then
             SetSkip("dgBack")
         elseif Restorable(i) then
             SetSkip("restore")
@@ -865,13 +871,13 @@ function RefreshInner(forceWP)
             SetSkip((s.t == "note" or s.t == "go" or s.t == "level") and "ok" or "ignore")
         end
         -- quete sautee faute de prerequis : on la montre, cliquable
-        local locks = (not peek) and LockCandidates() or {}
+        local locks = (not State.peek) and LockCandidates() or {}
         f.lockBtn.list = locks
         local li = locks[1]
         if li then
-            local need = ChainFor(steps[li].id) or {}
+            local need = ChainFor(State.steps[li].id) or {}
             f.lockBtn.idx = li
-            f.lockBtn.label:SetText("|cffd69a66" .. T("lockLine", QName(steps[li]) or "?") .. "|r  |cff8c7f62"
+            f.lockBtn.label:SetText("|cffd69a66" .. T("lockLine", QName(State.steps[li]) or "?") .. "|r  |cff8c7f62"
                 .. T("lockNeed", #need) .. (#locks > 1 and ("  (+" .. (#locks - 1) .. ")") or "") .. "|r")
             f.lockBtn:Show()
         else
@@ -879,9 +885,9 @@ function RefreshInner(forceWP)
             f.lockBtn:Hide()
         end
         -- conseil : journal plein, pierre de foyer
-        local adv = (not peek) and Advice and Advice(i, g) or nil
+        local adv = (not State.peek) and Advice and Advice(i, g) or nil
         currentAdvice = adv
-        adviceArgs = (not peek) and { i, g } or nil   -- pour le revoir quand tu te deplaces (UpdateDistance)
+        adviceArgs = (not State.peek) and { i, g } or nil   -- pour le revoir quand tu te deplaces (UpdateDistance)
         if adv and f.advice then
             f.advice.icon:SetTexture(adv.icon); f.advice.label:SetText(adv.text); f.advice:Show()
             local c = adv.tint or { 1, 1, 1 }
@@ -891,10 +897,10 @@ function RefreshInner(forceWP)
         if ns.Targets then ns.Targets.Update(det and g or s) end
         local wpKey = (det and ("pre" .. det.id .. (det.done and "d" or "") .. ">") or "") .. (sp and (sp.kind .. sp.x .. ":" .. sp.y .. ">") or "") .. i .. (tr and (":" .. tr.id) or "") .. (fl and (":fl:" .. fl.from.key .. ">" .. fl.to.key) or "")
         -- v1.46 : de quoi deplacer la fleche sans tout reconstruire (RetargetLight), seulement a pied vers l'objectif
-        lightCtx = (not peek and not det and not tr and not fl and sp) and { i = i, kind = sp.kind, out = sp.out,
+        lightCtx = (not State.peek and not det and not tr and not fl and sp) and { i = i, kind = sp.kind, out = sp.out,
             area = distTarget and distTarget[4] or false, t = GetTime and GetTime() or 0 } or nil
-        if not peek and (forceWP or lastWP ~= wpKey) then
-            lastWP = wpKey
+        if not State.peek and (forceWP or State.lastWP ~= wpKey) then
+            State.lastWP = wpKey
             if fl then
                 SetWaypoint({ m = fl.from.m, x = fl.from.x, y = fl.from.y, quest = T("flight") .. " -> " .. fl.to.name })
             elseif tr then
@@ -916,16 +922,16 @@ end
 local LIGHT_KINDS = { obj = true, trail = true, pass = true, gate = true, enter = true, exit = true, corpse = true }
 function RetargetLight(sp)
     local c = lightCtx
-    if not (c and sp and f and steps) or peek or focus then return false end
-    local s = steps[current]
-    if not s or c.i ~= current or sp.kind ~= c.kind or sp.out ~= c.out or not LIGHT_KINDS[sp.kind] then return false end
+    if not (c and sp and f and State.steps) or State.peek or State.focus then return false end
+    local s = State.steps[State.current]
+    if not s or c.i ~= State.current or sp.kind ~= c.kind or sp.out ~= c.out or not LIGHT_KINDS[sp.kind] then return false end
     local now = GetTime and GetTime() or 0
     if now - (c.t or 0) > 10 then return false end      -- une vraie mise a jour de temps en temps (vols, conseils)
     local g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest }
     distTarget = { sp.m, sp.x, sp.y, c.area }
     if f.destName then f.destName:SetText((g.zone and g.zone ~= "") and g.zone or (MAPNAME[sp.m] or "")) end
     f.destCoord = string.format("%.1f, %.1f", sp.x, sp.y) .. (MAPNAME[sp.m] and ("  ·  " .. MAPNAME[sp.m]) or "")
-    lastWP = sp.kind .. sp.x .. ":" .. sp.y .. ">" .. current
+    State.lastWP = sp.kind .. sp.x .. ":" .. sp.y .. ">" .. State.current
     SetWaypoint(g)
     UpdateDistance()
     if UpdateMini then pcall(UpdateMini) end
@@ -1355,8 +1361,8 @@ end
 -- "Sortie du donjon" (ou toutes les quetes completes) : le guide reprend pour aller les rendre.
 ------------------------------------------------------------------
 local function DgEntrance()
-    if not steps then return nil end
-    for j = 1, #steps do if steps[j].t == "go" then return j end end
+    if not State.steps then return nil end
+    for j = 1, #State.steps do if State.steps[j].t == "go" then return j end end
 end
 -- texte d'ambiance de l'entree du donjon (Lore.lua), sinon le message general
 function DungeonLore(zone)
@@ -1366,11 +1372,11 @@ function DungeonLore(zone)
     return T("dgAssemble", name, zone)
 end
 function DungeonLogActive()
-    if not (DB and steps and IS_DUNGEON[DB.guide]) then return false end
+    if not (DB and State.steps and IS_DUNGEON[DB.guide]) then return false end
     if DB.dgOut and DB.dgOut[DB.guide] then return false end
     local ent = DgEntrance()
-    if not ent or not doneCache[ent] or current <= ent then return false end
-    local s = steps[current]
+    if not ent or not State.doneCache[ent] or State.current <= ent then return false end
+    local s = State.steps[State.current]
     return s ~= nil and s.t ~= "turnin"
 end
 local function QProg(q)
@@ -1388,8 +1394,8 @@ end
 function DungeonLogList()
     local out, seen = {}, {}
     local ent = DgEntrance(); if not ent then return out end
-    for j = ent + 1, #steps do
-        local s = steps[j]
+    for j = ent + 1, #State.steps do
+        local s = State.steps[j]
         if Applies(s) and (s.t == "do" or s.t == "accept" or s.t == "turnin") then
             for _, q in ipairs(Ids(s)) do
                 if not seen[q] and not Rendue(q) and not (DB.ignored and DB.ignored[q]) then
@@ -1433,8 +1439,8 @@ local function QDetails(row)
     if #objLines > 0 then
         lines[#lines + 1] = table.concat(objLines, "\n")
     else
-        for j = ent + 1, #steps do
-            local s = steps[j]
+        for j = ent + 1, #State.steps do
+            local s = State.steps[j]
             if s.t == "do" and Applies(s) and HasQ(s, q) then lines[#lines + 1] = StepText(s); break end
         end
     end
@@ -1445,8 +1451,8 @@ local function QDetails(row)
     end
     local tip = ns.Tips and ns.Tips[q]
     if DB.tips ~= false and tip then lines[#lines + 1] = "|cffd6b866" .. T("tipLbl") .. "|r  " .. ((Lang() == "en") and tip[2] or tip[1]) end
-    for j = ent + 1, #steps do
-        local s = steps[j]
+    for j = ent + 1, #State.steps do
+        local s = State.steps[j]
         if s.t == "turnin" and Applies(s) and HasQ(s, q) then lines[#lines + 1] = "|cff8c7f62" .. T("dgTurnin") .. "|r  " .. StepText(s); break end
     end
     return table.concat(lines, "\n\n")
@@ -1475,7 +1481,7 @@ end
 function DungeonLogRender()
     SetObjRows(nil)
     local list = DungeonLogList()
-    local zone = Title(G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", ""):gsub("^[^:]+:%s*", "")
+    local zone = Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", ""):gsub("^[^:]+:%s*", "")
     local done = 0
     for _, r in ipairs(list) do if r.done then done = done + 1 end end
     local nq = 0; for _, r in ipairs(list) do if not r.later then nq = nq + 1 end end
@@ -1507,6 +1513,6 @@ function DungeonLogRender()
     if #list > 12 then f.text:SetText("|cffd69a66" .. T("dgGroup") .. "|r\n|cff8c7f62" .. T("dgMore", #list - 12) .. "|r") end
     if #list == 0 then f.text:SetText(T("dgEmpty")); f.text:Show() end
     SetSkip("dgExit")
-    if ns.Targets then ns.Targets.Update(steps[current]) end
+    if ns.Targets then ns.Targets.Update(State.steps[State.current]) end
     Layout()
 end

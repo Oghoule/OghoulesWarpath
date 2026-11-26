@@ -5,6 +5,11 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local Actionable, CityCaveFor, CityGatePoint, DungeonDoorPoint, ErrandPoint, FarmSpot, InlineIcon
+local MobZonePoint, PassageKey, StepPointKey
 
 -- titre en couleur + une ligne par element, en retrait avec un losange
 -- icone de l'addon en ligne, teintee (r, g, b de 0 a 255)
@@ -19,15 +24,15 @@ function ListBlock(title, items, col, icon)
     end
     return table.concat(out, "\n")
 end
-baseCurrent = nil   -- etape courante dans l'ordre du guide (avant le choix par proximite)
+State.baseCurrent = nil   -- etape courante dans l'ordre du guide (avant le choix par proximite)
 nearKind = nil      -- "near" (le plus proche du groupe) ou "pass" (en passant), pour l'affichage
 local PASS_R, LOOK, CLUSTER, HUB_R = 25, 15, 12, 80
 local lastPick
 
 -- etape "prendre" ou "rendre" faisable tout de suite
 function Actionable(j)
-    local s = steps and steps[j]
-    if not s or doneCache[j] or not Applies(s) or not s.m then return false end
+    local s = State.steps and State.steps[j]
+    if not s or State.doneCache[j] or not Applies(s) or not s.m then return false end
     if s.t == "turnin" then
         local any = false
         for _, id in ipairs(Ids(s)) do
@@ -61,15 +66,15 @@ end
 -- renvoie l'etape a faire en premier (ou nil = garder l'ordre du guide)
 function NearPick(cur)
     nearKind = nil
-    if not (steps and cur and steps[cur]) or IS_DUNGEON[DB.guide] or DB.near == false then return nil end
+    if not (State.steps and cur and State.steps[cur]) or IS_DUNGEON[DB.guide] or DB.near == false then return nil end
     local me = PlayerWP(); if not me then return nil end
-    local s0 = steps[cur]
+    local s0 = State.steps[cur]
     local best, bd, kind
     if s0.t == "accept" or s0.t == "turnin" then
         local j = cur
-        while j <= #steps and j <= cur + CLUSTER do
-            local s = steps[j]
-            if Applies(s) and not doneCache[j] then
+        while j <= #State.steps and j <= cur + CLUSTER do
+            local s = State.steps[j]
+            if Applies(s) and not State.doneCache[j] then
                 if s.t ~= "accept" and s.t ~= "turnin" then break end
                 -- seulement dans le meme camp que l'etape du guide (pas de saut d'un camp a l'autre)
                 local same = j == cur
@@ -85,21 +90,21 @@ function NearPick(cur)
             j = j + 1
         end
         -- on ne change pas d'avis pour quelques metres
-        if lastPick and lastPick ~= best and steps[lastPick] and not doneCache[lastPick] and (lastPick == cur or Actionable(lastPick)) then
-            local dl = distTo(me, steps[lastPick])
+        if lastPick and lastPick ~= best and State.steps[lastPick] and not State.doneCache[lastPick] and (lastPick == cur or Actionable(lastPick)) then
+            local dl = distTo(me, State.steps[lastPick])
             if dl and bd and dl < bd + 15 then best, bd = lastPick, dl end
         end
     end
     local j, k, barrier = cur + 1, 0, false
-    while j <= #steps do
-        local s = steps[j]
-        if Applies(s) and not doneCache[j] then
+    while j <= #State.steps do
+        local s = State.steps[j]
+        if Applies(s) and not State.doneCache[j] then
             k = k + 1
             if s.t == "go" or s.t == "level" then barrier = true end
             -- au-dela de 15 etapes (ou d'un changement de zone), seules les remises comptent : rendre plus tot ne coute rien
             if (barrier or k > LOOK) and s.t ~= "turnin" then s = nil end
         end
-        if s and Applies(s) and not doneCache[j] then
+        if s and Applies(s) and not State.doneCache[j] then
             local esc = s.t == "accept" and ((s.text or "") .. (s.en or "")):lower():find("escort", 1, true)
             if (s.t == "accept" or s.t == "turnin") and not esc and Actionable(j) then
                 local dj = distTo(me, s)
@@ -120,32 +125,32 @@ function NearTick()
     local t = GetTime and GetTime() or 0
     if t - lastTick < 2 then return end
     lastTick = t
-    if not steps or peek or focus or not baseCurrent or computingOther then return end
+    if not State.steps or State.peek or State.focus or not State.baseCurrent or State.computingOther then return end
     if DungeonLogActive and DungeonLogActive() then return end
     pcall(CaveTrack)
     -- v1.49 : prise laissee derriere toi (StepDone) : on refait le calcul quand tu arrives pres de son PNJ
     -- ou que tu t'en eloignes (seulement les quelques prises du camp de l'ancre ou en attente de niveau)
     for i, was in pairs(heldNear) do
-        local s = steps[i]
+        local s = State.steps[i]
         if s and NearNpc(s, was) ~= was then pcall(Advance); return end
     end
     local sp
     local ok, pk = pcall(function()
-        sp = StepPoint(steps[current])
-        return (sp and (sp.kind .. sp.m .. ":" .. sp.x .. ":" .. sp.y) or "") .. (TrainDetour(steps[current]) and "T" or "")
+        sp = StepPoint(State.steps[State.current])
+        return (sp and (sp.kind .. sp.m .. ":" .. sp.x .. ":" .. sp.y) or "") .. (TrainDetour(State.steps[State.current]) and "T" or "")
     end)
     if ok and pk ~= lastPointKey then
         lastPointKey = pk
         -- v1.46 : seul le point a bouge (meme etape, meme genre) : la fleche se deplace sans tout reconstruire
         local okL, light = false, false
         if pk:sub(-1) ~= "T" and RetargetLight then okL, light = pcall(RetargetLight, sp) end
-        if not (okL and light) then lastWP = nil; Refresh(true) end
+        if not (okL and light) then State.lastWP = nil; Refresh(true) end
         return
     end
-    local j = NearPick(baseCurrent) or baseCurrent
-    if j ~= current and steps[j] then
-        current = j; DB.step[DB.guide] = current
-        lastWP = nil; Refresh(true)
+    local j = NearPick(State.baseCurrent) or State.baseCurrent
+    if j ~= State.current and State.steps[j] then
+        State.current = j; DB.step[DB.guide] = State.current
+        State.lastWP = nil; Refresh(true)
     end
 end
 
@@ -156,7 +161,7 @@ function LevelWaitLines(s)
     local lvl = UnitLevel("player") or 1
     for _, q in ipairs(Ids(s)) do
         if logById[q] == nil and not Rendue(q) and not DB.ignored[q] then
-            for _, a in ipairs(steps) do
+            for _, a in ipairs(State.steps) do
                 if a.t == "accept" and (a.req or 0) > lvl and Applies(a) then
                     local has = false
                     for _, id in ipairs(Ids(a)) do if id == q then has = true end end
@@ -170,16 +175,16 @@ end
 
 -- pres d'un camp : quetes que le guide prendra plus tard, ou ne prend pas (pas rentables)
 function HubNotes(i)
-    local s = steps and steps[i]
+    local s = State.steps and State.steps[i]
     if not s or (s.t ~= "accept" and s.t ~= "turnin") or IS_DUNGEON[DB.guide] then return nil end
     local me = PlayerWP(); if not me then return nil end
     local here = distTo(me, s)
     if not here or here > 40 then return nil end
     local later, skip, seen = {}, {}, {}
-    for j = i + 1, #steps do
-        local a = steps[j]
-        if a.t == "accept" and Applies(a) and not doneCache[j] and j ~= current
-            and not (Actionable(j) and j <= (baseCurrent or i) + LOOK) then
+    for j = i + 1, #State.steps do
+        local a = State.steps[j]
+        if a.t == "accept" and Applies(a) and not State.doneCache[j] and j ~= State.current
+            and not (Actionable(j) and j <= (State.baseCurrent or i) + LOOK) then
             local d = distTo(me, a)
             if d and d < 30 then
                 for _, q in ipairs(Ids(a)) do
@@ -196,7 +201,7 @@ function HubNotes(i)
     for _, e in ipairs((ns.Skipped and ns.Skipped[pm]) or {}) do
         local q, x, y, rc, req, nm = e[1], e[2], e[3], e[4], e[5], e[6]
         if #skip < 3 and logById[q] == nil and not Rendue(q) and req <= lvl
-            and (rc == 0 or not RACEBIT[myRace] or HasBit(rc, RACEBIT[myRace])) then
+            and (rc == 0 or not RACEBIT[State.myRace] or HasBit(rc, RACEBIT[State.myRace])) then
             local d = distTo(me, { m = pm, x = x, y = y })
             if d and d < 30 then skip[#skip + 1] = QuestTitle(q) or nm end
         end
@@ -209,11 +214,11 @@ end
 
 -- "faire" : la prochaine etape est ailleurs -> on l'annonce pour avancer en tuant
 function ThenLine(i)
-    local s = steps and steps[i]
+    local s = State.steps and State.steps[i]
     if not s or s.t ~= "do" then return nil end
     local j = NextApplicable(i)
-    while j <= #steps and doneCache[j] do j = NextApplicable(j) end
-    local nx = steps[j]
+    while j <= #State.steps and State.doneCache[j] do j = NextApplicable(j) end
+    local nx = State.steps[j]
     if not (nx and nx.m and nx.x and s.m and s.x) then return nil end
     local a, b = WP(s.m, s.x, s.y), WP(nx.m, nx.x, nx.y)
     if not (a and b) or a[3] ~= b[3] or Dist(a[1], a[2], b[1], b[2]) < 100 then return nil end
@@ -223,12 +228,12 @@ end
 
 -- plusieurs remises faisables au meme endroit : on les annonce ensemble
 function TurninGroup(i)
-    local s = steps and steps[i]
+    local s = State.steps and State.steps[i]
     if not s or s.t ~= "turnin" or not (s.m and s.x) then return nil end
     local a = WP(s.m, s.x, s.y); if not a then return nil end
     local names, seen = {}, {}
-    for j = math.max(1, (baseCurrent or i) - 0), math.min(#steps, i + LOOK) do
-        local t = steps[j]
+    for j = math.max(1, (State.baseCurrent or i) - 0), math.min(#State.steps, i + LOOK) do
+        local t = State.steps[j]
         if t.t == "turnin" and (j == i or Actionable(j)) and t.m and t.x then
             local b = WP(t.m, t.x, t.y)
             if b and b[3] == a[3] and Dist(a[1], a[2], b[1], b[2]) < 30 then
@@ -287,7 +292,7 @@ local function nearestEntrance(m, x, y, r)
 end
 local lastOut, caveOut   -- derniere position dehors ; entree de la grotte ou tu es
 function CaveTrack()
-    if not (DB and steps and WarpathDropDB) then return end
+    if not (DB and State.steps and WarpathDropDB) then return end
     local indoors = IsIndoors and IsIndoors() or false
     local pm, px, py = PlayerPos()
     if not (pm and px) then return end
@@ -302,7 +307,7 @@ function CaveTrack()
         local me = WP(lastOut[1], lastOut[2], lastOut[3])
         local near = false
         if me then
-            for _, t in ipairs(steps) do
+            for _, t in ipairs(State.steps) do
                 if IsCaveStep(t) and Applies(t) then
                     local g = WP(t.m, t.x, t.y)
                     if g and g[3] == me[3] and Dist(me[1], me[2], g[1], g[2]) < 150 then near = true; break end
@@ -399,7 +404,7 @@ function CityCavePoint(m, x, y, npc, me)
 end
 -- /warpath passage : ta position devient le point de passage de l'etape affichee ; "efface" le retire
 function PassageCmd(arg)
-    local s = steps and steps[focus or current]
+    local s = State.steps and State.steps[State.focus or State.current]
     local q = s and Ids(s)[1]
     if not (s and q and s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept")) then say(T("passNoStep")); return end
     WarpathDropDB._pass = WarpathDropDB._pass or {}
@@ -421,7 +426,7 @@ function PassageCmd(arg)
             WarpathDropDB._cityCave[city] = { x, y }
             say(T("passCaveSaved", MAPNAME[city] or tostring(city), x, y))
         end
-        lastWP = nil; Refresh(true)
+        State.lastWP = nil; Refresh(true)
         return
     end
     if arg == "efface" or arg == "clear" or arg == "x" then
@@ -441,7 +446,7 @@ function PassageCmd(arg)
         say(T("passSaved", name, MAPNAME[pm] or tostring(pm), x, y))
         say(T("passHint"))   -- rappel : ce point sert a CETTE quete ; pour une ville, /warpath passage ville ou grotte
     end
-    lastWP = nil; Refresh(true)
+    State.lastWP = nil; Refresh(true)
 end
 
 -- Camps separes (Data/MobZones.lua) : la fleche va au camp dont les objectifs ne sont pas finis.
@@ -497,7 +502,7 @@ function MobZonePoint(s, me)
         end
     end
     if #list == 0 or total < 2 then return nil end
-    local sk = (SeenKey and SeenKey(current)) or tostring(current)
+    local sk = (SeenKey and SeenKey(State.current)) or tostring(State.current)
     local function point(c)
         zoneSticky[sk] = c.key
         local p = { m = c.z[1], x = c.z[2], y = c.z[3], name = zoneLabel(c.q, c.z), kind = "zone", idx = c.idx, n = c.n }
@@ -508,7 +513,7 @@ function MobZonePoint(s, me)
     -- le camp en cours vient d'etre fini : pas de changement pendant le combat
     if zoneSticky[sk] and UnitAffectingCombat and UnitAffectingCombat("player") and zoneLast[sk] then return zoneLast[sk] end
     -- deja dans un camp : celui-la ; sinon d'abord le camp le plus loin de l'etape suivante (on finit pres d'elle)
-    local nx = steps[NextApplicable(current)]
+    local nx = State.steps[NextApplicable(State.current)]
     local nw = nx and nx.m and nx.x and WP(nx.m, nx.x, nx.y)
     local best, bscore
     for _, c in ipairs(list) do
@@ -550,13 +555,13 @@ end
 function SetErrand(m, x, y, name)
     if not (DB and m and x and y) then return end
     DB.errand = { m = m, x = x, y = y, name = name, t = time and time() or 0 }
-    lastWP = nil
+    State.lastWP = nil
     Refresh(true)
 end
 function ClearErrand()
     if not (DB and DB.errand) then return end
     DB.errand = nil
-    lastWP = nil
+    State.lastWP = nil
     Refresh(true)
 end
 function ErrandPoint(me)
@@ -728,11 +733,11 @@ end
 -- v1.45 : etape de l'interieur du donjon (sans position) alors que tu es dehors, donjon pas quitte
 -- (mort, course en fantome : le corps est dans l'instance, le jeu ne le situe pas) : l'entree du donjon
 function DungeonDoorPoint(s)
-    if not (DB and steps and IS_DUNGEON and IS_DUNGEON[DB.guide]) or (s and s.m and s.x) then return nil end
+    if not (DB and State.steps and IS_DUNGEON and IS_DUNGEON[DB.guide]) or (s and s.m and s.x) then return nil end
     if not (DB.dgIn and DB.dgIn[DB.guide]) or (DB.dgOut and DB.dgOut[DB.guide]) then return nil end
     if IsInInstance and IsInInstance() then return nil end
-    for j = 1, #steps do
-        local g = steps[j]
+    for j = 1, #State.steps do
+        local g = State.steps[j]
         if g.t == "go" and g.m and g.x then
             local name = Title and Guides and Title(Guides[DB.guide]) or ""
             return { m = g.m, x = g.x, y = g.y, name = T("dgBack", name), kind = "dgdoor" }
@@ -746,7 +751,7 @@ end
 
 -- sous le niveau 10, mourir ne coute rien : pour un long trajet de retour, ca peut etre plus rapide
 function DeathTip(i)
-    local s = steps and steps[i]
+    local s = State.steps and State.steps[i]
     if not s or (UnitLevel("player") or 1) >= 10 or s.t ~= "turnin" or not s.m then return nil end
     if DB.deathTip == false then return nil end
     local me = PlayerWP(); if not me then return nil end
@@ -757,7 +762,7 @@ end
 
 -- etat des grottes pour /warpath diag : dedans ou dehors, etape de grotte, entree connue, cible de la fleche
 function CaveDiag()
-    local s = steps and steps[current]
+    local s = State.steps and State.steps[State.current]
     local out = { indoors = IsIndoors and IsIndoors() or false, cave = IsCaveStep(s), exitKnown = caveOut ~= nil }
     if out.cave then
         local e = nearestEntrance(s.m, s.x, s.y, 200)
@@ -775,7 +780,7 @@ end
 
 -- entree de grotte mal apprise : on l'oublie, elle sera reapprise a la prochaine entree
 function ForgetCave()
-    local s = steps and steps[current]
+    local s = State.steps and State.steps[State.current]
     local cv = WarpathDropDB and WarpathDropDB._caves
     if not cv then return end
     -- "x" : ni ton entree, ni celle des autres joueurs ; reapprise a ta prochaine entree
@@ -787,7 +792,7 @@ function ForgetCave()
     end
     if caveOut then cv[caveOut.k] = "x"; caveOut = nil end
     say(T("caveForgot"))
-    lastWP = nil; Refresh(true)
+    State.lastWP = nil; Refresh(true)
 end
 
 -- Nouveaux sorts (niveau pair) et entraineur de classe a moins de 250 m : etape temporaire avant l'etape en cours.
@@ -795,14 +800,14 @@ end
 local TRAIN_R = 250
 local trainLatch
 function TrainDetour(s)
-    if not (DB and DB.trainDue and myClass and DB.trainer ~= false) then return nil end
+    if not (DB and DB.trainDue and State.myClass and DB.trainer ~= false) then return nil end
     if DB.trainSkip == DB.trainDue or IS_DUNGEON[DB.guide] then return nil end
     if IsInInstance then local inI = IsInInstance(); if inI then return nil end end
     -- v1.49 : jamais pendant une chasse (etape Faire, escortes comprises, ou « Monte au niveau ») : plus
     -- d'interruption en plein combat. Le rappel attend la prochaine prise, remise, note ou etape « Aller ».
     if not s or s.t == "do" or s.t == "level" then return nil end
     if not NearestTrainer then return nil end
-    local e, d = NearestTrainer((ns.ClassTrainers or {})[myClass])
+    local e, d = NearestTrainer((ns.ClassTrainers or {})[State.myClass])
     if not (e and d) then return nil end
     -- deja proposee pour ce niveau : un peu plus de marge (pas de va-et-vient a la limite), mais plus de
     -- fleche qui te ramene de loin
@@ -813,7 +818,7 @@ end
 
 -- En chemin : objets de quete encore a ramasser (semes un peu partout) pres du trajet vers l'etape en cours
 function OnTheWay(i)
-    local s = steps and steps[i]
+    local s = State.steps and State.steps[i]
     if not s or s.t == "do" or not (s.m and s.x) or not ns.ObjSpawns then return nil end
     local me = PlayerWP(); if not me then return nil end
     local b = WP(s.m, s.x, s.y)
@@ -913,15 +918,15 @@ end
 -- etape "rendre" suivie de quetes a prendre chez le meme PNJ : on le dit tout de suite,
 -- pour ne pas fermer la fenetre et repartir (le jeu n'enchaine pas toujours la quete suivante)
 function FollowUpAccepts(i)
-    local s = steps and steps[i]
+    local s = State.steps and State.steps[i]
     if not s or s.t ~= "turnin" then return nil end
     local npcs = {}
     for _, q in ipairs(Ids(s)) do for _, n in ipairs((EST[q] or {}).en or {}) do npcs[n] = true end end
     local a = s.m and s.x and WP(s.m, s.x, s.y)
     local names, seen = {}, {}
     local j = NextApplicable(i)
-    while j <= #steps and #names < 4 do
-        local t = steps[j]
+    while j <= #State.steps and #names < 4 do
+        local t = State.steps[j]
         if t.t ~= "accept" then break end
         local same = false
         for _, q in ipairs(Ids(t)) do for _, n in ipairs((EST[q] or {}).g or {}) do if npcs[n] then same = true end end end
@@ -941,13 +946,13 @@ end
 
 -- plusieurs quetes a prendre au meme endroit : on les annonce ensemble
 function AcceptGroup(i)
-    local s = steps and steps[i]
+    local s = State.steps and State.steps[i]
     if not s or s.t ~= "accept" or not (s.m and s.x) then return nil end
     local a = WP(s.m, s.x, s.y); if not a then return nil end
     local names, seen = {}, {}
-    for j = i, math.min(#steps, i + LOOK) do
-        local t = steps[j]
-        if t.t == "accept" and (j == i or Actionable(j)) and t.m and t.x and Applies(t) and not doneCache[j] then
+    for j = i, math.min(#State.steps, i + LOOK) do
+        local t = State.steps[j]
+        if t.t == "accept" and (j == i or Actionable(j)) and t.m and t.x and Applies(t) and not State.doneCache[j] then
             local b = WP(t.m, t.x, t.y)
             if b and b[3] == a[3] and Dist(a[1], a[2], b[1], b[2]) < 30 then
                 for _, q in ipairs(Ids(t)) do

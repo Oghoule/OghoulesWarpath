@@ -7,6 +7,8 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
 
 -- Chaque target renvoie les morceaux de la grande fenetre a entourer (le trou = leur union).
 -- Une page dont rien n'est affiche est sautee. La visite se fait toujours en mode complet.
@@ -279,7 +281,7 @@ local TIPS = {
     { key = "arrow", head = "tipArrowHead", text = "tipArrow", target = function() return _G.WarpathArrow end },
     -- ciblage : seulement a une etape « Faire » (la ou la fenetre sert vraiment : les monstres a cibler)
     { key = "targets", head = "tipTgtHead", text = "tipTgt", target = function()
-        local st = steps and current and steps[current]
+        local st = State.steps and State.current and State.steps[State.current]
         if st and st.t == "do" then return _G.WarpathTargets end
     end },
     { key = "hearth", head = "tipHearthHead", text = "tipHearth", target = function()

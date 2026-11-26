@@ -7,6 +7,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local QMRenderPick, QMRenderTour, QMStart, QM_CITIES, QM_MAXLVL
 
 do
     QM_CITIES = { [1454] = "Orgrimmar", [1456] = "Thunder Bluff", [1458] = "Undercity" }
@@ -54,7 +58,7 @@ do
         local CT = ns.ClassTrainers or {}
         -- entraineur de classe
         local cl = {}
-        for _, e in ipairs(CT[myClass] or {}) do if e[1] == m then cl[#cl + 1] = { e[2], e[3], e[4] } end end
+        for _, e in ipairs(CT[State.myClass] or {}) do if e[1] == m then cl[#cl + 1] = { e[2], e[3], e[4] } end end
         local e = nearestIn(m, cl)
         if e then add("class", { key = "class", kind = "class", label = T("qmClass"), x = e[1], y = e[2], n = e[3],
                                  tag = DB.trainDue and T("qmNewSpells") or nil, hot = DB.trainDue and true, on = DB.trainDue and true or false }) end
@@ -131,7 +135,7 @@ do
         for _, it in ipairs(stops) do list[#list + 1] = { kind = it.kind, label = it.label, x = it.x, y = it.y, n = it.n } end
         DB.qm = { city = m, stops = list }
         if DB.wmSeen == nil then DB.wmSeen = true end
-        lastWP = nil
+        State.lastWP = nil
         Refresh(true)
     end
     function QMCurrent()
@@ -141,12 +145,12 @@ do
     end
     function QMQuit()
         if not (DB and DB.qm) then return end
-        DB.qm = nil; lastWP = nil
+        DB.qm = nil; State.lastWP = nil
         Refresh(true)
     end
     local function advanced()
         if not QMCurrent() then DB.qm = nil; say(T("qmDone"), true) end
-        lastWP = nil
+        State.lastWP = nil
         Refresh(true)
     end
     function QMSkip()
@@ -412,7 +416,7 @@ do
             -- sortie de la ville : la tournee s'arrete (le guide reprend)
             if (DB.qm or DB.qmPick) and C_Timer and C_Timer.After then
                 C_Timer.After(1, function()
-                    if not QMCity() then DB.qm = nil; DB.qmPick = nil; lastWP = nil; Refresh(true) end
+                    if not QMCity() then DB.qm = nil; DB.qmPick = nil; State.lastWP = nil; Refresh(true) end
                 end)
             end
             return

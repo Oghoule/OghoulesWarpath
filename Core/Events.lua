@@ -2,6 +2,8 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
 
 ------------------------------------------------------------------
 -- Evenements
@@ -58,7 +60,7 @@ function OnEvent(self, event, ...)
         end
         local _, c = UnitClass("player")
         local _, r = UnitRace("player")
-        myClass, myRace = c, r
+        State.myClass, State.myRace = c, r
         DB._class = c   -- pour etalonner le temps par monstre selon la classe (collecte.py)
         pcall(ResolveNewMaps)
         CreateUI()
@@ -83,7 +85,7 @@ function OnEvent(self, event, ...)
             say(T("noRace", tostring(r)))
             Refresh()
         else
-            say(T("login", Title(G), current, #steps))
+            say(T("login", Title(State.G), State.current, #State.steps))
             if not next(DB.fp) then say(T("fpHint")) end
         end
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -163,7 +165,7 @@ function OnEvent(self, event, ...)
     elseif event == "QUEST_TURNED_IN" then
         local id = ...
         if id then DB.done[id] = true end
-        peek = nil
+        State.peek = nil
         ScheduleAdvance()
     elseif event == "UI_INFO_MESSAGE" then
         -- "Nouveau trajet aerien decouvert" : on apprend le point de vol tout de suite
@@ -176,12 +178,12 @@ function OnEvent(self, event, ...)
     elseif event == "TAXIMAP_CLOSED" or event == "PLAYER_CONTROL_LOST" then
         if event == "TAXIMAP_CLOSED" then OnTaxiClosed() end
         -- decollage : la fleche passe tout de suite a la vraie destination (plus au maitre de vol)
-        local function retarget() lastWP = nil; Refresh(true) end
+        local function retarget() State.lastWP = nil; Refresh(true) end
         if C_Timer and C_Timer.After then C_Timer.After(0.5, retarget); C_Timer.After(2, retarget) else retarget() end
     elseif event == "PLAYER_CONTROL_GAINED" then
         if not (UnitOnTaxi and UnitOnTaxi("player")) then ns.Comfort.OnLanded() end
         -- fin d'un vol : on recalcule le trajet depuis l'endroit ou tu as atterri
-        lastWP = nil
+        State.lastWP = nil
         Refresh(true)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         -- entree dans l'instance du donjon suivi : le journal du donjon prend le relais
@@ -190,7 +192,7 @@ function OnEvent(self, event, ...)
         ScheduleAdvance()
         Refresh(true)
     else
-        if event == "QUEST_ACCEPTED" then peek = nil end
+        if event == "QUEST_ACCEPTED" then State.peek = nil end
         ScheduleAdvance()
     end
 end

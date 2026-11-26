@@ -6,6 +6,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local CheckWeaponMaster, PROF_NAMES
 
 do
     PROF_ORDER = { 164, 165, 197, 171, 202, 333, 182, 186, 393, 185, 129, 356 }
@@ -110,7 +114,7 @@ do
     local function mapOf(id) local e = EST[id]; return e and e.s and e.s[1] end
 
     function CheckProfQuests()
-        if not DB or DB.noProfAsk or DB.guide == "chain" or IS_DUNGEON[DB.guide] or asking or not StaticPopup_Show then return end
+        if not DB or DB.noProfAsk or DB.guide == "chain" or IS_DUNGEON[DB.guide] or State.asking or not StaticPopup_Show then return end
         if PopupVisible() or (StaticPopup_Visible and (StaticPopup_Visible("WARPATH_CHAIN") or StaticPopup_Visible("WARPATH_DUNGEON"))) then return end
         if UnitAffectingCombat and UnitAffectingCombat("player") then return end
         DB.pqAsked = DB.pqAsked or {}
@@ -139,7 +143,7 @@ do
     local CAPITAL = { [1637] = true, [1638] = true, [1497] = true }
     function CheckProfIntro()
         if not DB or DB.profIntro == "done" or not StaticPopup_Show then return end
-        if DB.guide == "chain" or IS_DUNGEON[DB.guide] or asking then return end
+        if DB.guide == "chain" or IS_DUNGEON[DB.guide] or State.asking then return end
         if PopupVisible() or (StaticPopup_Visible and (StaticPopup_Visible("WARPATH_CHAIN") or StaticPopup_Visible("WARPATH_DUNGEON"))) then return end
         if UnitAffectingCombat and UnitAffectingCombat("player") then return end
         local lvl = UnitLevel("player") or 1
@@ -200,14 +204,14 @@ do
     end
     -- nouveaux sorts : on dit ou est l'entraineur de classe le plus proche (repere sur la carte du monde)
     function TrainReminder()
-        if not (DB and DB.trainDue and myClass and DB.trainer ~= false) then return end
-        local e, d = NearestTrainer((ns.ClassTrainers or {})[myClass])
+        if not (DB and DB.trainDue and State.myClass and DB.trainer ~= false) then return end
+        local e, d = NearestTrainer((ns.ClassTrainers or {})[State.myClass])
         if e then say(T("trainNear", e[4], mname(e[1]), math.floor(d + 0.5))) end
     end
     -- premiere visite d'une capitale : competences d'armes
     local CAPS = { [1454] = true, [1456] = true, [1458] = true }
     function CheckWeaponMaster()
-        if not DB or DB.wmSeen or asking or PopupVisible() then return end
+        if not DB or DB.wmSeen or State.asking or PopupVisible() then return end
         local here = PlayerPos and select(1, PlayerPos())
         if not (here and CAPS[here]) then return end
         -- v1.41 : plus de question pour le maitre d'armes, l'Intendance s'en charge : une seule ligne dans le chat
@@ -312,9 +316,9 @@ do
         end
         -- entraineurs de ta classe quand de nouveaux sorts t'attendent, et maitres d'armes
         local CT = ns.ClassTrainers or {}
-        if DB.trainDue and myClass then
-            for _, e in ipairs(CT[myClass] or {}) do
-                if e[1] == mapId then place({ m = e[1], x = e[2], y = e[3], n = e[4], label = T("classTrainer") }, "Interface\\Icons\\ClassIcon_" .. myClass:sub(1, 1) .. myClass:sub(2):lower()) end
+        if DB.trainDue and State.myClass then
+            for _, e in ipairs(CT[State.myClass] or {}) do
+                if e[1] == mapId then place({ m = e[1], x = e[2], y = e[3], n = e[4], label = T("classTrainer") }, "Interface\\Icons\\ClassIcon_" .. State.myClass:sub(1, 1) .. State.myClass:sub(2):lower()) end
             end
         end
         for _, e in ipairs(CT.WEAPON or {}) do

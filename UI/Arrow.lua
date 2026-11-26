@@ -2,6 +2,8 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
 
 -- La fleche tourne vers la prochaine position du trajet (distTarget) a partir de ta position et de ton
 -- orientation. Hors instance seulement : en donjon et en raid, le jeu ne donne plus ces informations.
@@ -96,7 +98,7 @@ do
                 { "arrowMenuOpts", function() if ns.UI and ns.UI.OpenOptionsTab then ns.UI.OpenOptionsTab(6) end end },
                 { "arrowReset", function() if ns.Arrow then ns.Arrow.Reset() end end },
                 { "arrowMenuHide", function()
-                    DB.ownArrow = false; lastWP = nil; Refresh(true)
+                    DB.ownArrow = false; State.lastWP = nil; Refresh(true)
                     say(T("arrowHidden"))
                 end },
             }

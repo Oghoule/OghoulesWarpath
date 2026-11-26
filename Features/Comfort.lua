@@ -2,6 +2,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local ALL_NEEDED
 
 ------------------------------------------------------------------
 -- Confort : quetes automatiques, duree des vols, suivi du leveling, rappel d'entraineur,
@@ -13,12 +17,12 @@ local function AutoOK(key) return DB and DB[key] ~= false and not (IsShiftKeyDow
 -- quetes que le guide veut prendre bientot / rendre
 local function GuideQuests()
     local acc, turn = {}, {}
-    if not steps then return acc, turn end
-    local from = current or 1
-    for i = 1, #steps do
-        local s = steps[i]
+    if not State.steps then return acc, turn end
+    local from = State.current or 1
+    for i = 1, #State.steps do
+        local s = State.steps[i]
         local ids = type(s.id) == "table" and s.id or { s.id }
-        if s.t == "accept" and i >= from and i <= from + 12 and doneCache[i] ~= "done" and doneCache[i] ~= "skip" then
+        if s.t == "accept" and i >= from and i <= from + 12 and State.doneCache[i] ~= "done" and State.doneCache[i] ~= "skip" then
             for _, id in ipairs(ids) do if id then acc[id] = true end end
         elseif s.t == "turnin" then
             for _, id in ipairs(ids) do if id and logById[id] == true then turn[id] = true end end
@@ -118,8 +122,8 @@ end
 -- bouton de l'objet a utiliser pour l'etape (seulement les objets avec un effet "Utiliser")
 local itemBtn, itemWanted
 local function StepItem()
-    if not steps or not current or not steps[current] then return nil end
-    local s = steps[current]
+    if not State.steps or not State.current or not State.steps[State.current] then return nil end
+    local s = State.steps[State.current]
     for _, id in ipairs(Ids(s)) do
         local e = EST[id]
         for _, it in ipairs(e and e.u or {}) do
@@ -216,7 +220,7 @@ ns.Comfort = { OnQuestFrame = OnQuestFrame, TrackXP = TrackXP, UpdateInfo = Upda
     SetTaxiFrom = function(k) taxiFrom = k end, LevelInfo = LevelInfo, UpdateItemButton = UpdateItemButton,
     -- pour /warpath diag : objet de l'etape, nombre en sac, sort, bouton affiche
     ItemDiag = function()
-        local s = steps and steps[current]
+        local s = State.steps and State.steps[State.current]
         local it
         for _, id in ipairs(s and Ids(s) or {}) do local e = EST[id]; if e and e.u then it = e.u[1]; break end end
         if not it then return "-" end
@@ -257,9 +261,9 @@ end
 -- donnees par guide : quetes qui debloquent la suite, detours
 styleCache = nil
 local function GuideData()
-    if styleCache and styleCache.G == G then return styleCache end
+    if styleCache and styleCache.G == State.G then return styleCache end
     local needed, pos, byQ = {}, {}, {}
-    for i, s in ipairs(steps or {}) do
+    for i, s in ipairs(State.steps or {}) do
         local ids = Ids(s)
         for _, id in ipairs(ids) do
             local e = EST[id]
@@ -289,7 +293,7 @@ local function GuideData()
         end
     end
     for p in pairs(ALL_NEEDED) do needed[p] = true end
-    styleCache = { G = G, needed = needed, pos = pos, byQ = byQ, detour = {}, rate = {} }
+    styleCache = { G = State.G, needed = needed, pos = pos, byQ = byQ, detour = {}, rate = {} }
     return styleCache
 end
 
@@ -330,7 +334,7 @@ end
 
 -- v1.49 : la quete en debloque une autre (dans ce guide ou un guide suivant) : jamais mise de cote
 function QuestUnlocks(id)
-    if not (DB and steps and id) then return false end
+    if not (DB and State.steps and id) then return false end
     local ok, gd = pcall(GuideData)
     return ok and gd and gd.needed[id] and true or false
 end
@@ -338,7 +342,7 @@ end
 local function InGroup() return (IsInGroup and IsInGroup()) or ((GetNumGroupMembers and GetNumGroupMembers() or 0) > 0) end
 
 function StyleSkip(i, s)
-    if not DB or not steps or IS_DUNGEON[DB.guide] or DB.guide == "chain" or s.t ~= "accept" then return false end
+    if not DB or not State.steps or IS_DUNGEON[DB.guide] or DB.guide == "chain" or s.t ~= "accept" then return false end
     local st = StyleGet()
     local gd = GuideData()
     local ids = Ids(s)
@@ -358,13 +362,13 @@ end
 
 -- Etape "Monte au niveau X" : proposer le donjon de ton niveau (une fois par etape)
 function SuggestDungeonForLevel()
-    if not DB or not steps or IS_DUNGEON[DB.guide] or DB.guide == "chain" or asking or not StaticPopup_Show then return end
+    if not DB or not State.steps or IS_DUNGEON[DB.guide] or DB.guide == "chain" or State.asking or not StaticPopup_Show then return end
     local st = StyleGet()
     if st.xpMode ~= "dungeon" and st.xpMode ~= "both" then return end
-    local s = steps[current]
+    local s = State.steps[State.current]
     if not s or s.t ~= "level" or (UnitLevel("player") or 0) >= (s.level or 0) then return end
     DB.lvlAsked = DB.lvlAsked or {}
-    local key = SeenKey(current)
+    local key = SeenKey(State.current)
     if DB.lvlAsked[key] then return end
     local lvl = UnitLevel("player") or 1
     local best
@@ -375,6 +379,6 @@ function SuggestDungeonForLevel()
     end
     if not best then return end
     DB.lvlAsked[key] = true
-    asking = best
+    State.asking = best
     ns.Trace("popup WARPATH_DUNGEON"); Popup("WARPATH_DUNGEON", T("dAskXP", s.level, DungeonName(best), best.min, best.max) .. ((DungeonAskLine and DungeonAskLine(best.key)) or DungeonReqText(best.key)))
 end

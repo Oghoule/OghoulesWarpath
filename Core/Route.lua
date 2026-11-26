@@ -2,6 +2,11 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local BlizzArrowShown, CONT_FALLBACK, CanFly, EK, FLY_FACTOR, FLY_OVERHEAD, GateNodes, KALIMDOR, RIDE, UNKNOWN
+local WIND, gateKey, gateNodes, lastSample, walkCache
 
 ------------------------------------------------------------------
 -- Waypoints (natif si possible, TomTom si installe)
@@ -28,8 +33,8 @@ function ClearWaypoint()
     desiredWP = nil
     if InFight() then nativePending = true
     elseif C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
-    if tomtomWP and TomTom and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, tomtomWP) end
-    tomtomWP = nil
+    if State.tomtomWP and TomTom and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, State.tomtomWP) end
+    State.tomtomWP = nil
 end
 
 -- Avec la fleche Warpath, on garde le repere du jeu (point jaune, icone sur la minicarte), mais on
@@ -87,7 +92,7 @@ function SetWaypoint(s)
     if TomTom and TomTom.AddWaypoint then
         pcall(function()
             -- cleardistance = 0 : TomTom ne supprime pas la fleche quand on arrive
-            tomtomWP = TomTom:AddWaypoint(mapID, s.x / 100, s.y / 100,
+            State.tomtomWP = TomTom:AddWaypoint(mapID, s.x / 100, s.y / 100,
                 { title = desiredWP.title, persistent = false, minimap = true, world = true, cleardistance = 0, crazy = (DB.ownArrow == false) })
         end)
     end
@@ -376,7 +381,7 @@ function LearnFlightHere()
                     if w and bw and w[3] == bw[3] then links[best.key] = true end
                 end
             end
-            lastWP = nil
+            State.lastWP = nil
             ScheduleAdvance()
         end
     end
@@ -442,16 +447,16 @@ optCache = { key = nil, seq = nil }
 band = bit and bit.band
 
 OptimizeFn = function()
-    local n = #steps
+    local n = #State.steps
     local entrance
-    for i = 1, n do if steps[i].t == "go" then entrance = i; break end end
+    for i = 1, n do if State.steps[i].t == "go" then entrance = i; break end end
     if not entrance then return nil end
     -- une prise bloquee par un prerequis encore dans ton journal (ex. Hamuul Runetotem tant qu'Altered Beings
     -- n'est pas rendue) reste dans le calcul : on y passe par le detour (finir / rendre le prerequis), puis on la prend.
     -- Seulement si le detour n'a pas de position : elle passe a la fin, avec tout ce qui en depend.
     local later, via, detKey = {}, {}, {}
     for i = 1, entrance - 1 do
-        local s = steps[i]
+        local s = State.steps[i]
         local det = PrereqDetour and PrereqDetour(s)
         if det then
             local w = det.m and WP(det.m, det.x, det.y)
@@ -463,13 +468,13 @@ OptimizeFn = function()
     -- calcul : elle passe apres le ramassage, juste avant d'entrer.
     local P, tail = {}, {}
     for i = 1, entrance - 1 do
-        local st = steps[i]
-        if Applies(st) and not doneCache[i] and st.t ~= "note" and not later[i] then
+        local st = State.steps[i]
+        if Applies(st) and not State.doneCache[i] and st.t ~= "note" and not later[i] then
             if st.m and st.x and WP(st.m, st.x, st.y) then P[#P + 1] = i else tail[#tail + 1] = i end
         end
     end
     for i = 1, entrance - 1 do
-        if later[i] and Applies(steps[i]) and not doneCache[i] and steps[i].t ~= "note" then tail[#tail + 1] = i end
+        if later[i] and Applies(State.steps[i]) and not State.doneCache[i] and State.steps[i].t ~= "note" then tail[#tail + 1] = i end
     end
     if #P == 0 then return tail[1] and tail or nil end
     local greedy = #P > 12      -- trop d'etapes pour le calcul exact : plus proche voisin (respecte les chaines)
@@ -481,13 +486,13 @@ OptimizeFn = function()
     if optCache.key == key then return optCache.seq end
     local pos, slot = {}, {}
     for k, i in ipairs(P) do
-        local st = steps[i]
+        local st = State.steps[i]
         if not (st.m and st.x) then return nil end
         pos[k] = WP(st.m, st.x, st.y)
         if not pos[k] then return nil end
         slot[i] = k
     end
-    local endPos = steps[entrance].m and WP(steps[entrance].m, steps[entrance].x, steps[entrance].y)
+    local endPos = State.steps[entrance].m and WP(State.steps[entrance].m, State.steps[entrance].x, State.steps[entrance].y)
     -- masques de dependances (limites aux etapes en attente)
     local need = {}
     for k, i in ipairs(P) do
@@ -611,7 +616,7 @@ function PrereqDetour(s)
             local done = logById[p] == true
             local want = done and "turnin" or "do"
             local m, x, y
-            for _, t in ipairs(steps) do
+            for _, t in ipairs(State.steps) do
                 if t.t == want and t.m and t.x then
                     for _, id in ipairs(Ids(t)) do if id == p then m, x, y = t.m, t.x, t.y; break end end
                 end

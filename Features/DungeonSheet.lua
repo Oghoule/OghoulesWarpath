@@ -6,6 +6,8 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
 
 -- XP pour passer au niveau suivant (1 a 59), comme le jeu classique
 local XPL = { 400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600, 8800, 10100, 11400, 12900, 14400, 16000,
@@ -293,7 +295,7 @@ local function makeSheet()
         if not key then return end
         -- la question « Faire ce donjon ? » est ouverte : on y repond Oui (sinon sa fermeture dirait « Plus tard »)
         local dlg = _G.WarpathDialog
-        if asking and asking.key == key and dlg and dlg:IsShown() and dlg.button1 then dlg.button1:Click()
+        if State.asking and State.asking.key == key and dlg and dlg:IsShown() and dlg.button1 then dlg.button1:Click()
         else StartDungeon(key) end
     end)
     Border(sheet.go, COL.accent)

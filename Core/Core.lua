@@ -15,14 +15,21 @@
 --   5. Notes, etapes optionnelles et "Niveau" : passees avec OK, ou des que la suite est faite.
 -- L'etape affichee = la premiere etape qui n'est pas faite selon ces regles.
 local ADDON, ns = ...
+-- v1.50 : etat partage du guide (etape courante, etapes, apercu, cible de la fleche...).
+-- Les fichiers le lisent par State.x ; ns.CoreEnv redirige encore les anciens noms (tests).
+ns.State = ns.State or {}
+local State = ns.State
 -- Environnement prive partage par tous les fichiers du moteur (Core, Route, Estimate, Skin, Flow, Window,
 -- Comfort, Commands, Events) : leurs variables communes y vivent, les vraies globales du jeu restent dans _G.
 local DECL = {}
-for n in ("LegPoint heldNear heldPrev HOLD_R NearNpc QuestUnlocks ChainSteps WeaveSteps WovenReport Weave Unweave WovenCleanup ALL_NEEDED PerfOn PerfStart PerfMark PerfMem advicePos RetargetLight lightCtx TrailTick TrailPoint TrailCmd TrailBreak FarmSpot FmtDur PassageKey PassageFor PassageCmd FollowUpAccepts HearthButton MobZonePoint CaveDiag MapBar MAPBAR ChipScale InlineIcon STEP_TINT SetObjRows FIXED_H DiamondCheck Border SectionHead Chip STEP_ICON SetHeader SplitPlace HEAD_H OpenStepQuest ListBlock AcceptGroup LiveObjectives TraitTrees OnTheWay TrainDetour BackToNow MySpec ForgetCave DeathTip IsCaveStep CaveTrack StepPoint StepPointKey DungeonDoorPoint DungeonName DungeonQuests DungeonBadge DungeonAskLine DungeonSheetOpen DungeonSheetDefault DungeonSheetHide BugWindow NearestTrainer TrainReminder CheckWeaponMaster TurninGroup baseCurrent nearKind Actionable NearPick NearTick LevelWaitLines HubNotes ThenLine InDgInstance DungeonKeyForInstance OnInstanceChange DungeonInstanceMatches DungeonLore DL DungeonLogActive DungeonLogList DungeonLogHide DungeonLogRender Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow ChronPreview autoGoBusy CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER PROF_NAMES ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText DungeonIdeal ShowNews Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos HearthCD Advice currentAdvice PrereqDetour BlizzArrowShown RefreshInner ShowWelcome ShowTutorial StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache chainAskSelf ClassQuestList CheckClassQuests ACCENTS Advance AllDone AnalyzeChains Applies AskChain AutoPick BASE_KILL BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL CONT_FALLBACK CanFly Caps ChainFor CheckDungeons CheckDungeonsFn ClearWaypoint Compute Continent CreateUI D DB DISPLAY DOT DROP_PRIOR DROP_WEIGHT DUNGEONS Diamond Dist Divider DropRate EK EST Estimate FLIGHTS FLY_FACTOR FLY_OVERHEAD FONT FS FindAnchor FlatButton FormatNum G GATES GateNodes GreenRange Guides HasBit HasEvidence ICON INNER IS_DUNGEON IS_DUNGEON_SET Ids Ignore IsGrey KALIMDOR KILL_WORD KillTime KnownFlights LANG Lang Layout LearnGates ListDungeons ListGuides ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable NodeKeyFor OBJ_SECS OnEvent OnTaxiClosed OnTaxiOpened OnXPGain LearnFlightHere SetErrand ClearErrand ErrandPoint CityGatePoint UpdateMini ToggleMini ShowGuide MINI_W MINI_PAD QM_CITIES QM_MAXLVL QMCity QMCandidates QMStart QMCurrent QMQuit QMSkip QMPoint QMRenderPick QMOpen QMClosePick QMGo QMRenderTour QMPanelState QMShowPanel CheckQuartermaster DG_LEFT_DIST CheckDungeonLeft HearthPlace adviceArgs adviceT CityCaveFor CityCavePoint POPUP_HEAD MIN_H inCommand Toast FadeIn FadeOut Shine GoldFrame SKIP_ICON SetSkip HeadButton Glyph ScaleGrip OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestState QuestTitle QuestXP RACEBIT RIDE RUN Refresh Rendue ResolveNewMaps SPEC ScanLog ScheduleAdvance SeenKey SetChain SetGuide SetRoute SetUpcoming SetWaypoint Short Spaced StartChain StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UNKNOWN UpdateDistance Upper VERSION W WIND WP Walk WarpathName WorldPos ZeroDiff ZoneOf asking band blockedBy chainAskQ chainOf computingOther current depsOf desiredWP distElapsed distTarget doneCache dynOrder errShown ev f flightPlan focus gateKey gateNodes lastKill lastSample lastWP logById myClass myRace optCache peek pending pendingAccept say steps taxiGlow tomtomWP walkCache wpCache wpElapsed wpTicker"):gmatch("%S+") do DECL[n] = true end
+for n in ("LegPoint heldNear NearNpc QuestUnlocks ChainSteps WeaveSteps Weave Unweave PerfOn PerfStart PerfMark PerfMem RetargetLight TrailTick TrailPoint TrailCmd PassageFor PassageCmd FollowUpAccepts HearthButton CaveDiag MapBar ChipScale DiamondCheck Border SectionHead Chip HEAD_H OpenStepQuest ListBlock AcceptGroup LiveObjectives TraitTrees OnTheWay TrainDetour BackToNow MySpec ForgetCave DeathTip IsCaveStep CaveTrack StepPoint DungeonName DungeonQuests DungeonBadge DungeonAskLine DungeonSheetOpen DungeonSheetDefault DungeonSheetHide BugWindow NearestTrainer TrainReminder TurninGroup nearKind NearPick NearTick LevelWaitLines HubNotes ThenLine InDgInstance OnInstanceChange DungeonInstanceMatches DL DungeonLogActive DungeonLogList Restorable Restore ChronAdd ChronDungeon ChronTick ChronShow ChronPreview CheckZoneLevel GuideStatus ProfName TrainerPinsRefresh PROF_KEY CheckProfIntro PROF_ORDER ProfDetect ProfOn ProfSet ProfQuestList CheckProfQuests DungeonOpen DungeonReq DungeonReqText DungeonIdeal Tip Popup PopupVisible HEX PvPReport JournalReport DungeonLeft DungeonDone HearthPos Advice currentAdvice PrereqDetour RefreshInner ShowWelcome ShowTutorial StyleSkip StyleGet SuggestDungeonForLevel ApplyPreset styleCache ClassQuestList CheckClassQuests Advance AllDone AnalyzeChains Applies AskChain AutoPick BestFlight BuildChainGuide CHAIN CHECK CLASSBIT COL Caps ChainFor CheckDungeons ClearWaypoint Compute Continent CreateUI D DB DISPLAY DUNGEONS Diamond Dist Divider DropRate EST Estimate FLIGHTS FONT FS FindAnchor FlatButton FormatNum GATES GreenRange Guides HasBit ICON INNER IS_DUNGEON Ids Ignore IsGrey KillTime KnownFlights Lang Layout LearnGates ListDungeons ListHas LockCandidates MAIN_ORDER MAPNAME MAXLVL MINLVL MobXP MyChain NextApplicable OnEvent OnTaxiClosed OnTaxiOpened OnXPGain LearnFlightHere SetErrand ClearErrand UpdateMini ToggleMini ShowGuide QMCity QMCandidates QMCurrent QMQuit QMSkip QMPoint QMOpen QMClosePick QMGo QMPanelState QMShowPanel CheckQuartermaster CheckDungeonLeft HearthPlace CityCavePoint POPUP_HEAD Toast FadeIn FadeOut Shine GoldFrame HeadButton Glyph ScaleGrip OptimizeFn PAD PCOL PREFIX Peek PlaceNative PlayerPos PlayerWP QAvailable QName QuestTitle QuestXP RACEBIT RUN Refresh Rendue ResolveNewMaps ScanLog ScheduleAdvance SeenKey SetGuide SetWaypoint Short Spaced StartDungeon StepDone StepText StopDungeon T TRANSPORTS Tex Title TitledRule TransportFor TravelCost UpdateDistance Upper VERSION W WP Walk WarpathName WorldPos ZoneOf band blockedBy chainOf depsOf desiredWP distTarget dynOrder errShown ev f lastKill logById optCache say wpCache"):gmatch("%S+") do DECL[n] = true end
+-- v1.50 : anciens noms de l'etat, rediriges vers State (outils de test, oubli eventuel) ; jamais stockes dans env
+local STATE = {}
+for n in ("tomtomWP lastWP baseCurrent current focus flightPlan pending G steps peek doneCache pendingAccept computingOther asking inCommand myClass myRace"):gmatch("%S+") do STATE[n] = true end
 local assigned = {}
 local env = setmetatable({}, {
-    __index = function(_, k) if DECL[k] and assigned[k] then return nil end return _G[k] end,
-    __newindex = function(t, k, v) if DECL[k] then assigned[k] = true; rawset(t, k, v) else _G[k] = v end end,
+    __index = function(_, k) if STATE[k] then return State[k] end if DECL[k] and assigned[k] then return nil end return _G[k] end,
+    __newindex = function(t, k, v) if STATE[k] then State[k] = v elseif DECL[k] then assigned[k] = true; rawset(t, k, v) else _G[k] = v end end,
 })
 ns.CoreEnv = env
 -- Trace temporaire : affiche (une fois) chaque appel sensible juste avant de le faire
@@ -98,21 +105,23 @@ ns.MapAPI = {
 }
 local _ENV = env
 if setfenv then setfenv(1, env) end
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local DOT, HOLD_R, IS_DUNGEON_SET, LANG, QuestState, heldPrev
 Guides = ns.Guides or {}
 
 DB = nil -- WarpathCharDB (par personnage)
 f = nil -- fenetre principale
-G, steps = nil, nil -- guide actif et ses etapes
-myClass, myRace = nil, nil
-current = 1             -- etape calculee
-peek = nil -- etape regardee avec < > (apercu), nil sinon
-focus = nil -- etape choisie en cliquant (liste "A suivre" ou debut de chaine)
+State.G, State.steps = nil, nil -- guide actif et ses etapes
+State.myClass, State.myRace = nil, nil
+State.current = 1             -- etape calculee
+State.peek = nil -- etape regardee avec < > (apercu), nil sinon
+State.focus = nil -- etape choisie en cliquant (liste "A suivre" ou debut de chaine)
 dynOrder = nil -- ordre optimise des etapes de ramassage (donjons), ou nil
 chainOf = {}            -- index d'etape -> { name, pos, len, first = index de la 1re etape }
 OptimizeFn = nil -- defini plus bas (besoin des fonctions de carte)
-flightPlan = nil -- vol conseille en ce moment ({ from, to }) pour surligner la destination
-lastWP, tomtomWP = nil, nil
-pending = false
+State.flightPlan = nil -- vol conseille en ce moment ({ from, to }) pour surligner la destination
+State.lastWP, State.tomtomWP = nil, nil
+State.pending = false
 
 D = ns.Data
 CHAIN, MAXLVL, DUNGEONS, IS_DUNGEON = D.CHAIN, D.MAXLVL, D.DUNGEONS, D.IS_DUNGEON
@@ -177,10 +186,10 @@ function Title(g) return (Lang() == "en" and g.title_en) or g.title end
 -- v1.41 (audit) : DB.chatLevel = "all" (defaut) / "important" / "none".
 --   important = "error" : toujours affiche (erreurs, utiles aux signalements) ; true : message important ;
 --   rien : simple information. Les reponses aux commandes /warpath s'affichent toujours (inCommand).
-inCommand = false
+State.inCommand = false
 function say(msg, important)
     local lvl = DB and DB.chatLevel or "all"
-    if important ~= "error" and not inCommand and lvl ~= "all" then
+    if important ~= "error" and not State.inCommand and lvl ~= "all" then
         if lvl == "none" or not important then return end
     end
     print("|TInterface\\AddOns\\OghoulesWarpath\\Media\\Gem:12:12:0:0|t |cffcdbb8eWarpath|r : " .. tostring(msg))
@@ -255,7 +264,7 @@ function ListHas(list, value)
 end
 
 function Applies(s)
-    return s and ListHas(s.class, myClass) and ListHas(s.race, myRace)
+    return s and ListHas(s.class, State.myClass) and ListHas(s.race, State.myRace)
 end
 
 -- Cle d'une etape INDEPENDANTE de sa position dans le guide : type + quetes (ou empreinte du texte) + rang parmi
@@ -272,7 +281,7 @@ do
         return (s.t or "?") .. ":" .. ids .. ":" .. tostring(s.level or "") .. ":" .. (s.id and "" or tostring(hash(s.text or "")))
     end
     function SeenKey(i)
-        local list = steps
+        local list = State.steps
         if not (DB and DB.guide and list and list[i]) then return (DB and DB.guide or "?") .. ":" .. tostring(i) end
         local c = sigCache[list]
         if not c then
@@ -326,15 +335,15 @@ end
 
 -- Renvoie "done" (faite), "skip" (sautee) ou false (a faire) pour l'etape i.
 -- pendingAccept[id] = true si l'etape "Accepter" de cette quete est encore a faire.
-pendingAccept = {}
-computingOther = false  -- vrai pendant qu'on evalue un AUTRE guide (options, choix auto)
+State.pendingAccept = {}
+State.computingOther = false  -- vrai pendant qu'on evalue un AUTRE guide (options, choix auto)
 blockedBy = {}          -- index d'etape -> quetes prerequises manquantes (etape sautee pour ca)
 -- v1.49 : prises laissees derriere toi (voir StepDone) : index -> true si tu es pres de leur PNJ.
 -- NearTick refait le calcul quand tu t'en approches ou t'en eloignes.
 heldNear, heldPrev = {}, {}
 HOLD_R = 80             -- metres : meme camp (comme HUB_R dans Near.lua)
 function NearNpc(s, wasNear)
-    if computingOther or not (s and s.m and s.x and PlayerWP and WP) then return false end
+    if State.computingOther or not (s and s.m and s.x and PlayerWP and WP) then return false end
     local me = PlayerWP(); if not me then return false end
     local g = WP(s.m, s.x, s.y)
     if not (g and g[3] == me[3]) then return false end
@@ -349,7 +358,7 @@ local function SameCamp(a, b)
 end
 
 function StepDone(i, anchor)
-    local s = steps[i]
+    local s = State.steps[i]
     if s.t == "accept" or s.t == "do" or s.t == "turnin" then
         local st = QuestState(s)
         if st == "done" then return "done" end
@@ -357,7 +366,7 @@ function StepDone(i, anchor)
         -- st == "absent" : au moins une quete ni prise ni rendue
         if s.t ~= "accept" then
             for _, id in ipairs(Ids(s)) do
-                if pendingAccept[id] and not Rendue(id) and not DB.ignored[id] and logById[id] == nil then
+                if State.pendingAccept[id] and not Rendue(id) and not DB.ignored[id] and logById[id] == nil then
                     return false                         -- sa prise est encore devant toi
                 end
             end
@@ -375,9 +384,9 @@ function StepDone(i, anchor)
         local passed = (i < anchor and not s.woven) or waitLvl
         local near = false
         if passed and not s.optional and not IS_DUNGEON[DB.guide] and DB.guide ~= "chain"   -- optionnelle : comme avant
-            and (waitLvl or SameCamp(s, steps[anchor])) then   -- avant l'ancre : seulement le camp de l'ancre
+            and (waitLvl or SameCamp(s, State.steps[anchor])) then   -- avant l'ancre : seulement le camp de l'ancre
             near = NearNpc(s, heldPrev[i])
-            if not computingOther then heldNear[i] = near end
+            if not State.computingOther then heldNear[i] = near end
         end
         local skip = (passed and not near) or (IsGrey(s) and not chainLike) or (s.optional and DB.seen[SeenKey(i)])
             or not lvlOk -- niveau requis pas atteint : impossible a prendre
@@ -400,11 +409,11 @@ function StepDone(i, anchor)
             if #blockers > 0 then
                 local waiting = false
                 for _, p in ipairs(blockers) do
-                    if logById[p] ~= nil or pendingAccept[p] then waiting = true end
+                    if logById[p] ~= nil or State.pendingAccept[p] then waiting = true end
                 end
                 if not waiting then
                     skip = true
-                    if not computingOther then blockedBy[i] = blockers end
+                    if not State.computingOther then blockedBy[i] = blockers end
                 end
             end
             -- dans un donjon, une quete dont le niveau requis est trop haut est sautee
@@ -412,7 +421,7 @@ function StepDone(i, anchor)
         end
         for _, id in ipairs(Ids(s)) do
             if logById[id] == nil and not Rendue(id) and not DB.ignored[id] then
-                pendingAccept[id] = not skip
+                State.pendingAccept[id] = not skip
             end
         end
         return skip and "skip" or false
@@ -433,7 +442,7 @@ end
 -- ou une livraison faite en avance (isolee loin devant) ne fait donc pas tout sauter.
 function FindAnchor()
     local total, done, anchor = 0, 0, 0
-    for i, s in ipairs(steps) do
+    for i, s in ipairs(State.steps) do
         -- v1.47 : les « Rendre » d'une chaine integree ne comptent pas (rendue tot, elle ferait tout sauter)
         if s.t == "turnin" and Applies(s) and not s.woven then
             total = total + 1
@@ -451,28 +460,28 @@ function FindAnchor()
 end
 
 function NextApplicable(i)
-    local n = #steps
+    local n = #State.steps
     i = i + 1
-    while i <= n and not Applies(steps[i]) do i = i + 1 end
+    while i <= n and not Applies(State.steps[i]) do i = i + 1 end
     return i
 end
 
-doneCache = {}
+State.doneCache = {}
 
 -- Dependances et chaines de quetes (calculees une fois par guide)
 depsOf = {}             -- index -> liste d'index d'etapes qui doivent etre faites avant
 
 function AnalyzeChains()
     wipe(chainOf); wipe(depsOf)
-    if not steps then return end
-    local n = #steps
+    if not State.steps then return end
+    local n = #State.steps
     -- union-find sur les QUETES, liees seulement par leurs prerequis
     local parent = {}
     local function find(x) while parent[x] ~= x do parent[x] = parent[parent[x]]; x = parent[x] end return x end
     local function union(a, b) a, b = find(a), find(b); if a ~= b then parent[b] = a end end
     local stepsOfQuest = {}
     for i = 1, n do
-        local st = steps[i]
+        local st = State.steps[i]
         if st.id then
             for _, id in ipairs(Ids(st)) do
                 parent[id] = parent[id] or id
@@ -486,7 +495,7 @@ function AnalyzeChains()
         table.insert(depsOf[j], i)
     end
     for j = 1, n do
-        local st = steps[j]
+        local st = State.steps[j]
         depsOf[j] = {}
         if st.id then
             for _, id in ipairs(Ids(st)) do
@@ -501,7 +510,7 @@ function AnalyzeChains()
                 for _, q in ipairs(pre) do
                     if stepsOfQuest[q] then
                         for _, i in ipairs(stepsOfQuest[q]) do
-                            if i < j and steps[i].t == "turnin" then addDep(j, i) end
+                            if i < j and State.steps[i].t == "turnin" then addDep(j, i) end
                         end
                         if not st.class then for _, id in ipairs(Ids(st)) do union(q, id) end end
                     end
@@ -522,7 +531,7 @@ function AnalyzeChains()
     end
     local groups = {}
     for i = 1, n do
-        local st = steps[i]
+        local st = State.steps[i]
         if st.id then
             for _, id in ipairs(Ids(st)) do
                 local r = chainRoot[id]
@@ -540,7 +549,7 @@ function AnalyzeChains()
         local name = "?"
         local li = stepsOfQuest[g.lastQ]
         if li then
-            local st = steps[li[#li]]
+            local st = State.steps[li[#li]]
             for k, id in ipairs(Ids(st)) do
                 if id == g.lastQ then
                     local parts = {}
@@ -557,71 +566,71 @@ end
 
 function Compute()
     ScanLog()
-    wipe(doneCache)
-    wipe(pendingAccept)
-    if not computingOther then wipe(blockedBy) end
-    local n = #steps
+    wipe(State.doneCache)
+    wipe(State.pendingAccept)
+    if not State.computingOther then wipe(blockedBy) end
+    local n = #State.steps
     local anchor = FindAnchor()
-    if not computingOther then heldPrev, heldNear = heldNear, {} end
+    if not State.computingOther then heldPrev, heldNear = heldNear, {} end
     for i = 1, n do
-        if Applies(steps[i]) then doneCache[i] = StepDone(i, anchor) else doneCache[i] = "skip" end
+        if Applies(State.steps[i]) then State.doneCache[i] = StepDone(i, anchor) else State.doneCache[i] = "skip" end
     end
     -- sortie du donjon choisie : les objectifs restants du donjon sont laisses de cote (pas ignores), on va rendre
     if IS_DUNGEON[DB.guide] and DB.dgOut and DB.dgOut[DB.guide] then
         local after = false
         for i = 1, n do
-            if steps[i].t == "go" then after = true
-            elseif after and steps[i].t == "do" and not doneCache[i] then doneCache[i] = "skip"
+            if State.steps[i].t == "go" then after = true
+            elseif after and State.steps[i].t == "do" and not State.doneCache[i] then State.doneCache[i] = "skip"
             -- quete a prendre ou a rendre a un PNJ de l'interieur (etape sans coordonnees) : impossible dehors
-            elseif after and (steps[i].t == "accept" or steps[i].t == "turnin") and not steps[i].m and not doneCache[i] then
-                doneCache[i] = "skip"
-            elseif after and steps[i].t == "turnin" and not doneCache[i] then
+            elseif after and (State.steps[i].t == "accept" or State.steps[i].t == "turnin") and not State.steps[i].m and not State.doneCache[i] then
+                State.doneCache[i] = "skip"
+            elseif after and State.steps[i].t == "turnin" and not State.doneCache[i] then
                 -- quete pas finie : impossible a rendre, on ne t'envoie pas au PNJ pour rien
                 local ready = false
-                for _, id in ipairs(Ids(steps[i])) do if logById[id] == true then ready = true end end
-                if not ready then doneCache[i] = "skip" end
+                for _, id in ipairs(Ids(State.steps[i])) do if logById[id] == true then ready = true end end
+                if not ready then State.doneCache[i] = "skip" end
             end
         end
     end
     -- regle 5 : une note / optionnelle / niveau saute si l'etape suivante est deja faite
     for i = n, 1, -1 do
-        local s = steps[i]
-        if not doneCache[i] and (s.t == "note" or s.t == "go" or s.t == "level" or s.optional)
+        local s = State.steps[i]
+        if not State.doneCache[i] and (s.t == "note" or s.t == "go" or s.t == "level" or s.optional)
             and not (s.t == "go" and IS_DUNGEON[DB.guide]) then
             local j = NextApplicable(i)
             -- prise/remise facultative : les prises voisines peuvent etre faites dans un autre ordre (PNJ le plus
             -- proche d'abord), donc on regarde la prochaine etape qui n'est ni une prise ni une remise
             if s.optional and (s.t == "accept" or s.t == "turnin") then
-                while j <= n and (steps[j].t == "accept" or steps[j].t == "turnin") do j = NextApplicable(j) end
+                while j <= n and (State.steps[j].t == "accept" or State.steps[j].t == "turnin") do j = NextApplicable(j) end
             end
-            if j <= n and doneCache[j] then doneCache[i] = "skip" end
+            if j <= n and State.doneCache[j] then State.doneCache[i] = "skip" end
         end
     end
-    current = n + 1
+    State.current = n + 1
     for i = 1, n do
-        if not doneCache[i] then current = i; break end
+        if not State.doneCache[i] then State.current = i; break end
     end
     -- v1.49 : prises depassees faute de niveau pendant que tu avancais dans la zone. Quand le niveau arrive,
     -- elles ne te font pas revenir en arriere (StepDone) : proposees seulement en repassant pres de leur PNJ.
     -- Pas si tu n'as encore rien fait dans le guide (zone ouverte trop tot), ni avant une etape "Monte au
     -- niveau X" (la, le guide veut justement que tu reviennes les prendre), ni pour une quete qui en
     -- debloque une autre (QuestUnlocks : sinon toute la suite serait perdue).
-    if not computingOther and not IS_DUNGEON[DB.guide] and DB.guide ~= "chain" and current <= n
-        and steps[current].t ~= "level" then
+    if not State.computingOther and not IS_DUNGEON[DB.guide] and DB.guide ~= "chain" and State.current <= n
+        and State.steps[State.current].t ~= "level" then
         local first
-        for i = 1, current - 1 do
-            local s = steps[i]
-            if (s.t == "accept" or s.t == "do" or s.t == "turnin") and doneCache[i] == "done" and s.id and Applies(s) and not s.woven then
+        for i = 1, State.current - 1 do
+            local s = State.steps[i]
+            if (s.t == "accept" or s.t == "do" or s.t == "turnin") and State.doneCache[i] == "done" and s.id and Applies(s) and not s.woven then
                 local real = false
                 for _, id in ipairs(Ids(s)) do if not DB.ignored[id] then real = true end end
                 if real then first = i; break end
             end
         end
         local lvl = UnitLevel("player") or 60
-        for i = current - 1, (first or current) + 1, -1 do
-            local s = steps[i]
+        for i = State.current - 1, (first or State.current) + 1, -1 do
+            local s = State.steps[i]
             if s.t == "level" then break end
-            if s.t == "accept" and not s.woven and (s.req or 0) > lvl and doneCache[i] == "skip" and Applies(s) then
+            if s.t == "accept" and not s.woven and (s.req or 0) > lvl and State.doneCache[i] == "skip" and Applies(s) then
                 local key = SeenKey(i)
                 if not (DB.lvlWait and DB.lvlWait[key]) then
                     local unlocks = false
@@ -632,20 +641,20 @@ function Compute()
         end
     end
     dynOrder = nil
-    if not computingOther and IS_DUNGEON_SET and IS_DUNGEON_SET[DB.guide] and OptimizeFn then
+    if not State.computingOther and IS_DUNGEON_SET and IS_DUNGEON_SET[DB.guide] and OptimizeFn then
         local ok, order = pcall(OptimizeFn)
         if ok and order and order[1] then
             dynOrder = order
             -- la note d'introduction du donjon reste affichee tant que tu ne l'as pas lue
-            if not (steps[current] and steps[current].t == "note") then current = order[1] end
+            if not (State.steps[State.current] and State.steps[State.current].t == "note") then State.current = order[1] end
         end
     end
-    baseCurrent = current
-    if not dynOrder and not computingOther and NearPick then
-        local ok, j = pcall(NearPick, current)
-        if ok and j then current = j end
+    State.baseCurrent = State.current
+    if not dynOrder and not State.computingOther and NearPick then
+        local ok, j = pcall(NearPick, State.current)
+        if ok and j then State.current = j end
     end
-    if computingOther then return end
-    if focus and (doneCache[focus] or not steps[focus]) then focus = nil end
-    DB.step[DB.guide] = current
+    if State.computingOther then return end
+    if State.focus and (State.doneCache[State.focus] or not State.steps[State.focus]) then State.focus = nil end
+    DB.step[DB.guide] = State.current
 end

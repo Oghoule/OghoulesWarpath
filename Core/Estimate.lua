@@ -2,6 +2,10 @@
 local ADDON, ns = ...
 local _ENV = ns.CoreEnv
 if setfenv then setfenv(1, _ENV) end
+-- v1.50 : etat partage du guide (Core.lua, ns.State)
+local State = ns.State
+-- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
+local BASE_KILL, DROP_PRIOR, DROP_WEIGHT, KILL_WORD, OBJ_SECS, SPEC, ZeroDiff
 
 ------------------------------------------------------------------
 -- Estimations : XP (quetes + monstres) et temps de jeu
@@ -19,13 +23,13 @@ function QAvailable(q)
     local e = EST[q]
     if not e then return false end
     if e.rc and e.rc > 0 then
-        if RACEBIT[myRace] then
-            if not HasBit(e.rc, RACEBIT[myRace]) and not (e.rc >= 2 ^ 32 and e.rc % 2 ^ 32 == 0 and HasBit(e.rc, 2 ^ 33)) then return false end
+        if RACEBIT[State.myRace] then
+            if not HasBit(e.rc, RACEBIT[State.myRace]) and not (e.rc >= 2 ^ 32 and e.rc % 2 ^ 32 == 0 and HasBit(e.rc, 2 ^ 33)) then return false end
         elseif e.rc >= 2 ^ 32 and not HasBit(e.rc, 2 ^ 33) then
             return false                                   -- nouvelle race (Skyborne) : quete reservee a l'Alliance
         end
     end
-    if e.cl and e.cl > 0 and CLASSBIT[myClass] and not HasBit(e.cl, CLASSBIT[myClass]) then return false end
+    if e.cl and e.cl > 0 and CLASSBIT[State.myClass] and not HasBit(e.cl, CLASSBIT[State.myClass]) then return false end
     return true
 end
 
@@ -145,8 +149,8 @@ function KillTime()
     if m and (m[2] or 0) >= 8 then return m[1], true end
     -- ancienne mesure sans specialisation connue : valable seulement si on ne connait pas la specialisation
     if not sp and DB.ktN and DB.ktN >= 8 and DB.kt then return DB.kt, true end
-    local t = BASE_KILL[myClass] or 30
-    if sp and SPEC[myClass] and SPEC[myClass][sp] then t = t * SPEC[myClass][sp] end
+    local t = BASE_KILL[State.myClass] or 30
+    if sp and SPEC[State.myClass] and SPEC[State.myClass][sp] then t = t * SPEC[State.myClass][sp] end
     local lvl = UnitLevel("player") or 1
     return t * (1 + math.max(0, lvl - 20) * 0.004), false
 end
@@ -290,15 +294,15 @@ function BuildChainGuide(q, withSelf)
     local list = ChainSteps(q, withSelf)
     local target = EST[q]
     if not list or not target then return nil end
-    if withSelf then return { title = "Classe : " .. target.n, title_en = "Class: " .. target.n, races = { myRace }, steps = list, side = true } end
-    return { title = "Chaine : " .. target.n, title_en = "Chain: " .. target.n, races = { myRace }, steps = list, side = true }
+    if withSelf then return { title = "Classe : " .. target.n, title_en = "Class: " .. target.n, races = { State.myRace }, steps = list, side = true } end
+    return { title = "Chaine : " .. target.n, title_en = "Chain: " .. target.n, races = { State.myRace }, steps = list, side = true }
 end
 
 function LockCandidates()
     local out = {}
-    if not steps then return out end
-    for i = math.max(1, current - 25), #steps do
-        local s = steps[i]
+    if not State.steps then return out end
+    for i = math.max(1, State.current - 25), #State.steps do
+        local s = State.steps[i]
         if blockedBy[i] and s.t == "accept" and not DB.lockHide[s.id] and type(s.id) == "number" and ChainFor(s.id) then
             out[#out + 1] = i
         end
