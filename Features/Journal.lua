@@ -3,8 +3,6 @@
 -- (boire, manger, parler aux PNJ, piller). Il ne compte pas si tu es AFK, si une fenetre de metier est ouverte,
 -- ou si tu ne bouges plus depuis 45 s (en ville, a coder, a faire autre chose).
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
 local Core = ns.Mod.Core -- v1.50 : module
@@ -28,9 +26,9 @@ do
     end
 
     local function J()
-        if not DB then return nil end
-        DB.jr = DB.jr or { a = 0, xp = 0, g = {}, s = {} }
-        return DB.jr
+        if not State.DB then return nil end
+        State.DB.jr = State.DB.jr or { a = 0, xp = 0, g = {}, s = {} }
+        return State.DB.jr
     end
     local function now() return GetTime and GetTime() or 0 end
     local function act() lastAct = now() end
@@ -40,7 +38,7 @@ do
     end
     local function slot()
         local j = J(); if not j then return end
-        local g = DB.guide or "?"
+        local g = State.DB.guide or "?"
         j.g[g] = j.g[g] or { a = 0, xp = 0, l0 = UnitLevel("player") }
         local k = g .. ":" .. (State.current or 0)
         j.s[k] = j.s[k] or { a = 0, xp = 0 }
@@ -48,7 +46,7 @@ do
     end
 
     local function tick()
-        if not DB then return end
+        if not State.DB then return end
         if UnitIsAFK and UnitIsAFK("player") then return end
         if crafting() then return end
         if (GetUnitSpeed and (GetUnitSpeed("player") or 0) > 0) or (UnitAffectingCombat and UnitAffectingCombat("player"))
@@ -65,11 +63,11 @@ do
     local function line()
         nTick = nTick + 1
         if nTick % 5 ~= 0 then return end
-        local fr = f and rawget(f, "xph"); if not fr then return end
+        local fr = Core.f and rawget(Core.f, "xph"); if not fr then return end
         -- v1.41 : le pied n'est plus affiche (infos au survol de la barre de progression) ; on calcule quand meme
         -- les valeurs (f.footInfo) pour l'infobulle
-        local want = DB ~= nil
-        local lv, ss = rawget(f, "footLvl"), rawget(f, "footSess")
+        local want = State.DB ~= nil
+        local lv, ss = rawget(Core.f, "footLvl"), rawget(Core.f, "footSess")
         sessT0 = sessT0 or now()
         local cur, mx = UnitXP and UnitXP("player") or 0, UnitXPMax and UnitXPMax("player") or 1
         local lvl = UnitLevel("player") or 1
@@ -78,13 +76,13 @@ do
         local dur = function(sec) return string.format("%d h %02d", math.floor(sec / 3600), math.floor(sec % 3600 / 60)) end
         if want and lv and ss then
             -- pied : niveau | XP/h actif | temps avant le niveau suivant (au rythme actif)
-            lv:SetText(T("footLvl", lvl, math.floor((cur or 0) * 100 / math.max(1, mx or 1))))
+            lv:SetText(Core.T("footLvl", lvl, math.floor((cur or 0) * 100 / math.max(1, mx or 1))))
             -- v1.41 (audit) : sans donnees encore (debut de seance), « calcul… » au lieu de « — XP/h » et « Niv. 25 dans — »
-            fr:SetText(rate > 0 and T("footXph", Est.FormatNum(math.floor(rate))) or T("footCalc"))
+            fr:SetText(rate > 0 and Core.T("footXph", Est.FormatNum(math.floor(rate))) or Core.T("footCalc"))
             local left = (mx or 0) - (cur or 0)
-            ss:SetText(rate > 0 and T("footNext", lvl + 1, FmtDur and FmtDur(left / rate * 3600) or (math.floor(left / rate * 60 + 0.5) .. " min")) or "")
+            ss:SetText(rate > 0 and Core.T("footNext", lvl + 1, FmtDur and FmtDur(left / rate * 3600) or (math.floor(left / rate * 60 + 0.5) .. " min")) or "")
             -- detail au survol du pied
-            f.footInfo = { rate = rate, active = dur(sessA), wallRate = wall > 60 and sessXP * 3600 / wall or 0, wall = dur(wall), xp = sessXP,
+            Core.f.footInfo = { rate = rate, active = dur(sessA), wallRate = wall > 60 and sessXP * 3600 / wall or 0, wall = dur(wall), xp = sessXP,
                            lvl = lv:GetText(), xph = fr:GetText(), nxt = ss:GetText() }
         end
     end
@@ -112,7 +110,7 @@ do
         pcall(f.RegisterEvent, f, e)
     end
     f:SetScript("OnEvent", function(_, e)
-        if not DB then return end
+        if not State.DB then return end
         if e == "PLAYER_XP_UPDATE" or e == "PLAYER_LEVEL_UP" then xpUpdate()
         elseif e == "PLAYER_ENTERING_WORLD" then lastXP = nil; xpUpdate()
         else act() end
@@ -124,15 +122,15 @@ do
 
     function JournalReport(arg)
         local j = J(); if not j then return end
-        if arg == "reset" then DB.jr = nil; sessA, sessXP = 0, 0; say(T("jrReset")); return end
-        say(T("jrHead"))
-        say(T("jrLine", T("jrSession"), hm(sessA), Est.FormatNum(sessXP), rate(sessXP, sessA)))
-        say(T("jrLine", T("jrTotal"), hm(j.a), Est.FormatNum(j.xp), rate(j.xp, j.a)))
-        local g = DB.guide and j.g[DB.guide]
+        if arg == "reset" then State.DB.jr = nil; sessA, sessXP = 0, 0; Core.say(Core.T("jrReset")); return end
+        Core.say(Core.T("jrHead"))
+        Core.say(Core.T("jrLine", Core.T("jrSession"), hm(sessA), Est.FormatNum(sessXP), rate(sessXP, sessA)))
+        Core.say(Core.T("jrLine", Core.T("jrTotal"), hm(j.a), Est.FormatNum(j.xp), rate(j.xp, j.a)))
+        local g = State.DB.guide and j.g[State.DB.guide]
         -- v1.50 : titre du guide (avant : G[DB.guide], toujours vide, donc la cle "stv1" s'affichait)
-        local gd = Core.Guides and Core.Guides[DB.guide]
-        if g then say(T("jrLine", (gd and (Lang and Lang() == "en" and gd.title_en or gd.title)) or DB.guide, hm(g.a), Est.FormatNum(g.xp), rate(g.xp, g.a))) end
-        say(T("jrHelp"))
+        local gd = Core.Guides and Core.Guides[State.DB.guide]
+        if g then Core.say(Core.T("jrLine", (gd and (Core.Lang and Core.Lang() == "en" and gd.title_en or gd.title)) or State.DB.guide, hm(g.a), Est.FormatNum(g.xp), rate(g.xp, g.a))) end
+        Core.say(Core.T("jrHelp"))
     end
 end
 

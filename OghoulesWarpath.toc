@@ -38,6 +38,7 @@ Core\Near.lua
 Core\Trail.lua
 Core\Legs.lua
 Core\Estimate.lua
+Core\Style.lua
 UI\Skin.lua
 Core\Flow.lua
 UI\Window.lua

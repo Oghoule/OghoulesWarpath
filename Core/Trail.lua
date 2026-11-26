@@ -10,10 +10,10 @@
 --                            WarpathDropDB._trailNo[cle] = true : deja propose, on ne redemande pas
 -- cle = "carte:x:y" de l'objectif de l'etape.
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Trail = ns.Mod.Trail -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
 local Est = ns.Mod.Est -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
@@ -91,7 +91,7 @@ local function trails()
     for k, v in pairs(saved() or {}) do
         local pts, p = {}, type(v) == "table" and v.p or {}
         for i = 1, #p - 2, 3 do
-            local w = WP(p[i], p[i + 1], p[i + 2])
+            local w = Route.WP(p[i], p[i + 1], p[i + 2])
             if w then pts[#pts + 1] = { w[1], w[2], w[3], p[i], p[i + 1], p[i + 2] } end
         end
         if #pts >= 2 then cache[#cache + 1] = { k = k, pts = pts, c = pts[1][3] } end
@@ -155,23 +155,23 @@ end
 
 local function TrailKeep()
     local t = saved()
-    if not (candidate and t) then say(T("trailNone")); return end
+    if not (candidate and t) then Core.say(Core.T("trailNone")); return end
     local n = 0
     for _ in pairs(t) do n = n + 1 end
-    if n >= MAX_TRAILS and not t[candidate.key] then say(T("trailFull", MAX_TRAILS)); return end
+    if n >= MAX_TRAILS and not t[candidate.key] then Core.say(Core.T("trailFull", MAX_TRAILS)); return end
     t[candidate.key] = { p = candidate.p }
     refused()[candidate.key] = nil
-    say(T("trailKept", #candidate.p / 3))
+    Core.say(Core.T("trailKept", #candidate.p / 3))
     candidate, cache = nil, nil
-    State.lastWP = nil; Refresh(true)
+    State.lastWP = nil; Skin.Refresh(true)
 end
 
 -- arrivee a l'objectif de l'etape en cours : proposer de garder le chemin s'il a fait un grand detour
 local function checkArrival(here)
-    if not (DB and DB.trailAsk ~= false and DB.smartArrow ~= false) then return end
+    if not (State.DB and State.DB.trailAsk ~= false and State.DB.smartArrow ~= false) then return end
     local s = State.steps and State.steps[State.current]
     if not (s and s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept")) then return end
-    local g = WP(s.m, s.x, s.y)
+    local g = Route.WP(s.m, s.x, s.y)
     if not (g and g[3] == here[3]) then return end
     local key = s.m .. ":" .. s.x .. ":" .. s.y
     if arrived[key] or Route.Dist(here[1], here[2], g[1], g[2]) > (s.t == "do" and 40 or 25) then return end
@@ -183,18 +183,18 @@ local function checkArrival(here)
     candidate = cand
     -- v1.43 : « non » seulement si le joueur ferme avec le « x ». Sans reponse (toast efface), on
     -- reproposera a la prochaine seance (arrived[] evite de redemander dans la meme seance).
-    Skin.Toast(T("trailHead"), T("trailAsk", math.floor(cand.ex)), TrailKeep,
+    Skin.Toast(Core.T("trailHead"), Core.T("trailAsk", math.floor(cand.ex)), TrailKeep,
         function() refused()[key] = true end)
 end
 
 -- Appele chaque seconde (Window.lua, a cote de LearnGates)
-function TrailTick()
+function Trail.TrailTick()
     if (UnitOnTaxi and UnitOnTaxi("player")) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost("player")) then TrailBreak(); return end
     if IsInInstance then
         local ok, inst = pcall(IsInInstance)
         if ok and inst then TrailBreak(); return end
     end
-    local pm, px, py = PlayerPos()
+    local pm, px, py = Route.PlayerPos()
     if not (pm and px) then return end
     local wx, wy = Route.WorldPos(pm, px, py)
     if not wx then return end
@@ -232,9 +232,9 @@ local function alongTrail(pts, bi, me)
 end
 
 -- Point vise par la fleche sur un chemin garde (StepPoint, Near.lua), ou nil
-function TrailPoint(s, me)
+function Trail.TrailPoint(s, me)
     if not (s and s.m and s.x and me) then return nil end
-    local g = WP(s.m, s.x, s.y)
+    local g = Route.WP(s.m, s.x, s.y)
     local best
     for _, tr in ipairs(trails()) do
         local pts, n = tr.pts, #tr.pts
@@ -273,7 +273,7 @@ function TrailPoint(s, me)
         end
     end
     if best then
-        return { m = best.p[4], x = best.p[5], y = best.p[6], name = T(best.out and "trailOut" or "trailIn"), kind = "trail", out = best.out }
+        return { m = best.p[4], x = best.p[5], y = best.p[6], name = Core.T(best.out and "trailOut" or "trailIn"), kind = "trail", out = best.out }
     end
 end
 
@@ -284,7 +284,7 @@ function TrailCmd(arg)
     local t = saved()
     if not t then return end
     if arg == "efface" or arg == "clear" or arg == "x" then
-        local me = PlayerWP()
+        local me = Route.PlayerWP()
         local bestK, bd
         if me then
             for _, tr in ipairs(trails()) do
@@ -294,24 +294,24 @@ function TrailCmd(arg)
                 end
             end
         end
-        if not bestK then say(T("trailNoneNear")); return end
+        if not bestK then Core.say(Core.T("trailNoneNear")); return end
         t[bestK] = nil
         refused()[bestK] = true        -- ne pas le reproposer au meme endroit
         cache = nil; wipe(prog)
-        say(T("trailCleared"))
-        State.lastWP = nil; Refresh(true)
+        Core.say(Core.T("trailCleared"))
+        State.lastWP = nil; Skin.Refresh(true)
     elseif arg == "liste" or arg == "list" then
         local n = 0
         for _, v in pairs(t) do
             local p = type(v) == "table" and v.p
             if p and #p >= 6 then
                 n = n + 1
-                say(string.format("  %s %.1f, %.1f  (%d)", Est.MAPNAME[Route.ZoneOf(p[#p - 2])] or tostring(p[#p - 2]), p[#p - 1], p[#p], #p / 3))
+                Core.say(string.format("  %s %.1f, %.1f  (%d)", Est.MAPNAME[Route.ZoneOf(p[#p - 2])] or tostring(p[#p - 2]), p[#p - 1], p[#p], #p / 3))
             end
         end
-        say(n == 0 and T("trailEmpty") or T("trailCount", n))
+        Core.say(n == 0 and Core.T("trailEmpty") or Core.T("trailCount", n))
     else
-        say(T("trailHelp"))
+        Core.say(Core.T("trailHelp"))
     end
 end
 

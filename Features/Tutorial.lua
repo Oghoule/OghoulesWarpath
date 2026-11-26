@@ -5,10 +5,9 @@
 -- Ajouter une page = une entree dans PAGES : head/text (cles Locale), target (fonction -> cadre a montrer).
 -- En bas : les astuces au bon moment (fleche, ciblage, pierre de foyer), une fois chacune (DB.tutoTips).
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
 -- v1.50 : module ns.Mod.Tutorial (publie en fin de fichier pour les autres fichiers)
 local ShowTutorial
 local Window = ns.Mod.Window -- v1.50 : module
@@ -16,7 +15,7 @@ local Skin = ns.Mod.Skin -- v1.50 : module
 
 -- Chaque target renvoie les morceaux de la grande fenetre a entourer (le trou = leur union).
 -- Une page dont rien n'est affiche est sautee. La visite se fait toujours en mode complet.
-local function Win() return rawget(_ENV, "f") or _G.WarpathFrame end
+local function Win() return Core.f or _G.WarpathFrame end   -- v1.50 : la fenetre vit dans le module Core
 local function Shown(...)
     local out = {}
     for i = 1, select("#", ...) do
@@ -97,7 +96,7 @@ local function RectOf(parts, pad, header)
             local pl, pb, pr, pt = p:GetLeft(), p:GetBottom(), p:GetRight(), p:GetTop()
             if pl and pb and pr and pt then
                 local top = pt * s
-                if header then pb = pt - (HEAD_H or 34) end
+                if header then pb = pt - (Window.HEAD_H or 34) end
                 L = math.min(L or pl * s, pl * s); B = math.min(B or pb * s, pb * s)
                 R = math.max(R or pr * s, pr * s); T = math.max(T or top, top)
             end
@@ -135,11 +134,11 @@ local function Render()
     else
         card:SetWidth(320)
         card.title:SetFont(Skin.FONT, 12, ""); card.title:SetJustifyH("CENTER")
-        card.title:SetText(Skin.Caps(T(p.head)))
+        card.title:SetText(Skin.Caps(Core.T(p.head)))
     end
     card.rule:SetWidth(card:GetWidth() - 60)
     card.text:SetWidth(card:GetWidth() - 50)
-    card.text:SetText(T(p.text))
+    card.text:SetText(Core.T(p.text))
     -- losanges : un par page, la page courante pleine
     for i, d in ipairs(card.dots) do
         if i <= #list then
@@ -148,9 +147,9 @@ local function Render()
         else d:Hide() end
     end
     -- boutons
-    card.skip:SetLabel(T("tutoSkip"))
-    card.prev:SetShown(page > 1); card.prev:SetLabel("<  " .. T("tutoPrev"))
-    card.go:SetLabel(p.welcome and (T("tutoStart") .. "  >") or last and T("tutoEnd") or (T("tutoNext") .. "  >"))
+    card.skip:SetLabel(Core.T("tutoSkip"))
+    card.prev:SetShown(page > 1); card.prev:SetLabel("<  " .. Core.T("tutoPrev"))
+    card.go:SetLabel(p.welcome and (Core.T("tutoStart") .. "  >") or last and Core.T("tutoEnd") or (Core.T("tutoNext") .. "  >"))
     card.go:SetWidth(p.welcome and 140 or 100)
     card:SetHeight(math.floor((card.text:GetStringHeight() or 40) + 150))
     -- trou + place de la bulle
@@ -161,7 +160,7 @@ local function Render()
     end
     if l then
         SetHole(l, b, r, t)
-        if p.key and DB then DB.tutoTips = DB.tutoTips or {}; DB.tutoTips[p.key] = true end
+        if p.key and State.DB then State.DB.tutoTips = State.DB.tutoTips or {}; State.DB.tutoTips[p.key] = true end
         if (l + r) / 2 > (overlay:GetWidth() or 0) / 2 then
             card:SetPoint("TOPRIGHT", overlay, "BOTTOMLEFT", l - 20, t)   -- element a droite : bulle a gauche
         else
@@ -226,11 +225,11 @@ local function Build()
     overlay:SetScript("OnHide", function()
         -- Passer, Terminer, Echap (toute fermeture hors combat) = visite vue, puis la suite eventuelle
         if pending then return end
-        if DB then DB.tutoSeen = true end
+        if State.DB then State.DB.tutoSeen = true end
         if TipDelay then TipDelay(180) end   -- pas d'astuce dans les 3 minutes qui suivent la visite
         if guideWasShown == false and Window.ShowGuide then pcall(Window.ShowGuide, false) end
         guideWasShown = nil
-        if miniWas and DB then DB.mini = true; if Refresh then pcall(Refresh, true) end end
+        if miniWas and State.DB then State.DB.mini = true; if Skin.Refresh then pcall(Skin.Refresh, true) end end
         miniWas = nil
         local cb = onDone; onDone = nil
         if cb then
@@ -252,7 +251,7 @@ end
 -- force = true : meme si deja vue. after : fonction appelee a la fin de la visite (Passer, Echap...).
 function ShowTutorial(force, after)
     if WARPATH_TEST or not (CreateFrame and UIParent) then return end
-    if not force and (not DB or DB.tutoSeen) then return end
+    if not force and (not State.DB or State.DB.tutoSeen) then return end
     if after then onDone = after end
     if InCombat() then
         -- on attend la fin du combat (au plus ~2 min)
@@ -266,10 +265,10 @@ function ShowTutorial(force, after)
     ns.Trace("visite guidee")
     local o = Build()
     -- le guide doit etre a l'ecran pour etre montre ; remis comme avant a la fin
-    guideWasShown = DB and DB.shown and true or false
+    guideWasShown = State.DB and State.DB.shown and true or false
     if not guideWasShown and Window.ShowGuide then pcall(Window.ShowGuide, true) end
-    miniWas = DB and DB.mini and true or nil
-    if miniWas then DB.mini = false; if Refresh then pcall(Refresh, true) end end
+    miniWas = State.DB and State.DB.mini and true or nil
+    if miniWas then State.DB.mini = false; if Skin.Refresh then pcall(Skin.Refresh, true) end end
     page, pending = 1, false
     o:Show()
     Render()
@@ -325,7 +324,7 @@ local function TipPlace()
 end
 
 local function TipDone(mark)
-    if curTip and mark and DB then DB.tutoTips = DB.tutoTips or {}; DB.tutoTips[curTip.key] = true; TipDelay(TIP_GAP) end
+    if curTip and mark and State.DB then State.DB.tutoTips = State.DB.tutoTips or {}; State.DB.tutoTips[curTip.key] = true; TipDelay(TIP_GAP) end
     curTip = nil
     if tip then tip:Hide() end
 end
@@ -367,8 +366,8 @@ local function TipShow(t)
     TipBuild()
     curTip, tipShownAt = t, GetTime and GetTime() or 0
     local card = tip.card
-    card.head:SetText(Skin.Caps(T(t.head)))
-    card.text:SetText(T(t.text))
+    card.head:SetText(Skin.Caps(Core.T(t.head)))
+    card.text:SetText(Core.T(t.text))
     card.ok:SetLabel("OK")
     card:SetHeight(math.floor((card.text:GetStringHeight() or 30) + 70))
     tip:Show()
@@ -376,7 +375,7 @@ local function TipShow(t)
 end
 
 local function TipCheck()
-    if not DB or not DB.welcomed then return end
+    if not State.DB or not State.DB.welcomed then return end
     if not tipReadyAt then TipDelay(TIP_START) end                     -- 1er passage = connexion
     if InCombat() then if curTip then TipDone(false) end; return end   -- revient apres le combat
     if overlay and overlay:IsShown() then return end
@@ -388,7 +387,7 @@ local function TipCheck()
     if Now() < tipReadyAt then return end
     local toast = _G.WarpathToast                                      -- « Quoi de neuf » affiche : on attend
     if toast and toast:IsShown() then return end
-    local seen = DB.tutoTips or {}
+    local seen = State.DB.tutoTips or {}
     for _, t in ipairs(TIPS) do
         if not seen[t.key] then
             if TipTarget(t) then

@@ -1,22 +1,23 @@
 -- Oghoule's Warpath : moteur (Skin.lua) - voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Hearth = ns.Mod.Hearth -- v1.50 : module
+local Skin = ns.Mod.Skin -- v1.50 : module
+local Window = ns.Mod.Window -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
 -- v1.50 : module ns.Mod.Skin (publie en fin de fichier pour les autres fichiers)
-local Border, COL, Caps, Chip, ChipScale, DISPLAY, Diamond, DiamondCheck, Divider, DungeonLogActive
-local DungeonLogList, FONT, FS, FadeIn, FadeOut, FlatButton, Glyph, GoldFrame, HEX, HeadButton, INNER, Layout
-local MapBar, PAD, PopupVisible, ScaleGrip, SectionHead, Shine, Spaced, Tex, TitledRule, Toast, Upper
+local Border, COL, Caps, Chip, ChipScale, DISPLAY, Diamond, DiamondCheck, Divider
+local FONT, FS, FadeIn, FadeOut, FlatButton, Glyph, GoldFrame, HEX, HeadButton, INNER, Layout
+local MapBar, PAD, PopupVisible, ScaleGrip, SectionHead, Shine, Spaced, Tex, TitledRule, Toast
 local WarpathName
 local Flow = ns.Mod.Flow -- v1.50 : module
 local Near = ns.Mod.Near -- v1.50 : module
 local Est = ns.Mod.Est -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
-local ACCENTS, DungeonLogHide, DungeonLogRender, DungeonLore, FIXED_H, MAPBAR, MIN_H, SKIP_ICON, STEP_ICON
+local DungeonLogHide, DungeonLogRender, DungeonLore, FIXED_H, MAPBAR, MIN_H, SKIP_ICON, STEP_ICON
 local STEP_TINT, SetChain, SetHeader, SetObjRows, SetRoute, SetSkip, SetUpcoming, SplitPlace, adviceArgs
 local advicePos, adviceT, autoGoBusy, lightCtx
 
@@ -33,19 +34,13 @@ COL = {
 }
 -- memes teintes pour le texte du chat, des fiches et des listes (|cff..)
 HEX = { gold = "cdbb8e", accent = "d6b866", soft = "b5aa98", faint = "8c7f62", red = "c24a3e", green = "9cc7a8", chain = "a99cc0" }
-ACCENTS = { ["à"] = "À", ["â"] = "Â", ["ç"] = "Ç", ["é"] = "É", ["è"] = "È", ["ê"] = "Ê", ["ë"] = "Ë",
-                  ["î"] = "Î", ["ï"] = "Ï", ["ô"] = "Ô", ["ù"] = "Ù", ["û"] = "Û", ["ü"] = "Ü", ["ö"] = "Ö" }
-function Upper(str)
-    str = tostring(str or ""):upper()
-    return (str:gsub("\195[\128-\191]", function(c) return ACCENTS[c] or c end))
-end
 -- capitales espacees (le jeu n'a pas d'espacement de lettres)
 function Spaced(str)
     local out = {}
     for ch in tostring(str or ""):gmatch("[%z\1-\127\194-\244][\128-\191]*") do out[#out + 1] = ch end
     return table.concat(out, " ")
 end
-function Caps(str) return Spaced(Upper(str)) end
+function Caps(str) return Spaced(Core.Upper(str)) end
 
 function FS(parent, size, col, font, justify, layer)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY")
@@ -205,15 +200,15 @@ end
 function WarpathName()
     local n = UnitName and UnitName("player")
     if type(n) ~= "string" or n == "" then n = "?" end
-    return T(n:sub(-1) == "s" and "warpathS" or "warpath", n)
+    return Core.T(n:sub(-1) == "s" and "warpathS" or "warpath", n)
 end
 
-W, PAD = 300, 18
-FIXED_H = math.floor(W * 640 / 340 + 0.5) -- proportions de la maquette (340 x 640) (plus utilise pour la hauteur)
+Skin.W, PAD = 300, 18
+FIXED_H = math.floor(Skin.W * 640 / 340 + 0.5) -- proportions de la maquette (340 x 640) (plus utilise pour la hauteur)
 MIN_H = 330                                 -- v1.41 : hauteur minimale ; au-dela, la fenetre suit son contenu
-DL = { rows = {}, n = 0 }   -- mode donjon : lignes du journal, detail ouvert
-INNER = W - 2 * PAD
-distTarget = nil -- { m, x, y } : prochaine position a atteindre (pour la distance affichee)
+Skin.DL = { rows = {}, n = 0 }   -- mode donjon : lignes du journal, detail ouvert
+INNER = Skin.W - 2 * PAD
+Skin.distTarget = nil -- { m, x, y } : prochaine position a atteindre (pour la distance affichee)
 
 -- icone de la liste « La suite » selon le type d'etape (textures du jeu)
 -- icones de l'addon (blanches, teintees ici) : rendre = fleche retour verte, prendre = ! dore, faire = epees
@@ -223,19 +218,19 @@ STEP_ICON = {
 }
 STEP_TINT = { accept = COL.accent, turnin = COL.green, ["do"] = COL.gold }
 function SetUpcoming(items, passed)
-    if not f or not f.up then return end
+    if not Core.f or not Core.f.up then return end
     -- v1.41 (audit, proposition A) : 2 etapes a venir, « +N ▾ » pour deplier jusqu'a 4 (DB.upOpen)
-    local limit = DB.upOpen and 4 or 2
+    local limit = State.DB.upOpen and 4 or 2
     local more = math.max(0, math.min(#items, 4) - 2)
-    f.nUp = math.min(#items, limit)
-    local tg = rawget(f, "upToggle")
+    Core.f.nUp = math.min(#items, limit)
+    local tg = rawget(Core.f, "upToggle")
     if tg then
         -- (la police du jeu n'a pas les fleches ▾ ▴ : un petit carre s'affichait)
-        tg.fs:SetText(more > 0 and (DB.upOpen and "-" or ("+" .. more)) or "")
+        tg.fs:SetText(more > 0 and (State.DB.upOpen and "-" or ("+" .. more)) or "")
         tg:SetShown(more > 0)
     end
     for k = 1, 4 do
-        local b, it = f.up[k], (k <= limit) and items[k] or nil
+        local b, it = Core.f.up[k], (k <= limit) and items[k] or nil
         if it then
             b.idx = it.idx; b.fs:SetText(it.text)
             if b.fs.SetTextColor then local c = (k == 1) and COL.white or COL.soft; b.fs:SetTextColor(c[1], c[2], c[3]) end
@@ -249,64 +244,64 @@ function SetUpcoming(items, passed)
             b:Show()
         else b.idx = nil; b:Hide() end
     end
-    if f.passed then
-        f.passed:SetText((passed or 0) > 0 and T("passedN", passed) or "")
-        f.passed:SetShown((passed or 0) > 0 and #items > 0)
+    if Core.f.passed then
+        Core.f.passed:SetText((passed or 0) > 0 and Core.T("passedN", passed) or "")
+        Core.f.passed:SetShown((passed or 0) > 0 and #items > 0)
     end
 end
 
 -- Place les blocs visibles les uns sous les autres et ajuste la hauteur
 function Layout()
     -- (v1.41 : 24 px sous l'en-tete au lieu de 14, pour que « Step x / y » au-dessus de la barre respire)
-    local y = -(HEAD_H or 34) - 24
+    local y = -(Window.HEAD_H or 34) - 24
     local function put(obj, h, gap, x)
         obj:ClearAllPoints()
-        obj:SetPoint("TOPLEFT", f, "TOPLEFT", x or PAD, y)
+        obj:SetPoint("TOPLEFT", Core.f, "TOPLEFT", x or PAD, y)
         y = y - h - (gap or 0)
     end
     local function sh(fs, min) local h = fs.GetStringHeight and fs:GetStringHeight(); return (type(h) == "number" and h > 0) and h or (min or 12) end
-    if f.name then f.name:Hide() end
-    if f.div then f.div:Hide() end
-    if f.progBg then put(f.progBg, 3, 18) end
-    local il = rawget(f, "infoLine")
+    if Core.f.name then Core.f.name:Hide() end
+    if Core.f.div then Core.f.div:Hide() end
+    if Core.f.progBg then put(Core.f.progBg, 3, 18) end
+    local il = rawget(Core.f, "infoLine")
     if il and il:IsShown() then put(il, sh(il, 10), 14) end
     -- Intendance : icone de l'en-tete en capitale (pas pendant une tournee ni dans un donjon)
-    local qb = rawget(f, "qmBtn")
+    local qb = rawget(Core.f, "qmBtn")
     if qb then
-        local inCity = Quartermaster.QMCity and Quartermaster.QMCity() and not DB.qm and not (Core.IS_DUNGEON and Core.IS_DUNGEON[DB.guide] and DungeonLogActive and DungeonLogActive())
+        local inCity = Quartermaster.QMCity and Quartermaster.QMCity() and not State.DB.qm and not (Core.IS_DUNGEON and Core.IS_DUNGEON[State.DB.guide] and Flow.DungeonLogActive())
         qb:SetShown(inCity and true or false)
         -- icones de l'en-tete, de droite a gauche : « - », sac (en capitale), « ? », engrenage (v1.46, accroche
         -- au « ? ») ; le titre s'arrete avant
-        local hb = rawget(f, "helpBtn")
-        if hb then hb:ClearAllPoints(); hb:SetPoint("RIGHT", inCity and qb or f.miniBtn, "LEFT", -2, 0) end
-        local gear = rawget(f, "optBtn") and 18 or 0
-        f.title:ClearAllPoints(); f.title:SetPoint("LEFT", f, "TOPLEFT", PAD + 12, -(HEAD_H or 34) / 2)
-        f.title:SetPoint("RIGHT", f, "TOPRIGHT", (inCity and -62 or -44) - gear, -(HEAD_H or 34) / 2)
+        local hb = rawget(Core.f, "helpBtn")
+        if hb then hb:ClearAllPoints(); hb:SetPoint("RIGHT", inCity and qb or Core.f.miniBtn, "LEFT", -2, 0) end
+        local gear = rawget(Core.f, "optBtn") and 18 or 0
+        Core.f.title:ClearAllPoints(); Core.f.title:SetPoint("LEFT", Core.f, "TOPLEFT", PAD + 12, -(Window.HEAD_H or 34) / 2)
+        Core.f.title:SetPoint("RIGHT", Core.f, "TOPRIGHT", (inCity and -62 or -44) - gear, -(Window.HEAD_H or 34) / 2)
     end
     -- en-tete de l'etape : badge de niveau a gauche, type + titre a droite
-    local badge = f.badge and f.badge:IsShown()
+    local badge = Core.f.badge and Core.f.badge:IsShown()
     local bx = badge and (PAD + 42) or PAD
     local bw = badge and (INNER - 42) or INNER
     local top = y
-    if badge then f.badge:ClearAllPoints(); f.badge:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, y - 1) end
-    if f.kind:IsShown() then f.kindRow:SetWidth(bw); f.kind:SetWidth(bw); put(f.kindRow, 15, 5, bx) end   -- (11 px depuis la v1.41)
-    if f.qtitle:IsShown() then f.qtitle:SetWidth(bw); put(f.qtitle, sh(f.qtitle, 20), 5, bx) end
-    if f.qsub and f.qsub:IsShown() then f.qsub:SetWidth(bw); put(f.qsub, sh(f.qsub, 12), 0, bx) end
+    if badge then Core.f.badge:ClearAllPoints(); Core.f.badge:SetPoint("TOPLEFT", Core.f, "TOPLEFT", PAD, y - 1) end
+    if Core.f.kind:IsShown() then Core.f.kindRow:SetWidth(bw); Core.f.kind:SetWidth(bw); put(Core.f.kindRow, 15, 5, bx) end   -- (11 px depuis la v1.41)
+    if Core.f.qtitle:IsShown() then Core.f.qtitle:SetWidth(bw); put(Core.f.qtitle, sh(Core.f.qtitle, 20), 5, bx) end
+    if Core.f.qsub and Core.f.qsub:IsShown() then Core.f.qsub:SetWidth(bw); put(Core.f.qsub, sh(Core.f.qsub, 12), 0, bx) end
     if badge and (top - y) < 46 then y = top - 46 end
     y = y - 18
-    if f.dest and f.dest:IsShown() then
-        if DB.compact then f.coord:Hide() end
+    if Core.f.dest and Core.f.dest:IsShown() then
+        if State.DB.compact then Core.f.coord:Hide() end
         -- hauteur selon le lieu (1 ou 2 lignes) et la ligne de precision
-        local dh = math.max(34, 18 + sh(f.destName, 12) + (f.coord:IsShown() and 15 or 0))
-        f.dest:SetHeight(dh); put(f.dest, dh, 18)
+        local dh = math.max(34, 18 + sh(Core.f.destName, 12) + (Core.f.coord:IsShown() and 15 or 0))
+        Core.f.dest:SetHeight(dh); put(Core.f.dest, dh, 18)
     end
     local any = false
-    for k = 1, 3 do if f.route[k]:IsShown() then put(f.route[k], 16, 2); any = true end end
+    for k = 1, 3 do if Core.f.route[k]:IsShown() then put(Core.f.route[k], 16, 2); any = true end end
     if any then y = y - 12 end
-    local no = rawget(f, "nObj") or 0
+    local no = rawget(Core.f, "nObj") or 0
     if no > 0 then
         for k = 1, no do
-            local w = f.obj[k]
+            local w = Core.f.obj[k]
             if w.kind == "obj" then put(w, 20, 2)
             else
                 if k > 1 then y = y - 6 end
@@ -315,58 +310,58 @@ function Layout()
         end
         y = y - 16
     end
-    if f.text:IsShown() then put(f.text, sh(f.text), 18) end
-    if (DL.n or 0) > 0 then
-        for k = 1, DL.n do
-            local r = DL.rows[k]
+    if Core.f.text:IsShown() then put(Core.f.text, sh(Core.f.text), 18) end
+    if (Skin.DL.n or 0) > 0 then
+        for k = 1, Skin.DL.n do
+            local r = Skin.DL.rows[k]
             if r and r:IsShown() then
                 put(r, 17, 1)
-                if DL.tip and DL.tip:IsShown() and DL.after == k then put(DL.tip, sh(DL.tip), 6, PAD + 14) end
+                if Skin.DL.tip and Skin.DL.tip:IsShown() and Skin.DL.after == k then put(Skin.DL.tip, sh(Skin.DL.tip), 6, PAD + 14) end
             end
         end
         y = y - 8
     end
     -- v1.41 (audit, proposition A) : chaine et quetes bloquees ne prennent plus de ligne : deux pastilles a droite
     -- de la ligne du type d'etape. Les anciennes lignes gardent leur logique (etat, clic) mais restent invisibles.
-    for _, b in ipairs({ f.chainBtn, f.lockBtn }) do
+    for _, b in ipairs({ Core.f.chainBtn, Core.f.lockBtn }) do
         if b.SetAlpha then b:SetAlpha(0) end
         if b.EnableMouse then b:EnableMouse(false) end
     end
-    local cc, cl = rawget(f, "chipChain"), rawget(f, "chipLock")
+    local cc, cl = rawget(Core.f, "chipChain"), rawget(Core.f, "chipLock")
     if cc and cl then
-        local ch = f.chainBtn:IsShown() and f.chainInfo
+        local ch = Core.f.chainBtn:IsShown() and Core.f.chainInfo
         cc:SetShown(ch and true or false)
         if ch then
             cc.fs:SetText(ch.pos .. "/" .. ch.len); cc:SetWidth(22 + (cc.fs.GetStringWidth and cc.fs:GetStringWidth() or 18))
-            cc.tipText = T("chainLine", ch.pos, ch.len)
+            cc.tipText = Core.T("chainLine", ch.pos, ch.len)
         end
-        local nl = f.lockBtn:IsShown() and #(f.lockBtn.list or {}) or 0
+        local nl = Core.f.lockBtn:IsShown() and #(Core.f.lockBtn.list or {}) or 0
         cl:SetShown(nl > 0)
         if nl > 0 then cl.fs:SetText(tostring(nl)); cl:SetWidth(22 + (cl.fs.GetStringWidth and cl.fs:GetStringWidth() or 8)) end
-        cl:ClearAllPoints(); cl:SetPoint("RIGHT", f.kindRow, "RIGHT", 0, 0)
-        cc:ClearAllPoints(); cc:SetPoint("RIGHT", nl > 0 and cl or f.kindRow, nl > 0 and "LEFT" or "RIGHT", nl > 0 and -5 or 0, 0)
+        cl:ClearAllPoints(); cl:SetPoint("RIGHT", Core.f.kindRow, "RIGHT", 0, 0)
+        cc:ClearAllPoints(); cc:SetPoint("RIGHT", nl > 0 and cl or Core.f.kindRow, nl > 0 and "LEFT" or "RIGHT", nl > 0 and -5 or 0, 0)
         -- le texte du type d'etape s'arrete avant les pastilles
         local cw = (cc:IsShown() and (cc:GetWidth() + 6) or 0) + (cl:IsShown() and (cl:GetWidth() + 6) or 0)
-        if f.kind.SetWidth then f.kind:SetWidth(math.max(40, bw - cw)) end
+        if Core.f.kind.SetWidth then Core.f.kind:SetWidth(math.max(40, bw - cw)) end
     end
-    if f.caveBtn and f.caveBtn:IsShown() then put(f.caveBtn, 18, 14) end
-    if f.nowBtn and f.nowBtn:IsShown() then put(f.nowBtn, 24, 14) end
-    if f.advice and f.advice:IsShown() then
-        local ah = math.max(16, (f.advice.label.GetStringHeight and f.advice.label:GetStringHeight() or 12) + 4)
-        f.advice:SetHeight(ah); put(f.advice, ah, 14)
+    if Core.f.caveBtn and Core.f.caveBtn:IsShown() then put(Core.f.caveBtn, 18, 14) end
+    if Core.f.nowBtn and Core.f.nowBtn:IsShown() then put(Core.f.nowBtn, 24, 14) end
+    if Core.f.advice and Core.f.advice:IsShown() then
+        local ah = math.max(16, (Core.f.advice.label.GetStringHeight and Core.f.advice.label:GetStringHeight() or 12) + 4)
+        Core.f.advice:SetHeight(ah); put(Core.f.advice, ah, 14)
     end
-    if DB.compact then for k = 1, 4 do f.up[k]:Hide() end; if f.passed then f.passed:Hide() end end
-    if (f.nUp or 0) > 0 and not DB.compact then
-        f.nextRule:Show(); put(f.nextRule, 12, 8)
-        for k = 1, 4 do if f.up[k]:IsShown() then put(f.up[k], 26, 0) end end
-        if f.passed and f.passed:IsShown() then put(f.passed, 22, 0, PAD + 22) end
+    if State.DB.compact then for k = 1, 4 do Core.f.up[k]:Hide() end; if Core.f.passed then Core.f.passed:Hide() end end
+    if (Core.f.nUp or 0) > 0 and not State.DB.compact then
+        Core.f.nextRule:Show(); put(Core.f.nextRule, 12, 8)
+        for k = 1, 4 do if Core.f.up[k]:IsShown() then put(Core.f.up[k], 26, 0) end end
+        if Core.f.passed and Core.f.passed:IsShown() then put(Core.f.passed, 22, 0, PAD + 22) end
     else
-        f.nextRule:Hide(); if f.passed then f.passed:Hide() end
+        Core.f.nextRule:Hide(); if Core.f.passed then Core.f.passed:Hide() end
     end
     -- bas de la fenetre : boutons et pied ancres en bas, hauteur fixe aux proportions de la maquette
     -- (la fenetre ne grandit que si le contenu depasse)
-    local xl = rawget(f, "xph")
-    local foot = rawget(f, "foot")
+    local xl = rawget(Core.f, "xph")
+    local foot = rawget(Core.f, "foot")
     -- v1.41 : plus de pied (niveau, XP/h) a la demande de l'auteur : ces infos sont au survol de la barre
     -- de progression de la zone (f.progHit, Window.lua)
     local footOn = false
@@ -375,18 +370,18 @@ function Layout()
     local bottomH = 34 + (footOn and (16 + 13) or 0) + BOT
     -- v1.41 (audit) : la hauteur suit le contenu (plus de bande vide), avec un minimum pour que la fenetre
     -- ne change pas trop de taille d'une etape a l'autre (avant : hauteur fixe aux proportions de la maquette)
-    local h = math.max(DB.compact and 0 or MIN_H, -y + 24 + bottomH)
-    f:SetHeight(h)
+    local h = math.max(State.DB.compact and 0 or MIN_H, -y + 24 + bottomH)
+    Core.f:SetHeight(h)
     if foot then
         foot:SetShown(footOn and true or false)
-        if footOn then foot:ClearAllPoints(); foot:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, BOT) end
-    elseif xl and xl:IsShown() then xl:ClearAllPoints(); xl:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, BOT) end
-    f.btnRow:ClearAllPoints(); f.btnRow:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", PAD, BOT + (footOn and 29 or 0))
+        if footOn then foot:ClearAllPoints(); foot:SetPoint("BOTTOMLEFT", Core.f, "BOTTOMLEFT", PAD, BOT) end
+    elseif xl and xl:IsShown() then xl:ClearAllPoints(); xl:SetPoint("BOTTOMLEFT", Core.f, "BOTTOMLEFT", PAD, BOT) end
+    Core.f.btnRow:ClearAllPoints(); Core.f.btnRow:SetPoint("BOTTOMLEFT", Core.f, "BOTTOMLEFT", PAD, BOT + (footOn and 29 or 0))
 end
 
 function SetRoute(legs)
     for k = 1, 3 do
-        local row, leg = f.route[k], legs[k]
+        local row, leg = Core.f.route[k], legs[k]
         if leg then
             row.name:SetText(leg.name or "")
             row.mode:SetText(Caps(leg.mode or ""))
@@ -408,9 +403,9 @@ end
 -- v1.41 (audit) : le bouton du bas change de role selon l'etape ; une icone de l'addon devant le mot le montre
 SKIP_ICON = { ok = "IcoOk", ignore = "IcoSkip", dgBack = "IcoTurnin", restore = "IcoUndo", dgExit = "IcoTurnin" }
 function SetSkip(key)
-    if not (f and f.skip) then return end
-    f.skip:SetLabel(Caps(T(key)))
-    local ic = rawget(f.skip, "icon")
+    if not (Core.f and Core.f.skip) then return end
+    Core.f.skip:SetLabel(Caps(Core.T(key)))
+    local ic = rawget(Core.f.skip, "icon")
     if ic then
         local name = SKIP_ICON[key]
         if name then ic:SetTexture("Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\" .. name) end
@@ -419,11 +414,11 @@ function SetSkip(key)
 end
 
 function SetChain(ch)
-    f.chainInfo = ch   -- (lu par la pastille de chaine, Layout)
-    if not ch then f.chainBtn:Hide(); return end
-    f.chainBtn.label:SetText(T("chainLine", ch.pos, ch.len))
+    Core.f.chainInfo = ch   -- (lu par la pastille de chaine, Layout)
+    if not ch then Core.f.chainBtn:Hide(); return end
+    Core.f.chainBtn.label:SetText(Core.T("chainLine", ch.pos, ch.len))
     for k = 1, 10 do
-        local g = f.chainBtn.gems[k]
+        local g = Core.f.chainBtn.gems[k]
         if ch.len <= 10 and k <= ch.len then
             g:SetStyle(k < ch.pos and COL.accent or (k == ch.pos and COL.white or COL.line), k > ch.pos)
             g:Show()
@@ -431,45 +426,45 @@ function SetChain(ch)
             g:Hide()
         end
     end
-    f.chainBtn:Show()
+    Core.f.chainBtn:Show()
 end
 
-function UpdateDistance()
-    if not f or not f.dist then return end
-    if NearTick then pcall(NearTick) end
-    if CheckDungeonLeft then pcall(CheckDungeonLeft) end
+function Skin.UpdateDistance()
+    if not Core.f or not Core.f.dist then return end
+    if Near.NearTick then pcall(Near.NearTick) end
+    if Flow.CheckDungeonLeft then pcall(Flow.CheckDungeonLeft) end
     -- v1.41 : conseil (pierre de foyer...) recalcule quand tu te deplaces : avant, il restait celui de l'endroit
     -- ou la fenetre avait ete mise a jour (ex. « retour a Sun Rock » alors que tu y etais deja arrive a pied)
     -- v1.47 : seulement apres 30 m parcourus, au plus toutes les 10 s (avant : toutes les 3 s, meme immobile ;
     -- chez un joueur a 18 points de vol, chaque calcul prenait jusqu'a 178 ms = saccade toutes les 3-4 s)
-    if adviceArgs and Advice and GetTime and GetTime() - (adviceT or 0) > 10 then
-        local here = PlayerWP()
+    if adviceArgs and Hearth.Advice and GetTime and GetTime() - (adviceT or 0) > 10 then
+        local here = Route.PlayerWP()
         local p = advicePos
         local still = here and p and p[3] == here[3] and Route.Dist(p[1], p[2], here[1], here[2]) < 30
         if not still or GetTime() - (adviceT or 0) > 60 then   -- immobile : une fois par minute (recharge de la pierre)
             adviceT, advicePos = GetTime(), here
-            local ok, adv = pcall(Advice, adviceArgs[1], adviceArgs[2])
-            if ok and (adv and adv.text) ~= (currentAdvice and currentAdvice.text) then Refresh() end
+            local ok, adv = pcall(Hearth.Advice, adviceArgs[1], adviceArgs[2])
+            if ok and (adv and adv.text) ~= (Skin.currentAdvice and Skin.currentAdvice.text) then Skin.Refresh() end
         end
     end
-    local me = PlayerWP()
-    local w = distTarget and WP(distTarget[1], distTarget[2], distTarget[3])
+    local me = Route.PlayerWP()
+    local w = Skin.distTarget and Route.WP(Skin.distTarget[1], Skin.distTarget[2], Skin.distTarget[3])
     if me and w and me[3] == w[3] then
-        f.dist:SetText(T("dist", math.floor(Route.Dist(me[1], me[2], w[1], w[2]) + 0.5)))
+        Core.f.dist:SetText(Core.T("dist", math.floor(Route.Dist(me[1], me[2], w[1], w[2]) + 0.5)))
     else
-        f.dist:SetText("")
+        Core.f.dist:SetText("")
     end
     -- etape "va a" : validee toute seule quand tu arrives (moins de 20 m), comme si tu cliquais OK
     if not State.peek and State.steps and me and not autoGoBusy then
         local i = State.focus or State.current
         local s = State.steps[i]
-        if s and s.t == "go" and s.m and s.x and not State.doneCache[i] and not Core.IS_DUNGEON[DB.guide] then
-            local g = WP(s.m, s.x, s.y)
+        if s and s.t == "go" and s.m and s.x and not State.doneCache[i] and not Core.IS_DUNGEON[State.DB.guide] then
+            local g = Route.WP(s.m, s.x, s.y)
             if g and g[3] == me[3] and Route.Dist(me[1], me[2], g[1], g[2]) < 20 then
                 autoGoBusy = true
-                DB.seen[Core.SeenKey(i)] = true
+                State.DB.seen[Core.SeenKey(i)] = true
                 State.focus = nil; State.lastWP = nil
-                pcall(Flow.Advance); Refresh(true)
+                pcall(Flow.Advance); Skin.Refresh(true)
                 autoGoBusy = false
             end
         end
@@ -478,18 +473,18 @@ end
 
 -- objectifs en direct, une ligne chacun : case, nom, compteur aligne a droite
 function SetObjRows(rows)
-    f.obj = rawget(f, "obj") or {}
+    Core.f.obj = rawget(Core.f, "obj") or {}
     local n = 0
     for k, r in ipairs(rows or {}) do
         if k > 14 then break end
-        local w = f.obj[k]
+        local w = Core.f.obj[k]
         if not w then
-            w = CreateFrame("Frame", nil, f); w:SetSize(INNER, 20)
+            w = CreateFrame("Frame", nil, Core.f); w:SetSize(INNER, 20)
             w.icon = w:CreateTexture(nil, "ARTWORK"); w.icon:SetSize(14, 14); w.icon:SetPoint("LEFT", 0, 0)
             w.count = FS(w, 12, COL.gold, FONT, "RIGHT"); w.count:SetPoint("RIGHT", 0, 0)
             w.name = FS(w, 12, COL.ink, FONT, "LEFT"); w.name:SetPoint("LEFT", 22, 0); w.name:SetPoint("RIGHT", w.count, "LEFT", -8, 0)
             if w.name.SetWordWrap then w.name:SetWordWrap(false) end
-            f.obj[k] = w
+            Core.f.obj[k] = w
         end
         w.kind = r.k
         w.done = r.done and true or false   -- (lu par le mode compact)
@@ -513,20 +508,20 @@ function SetObjRows(rows)
         end
         w:Show(); n = k
     end
-    for k = n + 1, #f.obj do f.obj[k]:Hide() end
-    f.nObj = n
+    for k = n + 1, #Core.f.obj do Core.f.obj[k]:Hide() end
+    Core.f.nObj = n
 end
 -- en-tete : zone a gauche, etape a droite, barre de progression rouge
 function SetHeader(zone, right, frac)
-    f.title:SetText(Caps(zone or ""))
+    Core.f.title:SetText(Caps(zone or ""))
     -- nom long (ex. STONETALON MOUNTAINS) : capitales sans espacement s'il ne tient pas ; sinon coupe avec « … »
-    local sw = (f.title.GetUnboundedStringWidth and f.title:GetUnboundedStringWidth()) or (f.title.GetStringWidth and f.title:GetStringWidth())
-    local aw = f.title.GetWidth and f.title:GetWidth()
-    if type(sw) == "number" and type(aw) == "number" and aw > 0 and sw > aw then f.title:SetText(Upper(zone or "")) end
-    if f.stepNo then f.stepNo:SetText(right or "") end
-    if f.progFill then
+    local sw = (Core.f.title.GetUnboundedStringWidth and Core.f.title:GetUnboundedStringWidth()) or (Core.f.title.GetStringWidth and Core.f.title:GetStringWidth())
+    local aw = Core.f.title.GetWidth and Core.f.title:GetWidth()
+    if type(sw) == "number" and type(aw) == "number" and aw > 0 and sw > aw then Core.f.title:SetText(Core.Upper(zone or "")) end
+    if Core.f.stepNo then Core.f.stepNo:SetText(right or "") end
+    if Core.f.progFill then
         frac = math.max(0, math.min(1, frac or 0))
-        f.progFill:SetWidth(math.max(1, INNER * frac)); f.progFill:SetShown(frac > 0)
+        Core.f.progFill:SetWidth(math.max(1, INNER * frac)); Core.f.progFill:SetShown(frac > 0)
     end
 end
 -- coupe « Lieu (precision) » en deux pour le bloc destination
@@ -548,150 +543,150 @@ function SplitPlace(txt)
     end
     return txt, nil
 end
-function RefreshInner(forceWP)
-    if not f then return end
+function Skin.RefreshInner(forceWP)
+    if not Core.f then return end
     SetObjRows(nil)
-    f.name:SetText(Caps(WarpathName()))
+    Core.f.name:SetText(Caps(WarpathName()))
     if not State.steps then
-        SetHeader("", "", 0); f.summary = T("noGuide")
-        if f.badge then f.badge:Hide(); f.qsub:Hide(); f.dest:Hide() end
-        f.kind:Hide(); f.qtitle:Hide(); f.text:SetText(T("noGuide")); f.text:Show()
-        f.coord:SetText(""); f.coord:Hide(); f.list:SetText(""); SetUpcoming({}); SetRoute({}); SetChain(nil)
-        distTarget = nil; Layout()
+        SetHeader("", "", 0); Core.f.summary = Core.T("noGuide")
+        if Core.f.badge then Core.f.badge:Hide(); Core.f.qsub:Hide(); Core.f.dest:Hide() end
+        Core.f.kind:Hide(); Core.f.qtitle:Hide(); Core.f.text:SetText(Core.T("noGuide")); Core.f.text:Show()
+        Core.f.coord:SetText(""); Core.f.coord:Hide(); Core.f.list:SetText(""); SetUpcoming({}); SetRoute({}); SetChain(nil)
+        Skin.distTarget = nil; Layout()
         return
     end
     local n = #State.steps
-    if not State.peek and not State.focus and DungeonLogActive() then
+    if not State.peek and not State.focus and Flow.DungeonLogActive() then
         DungeonLogRender()
         if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
         return
     end
     DungeonLogHide()
-    if f.caveBtn then f.caveBtn:Hide() end
+    if Core.f.caveBtn then Core.f.caveBtn:Hide() end
     local i = State.peek or State.focus or State.current
-    if f.nowBtn then
+    if Core.f.nowBtn then
         local away = (State.peek or State.focus) and State.steps[State.current] and (State.peek or State.focus) ~= State.current
-        if away then f.nowBtn.label:SetText(T("backNow", State.current, (Core.QName(State.steps[State.current]) and Core.QName(State.steps[State.current]) ~= "") and Core.QName(State.steps[State.current]) or (Core.StepText(State.steps[State.current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
-        f.nowBtn:SetShown(away and true or false)
+        if away then Core.f.nowBtn.label:SetText(Core.T("backNow", State.current, (Core.QName(State.steps[State.current]) and Core.QName(State.steps[State.current]) ~= "") and Core.QName(State.steps[State.current]) or (Core.StepText(State.steps[State.current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
+        Core.f.nowBtn:SetShown(away and true or false)
     end
     local s = State.steps[i]
     if not s then
-        SetHeader(Core.Title(State.G), T("finished"), 1)
-        if f.badge then f.badge:Hide(); f.qsub:Hide(); f.dest:Hide() end
-        f.summary = T("endGuide")
-        f.kind:Hide(); f.qtitle:Hide(); f.text:SetText(T("endGuide")); f.text:Show()
-        f.coord:SetText(""); f.coord:Hide(); f.list:SetText(""); SetUpcoming({}); SetRoute({}); SetChain(nil)
-        ClearWaypoint(); State.lastWP = nil; distTarget = nil
+        SetHeader(Core.Title(State.G), Core.T("finished"), 1)
+        if Core.f.badge then Core.f.badge:Hide(); Core.f.qsub:Hide(); Core.f.dest:Hide() end
+        Core.f.summary = Core.T("endGuide")
+        Core.f.kind:Hide(); Core.f.qtitle:Hide(); Core.f.text:SetText(Core.T("endGuide")); Core.f.text:Show()
+        Core.f.coord:SetText(""); Core.f.coord:Hide(); Core.f.list:SetText(""); SetUpcoming({}); SetRoute({}); SetChain(nil)
+        Route.ClearWaypoint(); State.lastWP = nil; Skin.distTarget = nil
         SetSkip("ok")
-        UpdateDistance(); Layout()
+        Skin.UpdateDistance(); Layout()
     else
         local zone = Core.Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "")
-        if Core.IS_DUNGEON[DB.guide] then zone = zone:gsub("^[^:]+:%s*", "") end
-        SetHeader(zone, T("stepOf", i, n), i / n)
+        if Core.IS_DUNGEON[State.DB.guide] then zone = zone:gsub("^[^:]+:%s*", "") end
+        SetHeader(zone, Core.T("stepOf", i, n), i / n)
         local st = State.peek and State.doneCache[i]
         -- prise impossible tant qu'un prerequis du journal n'est pas fini : on guide vers ce prerequis
         local det = (not State.peek) and ((Near.TrainDetour and Near.TrainDetour(s)) or (Route.PrereqDetour and Route.PrereqDetour(s))) or nil
         local g = det and { t = det.done and "turnin" or "do", id = det.id, m = det.m, x = det.x, y = det.y,
                             zone = Est.MAPNAME[det.m] or s.zone, quest = det.name } or s
         -- grotte (entree/sortie) ou objet au sol le plus proche : la fleche vise ce point
-        local sp = (not State.peek and (not det or DB.errand or DB.qm) and StepPoint) and StepPoint(s) or nil
+        local sp = (not State.peek and (not det or State.DB.errand or State.DB.qm) and Near.StepPoint) and Near.StepPoint(s) or nil
         if sp then g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest } end
-        if f.caveBtn then
+        if Core.f.caveBtn then
             local cave = sp and (sp.kind == "enter" or sp.kind == "exit")
-            if cave then f.caveBtn.label:SetText("|cff8c7f62" .. T("caveWrong") .. "|r") end
-            f.caveBtn:SetShown(cave and true or false)
+            if cave then Core.f.caveBtn.label:SetText("|cff8c7f62" .. Core.T("caveWrong") .. "|r") end
+            Core.f.caveBtn:SetShown(cave and true or false)
         end
-        local tr = (not State.peek) and TransportFor(g) or nil
+        local tr = (not State.peek) and Route.TransportFor(g) or nil
         -- vol conseille pour la prochaine etape du trajet (vers le transport, ou vers l'objectif)
         local fl
         local prevFl = State.flightPlan
         State.flightPlan = nil
-        if not State.peek and DB.useFlights ~= false and not (UnitOnTaxi and UnitOnTaxi("player")) then
-            local here = PlayerWP()
-            local leg = tr and WP(tr.from[1], tr.from[2], tr.from[3]) or (g.m and g.x and WP(g.m, g.x, g.y))
+        if not State.peek and State.DB.useFlights ~= false and not (UnitOnTaxi and UnitOnTaxi("player")) then
+            local here = Route.PlayerWP()
+            local leg = tr and Route.WP(tr.from[1], tr.from[2], tr.from[3]) or (g.m and g.x and Route.WP(g.m, g.x, g.y))
             if here and leg then
                 -- le vol deja conseille n'est garde que pour la meme destination (v1.45)
                 local legKey = math.floor(leg[1]) .. ":" .. math.floor(leg[2])
-                fl = BestFlight(here, leg, KnownFlights(), (prevFl and prevFl.dest == legKey) and prevFl or nil)
+                fl = Route.BestFlight(here, leg, Route.KnownFlights(), (prevFl and prevFl.dest == legKey) and prevFl or nil)
                 if fl then fl.dest = legKey; State.flightPlan = fl end
             end
         end
         -- texte complet (journal de debug et tests)
-        f.summary = (fl and (T("takeFlight", fl.from.name, fl.to.name) .. "\n") or "")
-            .. (tr and (T(tr.kind == "boat" and "takeBoat" or "takeZep", tr.dest, T(tr.where)) .. "\n") or "")
-            .. (st == "done" and (Core.CHECK .. " ") or st == "skip" and (T("skipped") .. " ") or "")
-            .. (Route.PREFIX[s.t] or "") .. (s.optional and (" " .. T("optional")) or "") .. (s.woven and (" " .. T("wovenTag")) or "")
+        Core.f.summary = (fl and (Core.T("takeFlight", fl.from.name, fl.to.name) .. "\n") or "")
+            .. (tr and (Core.T(tr.kind == "boat" and "takeBoat" or "takeZep", tr.dest, Core.T(tr.where)) .. "\n") or "")
+            .. (st == "done" and (Core.CHECK .. " ") or st == "skip" and (Core.T("skipped") .. " ") or "")
+            .. (Route.PREFIX[s.t] or "") .. (s.optional and (" " .. Core.T("optional")) or "") .. (s.woven and (" " .. Core.T("wovenTag")) or "")
             .. (s.quest and (" " .. Core.QName(s)) or "")
-            .. (Core.chainOf[i] and ("\n" .. T("chainLbl", Core.QuestTitle(Core.chainOf[i].qid) or Core.chainOf[i].name, Core.chainOf[i].pos, Core.chainOf[i].len)) or "")
+            .. (Core.chainOf[i] and ("\n" .. Core.T("chainLbl", Core.QuestTitle(Core.chainOf[i].qid) or Core.chainOf[i].name, Core.chainOf[i].pos, Core.chainOf[i].len)) or "")
             .. "\n" .. Core.StepText(s)
         -- type d'etape + etat
         local kc = Route.PCOL[s.t] or "cdbb8e"
         local nq = (s.quest and type(s.id) == "table") and #s.id or 1
         kc = "cdbb8e"
         -- v1.45 : entree d'un donjon : « Aller a Blackfathom Deeps » plutot que « Aller » seul
-        local kindTxt = (s.t == "go" and Core.IS_DUNGEON[DB.guide] and zone ~= "") and T("goDg", zone) or T(s.t)
-        f.kind:SetText("|cff" .. kc .. Caps(kindTxt) .. "|r" .. (nq > 1 and ("  |cff8c7f62·|r  |cff" .. kc .. Caps(T("nQuests", nq)) .. "|r") or "")
-            .. (s.optional and ("   |cff8c7f62" .. T("optional") .. "|r") or "")
-            .. (s.woven and ("   |cffcdbb8e" .. Caps(T("wovenTag")) .. "|r") or "")   -- v1.47 : etape d'une chaine integree
-            .. (st == "done" and ("  " .. Core.CHECK .. " |cff9cc7a8" .. T("stepDone") .. "|r")
-                or st == "skip" and ("   |cff8c7f62" .. T("skipped") .. "|r")
-                or State.peek and ("   |cffd69a66" .. T("stepTodo") .. "|r") or "")
-            .. ((not State.peek and State.focus) and ("   |cffcdbb8e" .. T("chosen") .. "|r") or "")
-            .. ((not State.peek and not State.focus and nearKind and i == State.current) and ("   |cff9cc7a8" .. T(nearKind == "pass" and "nearPass" or "nearNear") .. "|r") or ""))
+        local kindTxt = (s.t == "go" and Core.IS_DUNGEON[State.DB.guide] and zone ~= "") and Core.T("goDg", zone) or Core.T(s.t)
+        Core.f.kind:SetText("|cff" .. kc .. Caps(kindTxt) .. "|r" .. (nq > 1 and ("  |cff8c7f62·|r  |cff" .. kc .. Caps(Core.T("nQuests", nq)) .. "|r") or "")
+            .. (s.optional and ("   |cff8c7f62" .. Core.T("optional") .. "|r") or "")
+            .. (s.woven and ("   |cffcdbb8e" .. Caps(Core.T("wovenTag")) .. "|r") or "")   -- v1.47 : etape d'une chaine integree
+            .. (st == "done" and ("  " .. Core.CHECK .. " |cff9cc7a8" .. Core.T("stepDone") .. "|r")
+                or st == "skip" and ("   |cff8c7f62" .. Core.T("skipped") .. "|r")
+                or State.peek and ("   |cffd69a66" .. Core.T("stepTodo") .. "|r") or "")
+            .. ((not State.peek and State.focus) and ("   |cffcdbb8e" .. Core.T("chosen") .. "|r") or "")
+            .. ((not State.peek and not State.focus and Near.nearKind and i == State.current) and ("   |cff9cc7a8" .. Core.T(Near.nearKind == "pass" and "nearPass" or "nearNear") .. "|r") or ""))
         -- rendement estime (quete + monstres) compare au simple farm de monstres de ton niveau
-        f.rateTip = nil
+        Core.f.rateTip = nil
         if (s.t == "do" or (s.optional and s.t == "accept")) and type(s.id) == "number" and Est.EST[s.id] then
-            local e = Estimate({ s.id }, false)
+            local e = Est.Estimate({ s.id }, false)
             if e.secs > 0 and e.perHour > 0 then
                 local p = UnitLevel("player") or 1
                 local grind = Est.MobXP(p, p, 0) * 3600 / Est.KillTime()
-                local tag = (e.perHour >= grind * 1.3) and ("  |cff9cc7a8" .. T("rateGood") .. "|r")
-                    or (e.perHour < grind * 0.7) and ("  |cffd69a66" .. T("rateBad") .. "|r") or ""
-                f.kind:SetText(f.kind:GetText() .. tag)
-                f.rateTip = T("xpRate", Est.FormatNum(e.perHour))
+                local tag = (e.perHour >= grind * 1.3) and ("  |cff9cc7a8" .. Core.T("rateGood") .. "|r")
+                    or (e.perHour < grind * 0.7) and ("  |cffd69a66" .. Core.T("rateBad") .. "|r") or ""
+                Core.f.kind:SetText(Core.f.kind:GetText() .. tag)
+                Core.f.rateTip = Core.T("xpRate", Est.FormatNum(e.perHour))
             end
         end
-        f.kind:Show()
+        Core.f.kind:Show()
         local qn = s.quest and Core.QName(s)
         if qn and qn ~= "" then
             -- niveau de la quete, colore selon la difficulte (gris / vert / jaune / orange / rouge)
             local qid = type(s.id) == "number" and s.id or (type(s.id) == "table" and s.id[1])
             local ql = qid and Est.EST[qid] and Est.EST[qid].l
-            if f.badge then
+            if Core.f.badge then
                 if ql and ql > 0 then
                     local c = GetQuestDifficultyColor and GetQuestDifficultyColor(ql)
-                    f.badge.num:SetText(ql); f.badge.lbl:SetText(T("lvlShort"))
+                    Core.f.badge.num:SetText(ql); Core.f.badge.lbl:SetText(Core.T("lvlShort"))
                     -- niveau de la QUETE, colore selon la difficulte pour toi (comme le journal de quetes)
-                    if type(c) == "table" and f.badge.num.SetTextColor then f.badge.num:SetTextColor(c.r or 1, c.g or 1, c.b or 1) end
-                    f.badge:Show()
-                else f.badge:Hide() end
+                    if type(c) == "table" and Core.f.badge.num.SetTextColor then Core.f.badge.num:SetTextColor(c.r or 1, c.g or 1, c.b or 1) end
+                    Core.f.badge:Show()
+                else Core.f.badge:Hide() end
             end
             -- plusieurs quetes : la premiere en titre, les autres dessous
             local main, rest = qn:match("^(.-) %+ (.+)$")
-            f.qtitle:SetText(main or qn); f.qtitle:Show()
-            if f.qsub then
-                f.qsub:SetText(rest and (rest:gsub(" %+ ", " · ")) or ""); f.qsub:SetShown(rest ~= nil)
+            Core.f.qtitle:SetText(main or qn); Core.f.qtitle:Show()
+            if Core.f.qsub then
+                Core.f.qsub:SetText(rest and (rest:gsub(" %+ ", " · ")) or ""); Core.f.qsub:SetShown(rest ~= nil)
                 -- v1.41 : prise groupee commencee : combien sont prises, et lesquelles manquent (OK les saute)
                 if s.t == "accept" and type(s.id) == "table" and #s.id > 1 then
                     local have, miss = 0, {}
                     for _, id in ipairs(s.id) do
-                        if Core.logById[id] ~= nil or Rendue(id) or DB.ignored[id] then have = have + 1
+                        if Core.logById[id] ~= nil or Core.Rendue(id) or State.DB.ignored[id] then have = have + 1
                         else miss[#miss + 1] = (Core.QuestTitle and Core.QuestTitle(id)) or (Est.EST[id] and Est.EST[id].n) or tostring(id) end
                     end
                     if have > 0 and #miss > 0 then
-                        f.qsub:SetText((f.qsub:GetText() or "") .. "\n|cffd69a66" .. T("grpMissing", have, #s.id, table.concat(miss, ", ")) .. "|r")
-                        f.qsub:Show()
+                        Core.f.qsub:SetText((Core.f.qsub:GetText() or "") .. "\n|cffd69a66" .. Core.T("grpMissing", have, #s.id, table.concat(miss, ", ")) .. "|r")
+                        Core.f.qsub:Show()
                     end
                 end
             end
         else
-            f.qtitle:Hide()
-            if f.badge then f.badge:Hide(); f.qsub:Hide() end
+            Core.f.qtitle:Hide()
+            if Core.f.badge then Core.f.badge:Hide(); Core.f.qsub:Hide() end
         end
         -- etape "faire" : objectifs en direct (le texte complet passe dans l'infobulle du titre)
         local live, lead, orows
         if Near.LiveObjectives then live, lead, orows = Near.LiveObjectives(s) end
-        f.objPlain = live
+        Core.f.objPlain = live
         if orows and #orows > 0 then SetObjRows(orows); live = "" end
         -- prendre / rendre : le PNJ et son lieu vont dans le bloc destination (texte court d'une ligne)
         local st0 = Core.StepText(s) or ""
@@ -699,46 +694,46 @@ function RefreshInner(forceWP)
             lead = st0
         end
         local body = live or (lead and "" or st0)
-        f.qtitleTip = live and Core.StepText(s) or nil
+        Core.f.qtitleTip = live and Core.StepText(s) or nil
         -- astuce de quete (Tips.lua)
-        f.tipText = nil
-        if DB.tips ~= false and ns.Tips and s.t ~= "note" then
+        Core.f.tipText = nil
+        if State.DB.tips ~= false and ns.Tips and s.t ~= "note" then
             local qid = type(s.id) == "number" and s.id or (type(s.id) == "table" and s.id[1])
             local tip = qid and ns.Tips[qid]
-            f.tipText = tip and ((Lang() == "en") and tip[2] or tip[1]) or nil
-            if tip then body = body .. "\n\n|cffd6b866" .. T("tipLbl") .. "|r  |cff8c7f62" .. T("tipHint") .. "|r" end
+            Core.f.tipText = tip and ((Core.Lang() == "en") and tip[2] or tip[1]) or nil
+            if tip then body = body .. "\n\n|cffd6b866" .. Core.T("tipLbl") .. "|r  |cff8c7f62" .. Core.T("tipHint") .. "|r" end
         end
         -- taux de drop des objets encore a trouver (tes mesures + groupe/guilde, sinon Questie)
         if s.t == "do" or (det and not det.done) then
             local lines = {}
             for _, q in ipairs(det and { det.id } or Core.Ids(s)) do
                 if Core.logById[q] == false and Est.EST[q] then
-                    for _, dr in ipairs(Estimate({ q }, false).drops) do
+                    for _, dr in ipairs(Est.Estimate({ q }, false).drops) do
                       -- deja affiche a cote des monstres dans « Cibles de l'objectif » : pas de doublon ici
-                      if not (dr.mobs and DB.targets ~= false) then
+                      if not (dr.mobs and State.DB.targets ~= false) then
                         local pct = math.floor(dr.rate * 100 + 0.5)
-                        local how = (dr.how == "unique") and T("dropHowUnique") or (dr.how == "measured") and T("dropHowMeasured", dr.k)
-                            or (dr.how == "questie") and T("dropHowQuestie", dr.k or 0) or T("dropHowAssumed", dr.k or 0)
+                        local how = (dr.how == "unique") and Core.T("dropHowUnique") or (dr.how == "measured") and Core.T("dropHowMeasured", dr.k)
+                            or (dr.how == "questie") and Core.T("dropHowQuestie", dr.k or 0) or Core.T("dropHowAssumed", dr.k or 0)
                         lines[#lines + 1] = (dr.name or "?") .. " : |cffffd100" .. pct .. " %|r  |cff8c7f62" .. how .. "|r"
                       end
                     end
                 end
             end
-            if #lines > 0 then body = body .. "\n\n|cffd6b866" .. T("dropLbl") .. "|r\n" .. table.concat(lines, "\n") end
+            if #lines > 0 then body = body .. "\n\n|cffd6b866" .. Core.T("dropLbl") .. "|r\n" .. table.concat(lines, "\n") end
         end
         -- donjon : un objectif a faire apres l'entree se fait avec le groupe (les monstres pres de l'entree sont
         -- souvent elites, meme hors du portail)
-        if s.t == "do" and Core.IS_DUNGEON[DB.guide] and s.m then
+        if s.t == "do" and Core.IS_DUNGEON[State.DB.guide] and s.m then
             local ent
             for j = 1, n do if State.steps[j].t == "go" then ent = j; break end end
-            if ent and i > ent then body = "|cffd69a66" .. T("dgGroup") .. "|r\n\n" .. body end
+            if ent and i > ent then body = "|cffd69a66" .. Core.T("dgGroup") .. "|r\n\n" .. body end
         end
-        if det and det.train then body = "|cffd69a66" .. T("trainStep", det.name) .. "|r\n\n" .. body
-        elseif det then body = "|cffd69a66" .. T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
+        if det and det.train then body = "|cffd69a66" .. Core.T("trainStep", det.name) .. "|r\n\n" .. body
+        elseif det then body = "|cffd69a66" .. Core.T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
         -- quetes pas encore prises faute de niveau, quetes laissees pour plus tard, et la suite
         if not State.peek then
             local lw = Near.LevelWaitLines and Near.LevelWaitLines(s) or {}
-            if #lw > 0 then body = body .. "\n\n" .. Near.ListBlock(T("lvlWaitHdr"), lw, "d69a66") end
+            if #lw > 0 then body = body .. "\n\n" .. Near.ListBlock(Core.T("lvlWaitHdr"), lw, "d69a66") end
             local hn = Near.HubNotes and Near.HubNotes(i)
             if hn then body = body .. "\n\n" .. hn end
             local tg = Near.TurninGroup and Near.TurninGroup(i)
@@ -747,85 +742,85 @@ function RefreshInner(forceWP)
             if ag then body = ag .. "\n\n" .. body end
             local fu = Near.FollowUpAccepts and Near.FollowUpAccepts(i)
             if fu then body = body .. "\n\n" .. fu end
-            local ow = OnTheWay and OnTheWay(i)
+            local ow = Near.OnTheWay and Near.OnTheWay(i)
             if ow then body = body .. "\n\n" .. ow end
             local dt = Near.DeathTip and Near.DeathTip(i)
             -- conseil de mort : dans l'infobulle du titre, une seule ligne dans la fenetre
             if dt then
-                local had = type(rawget(f, "tipText")) == "string"
-                f.tipText = (had and (f.tipText .. "\n\n") or "") .. dt
-                if not had then body = body .. "\n\n|cffd6b866" .. T("tipLbl") .. "|r  |cff8c7f62" .. T("tipHint") .. "|r" end
+                local had = type(rawget(Core.f, "tipText")) == "string"
+                Core.f.tipText = (had and (Core.f.tipText .. "\n\n") or "") .. dt
+                if not had then body = body .. "\n\n|cffd6b866" .. Core.T("tipLbl") .. "|r  |cff8c7f62" .. Core.T("tipHint") .. "|r" end
             end
         end
         -- donjon : toutes les quetes en main, on marche sur l'entree
-        if s.t == "go" and Core.IS_DUNGEON[DB.guide] and not State.peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
+        if s.t == "go" and Core.IS_DUNGEON[State.DB.guide] and not State.peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
         body = body:gsub("^%s+", "")
-        f.text:SetText(body); f.text:SetShown(body ~= "")
+        Core.f.text:SetText(body); Core.f.text:SetShown(body ~= "")
         -- itineraire : au plus 3 etapes (vol, zeppelin/bateau, puis l'objectif)
         local legs = {}
         if fl then
-            legs[#legs + 1] = { name = fl.from.name, mode = T("modeWalk"), m = fl.from.m, x = fl.from.x, y = fl.from.y }
-            legs[#legs + 1] = { name = fl.to.name, mode = T("modeFly"), m = fl.to.m, x = fl.to.x, y = fl.to.y }
+            legs[#legs + 1] = { name = fl.from.name, mode = Core.T("modeWalk"), m = fl.from.m, x = fl.from.x, y = fl.from.y }
+            legs[#legs + 1] = { name = fl.to.name, mode = Core.T("modeFly"), m = fl.to.m, x = fl.to.x, y = fl.to.y }
         end
         if tr and #legs < 3 then
-            local wh = T(tr.where)
-            legs[#legs + 1] = { name = wh:sub(1, 1):upper() .. wh:sub(2), mode = (#legs == 0) and T("modeWalk") or T("modeWalk"),
+            local wh = Core.T(tr.where)
+            legs[#legs + 1] = { name = wh:sub(1, 1):upper() .. wh:sub(2), mode = (#legs == 0) and Core.T("modeWalk") or Core.T("modeWalk"),
                                 m = tr.from[1], x = tr.from[2], y = tr.from[3] }
-            if #legs < 3 then legs[#legs + 1] = { name = tr.dest, mode = T(tr.kind == "boat" and "modeBoat" or "modeZep") } end
+            if #legs < 3 then legs[#legs + 1] = { name = tr.dest, mode = Core.T(tr.kind == "boat" and "modeBoat" or "modeZep") } end
         end
         if g.x and g.y and #legs < 3 and #legs > 0 then
-            legs[#legs + 1] = { name = g.zone or T("arrival"), mode = T("modeWalk"), m = g.m, x = g.x, y = g.y }
+            legs[#legs + 1] = { name = g.zone or Core.T("arrival"), mode = Core.T("modeWalk"), m = g.m, x = g.x, y = g.y }
         end
         SetRoute(legs)
         local first = legs[1] or (g.x and g.y and { name = g.zone, m = g.m, x = g.x, y = g.y }) or nil
         if first and first.x then
             -- zone de chasse/ramassage (etape "faire", ou prerequis a faire) : la fleche se cache une fois sur place
             local area = (#legs == 0) and ((sp and sp.kind == "farm") or ((not sp or sp.kind == "zone") and ((det and not det.done) or (not det and s.t == "do")))) or false
-            distTarget = first.m and { first.m, first.x, first.y, area } or nil
+            Skin.distTarget = first.m and { first.m, first.x, first.y, area } or nil
             -- bloc destination : le lieu (celui du texte de l'etape s'il est precise), puis precision et coordonnees
             local nm, extra = first.name or "", nil
             if lead and lead ~= "" and #legs == 0 and not sp then nm, extra = SplitPlace(lead)
             elseif lead and lead ~= "" and not live then
-                body = lead .. (body ~= "" and ("\n\n" .. body) or ""); f.text:SetText(body); f.text:Show()
+                body = lead .. (body ~= "" and ("\n\n" .. body) or ""); Core.f.text:SetText(body); Core.f.text:Show()
             end
-            if sp and sp.kind == "farm" then nm, extra = sp.name, T("farmSub", sp.lmin, sp.lmax, sp.n)
-            elseif sp and sp.kind == "pass" then extra = T("tunnelVia")
-            elseif sp and sp.kind == "trail" then extra = T(sp.out and "trailOutSub" or "trailInSub")
-            elseif sp and sp.kind == "gate" then extra = T("gateVia")
-            elseif sp and sp.kind == "citycave" then nm, extra = sp.name or nm, T("caveEnter")
-            elseif sp and sp.kind == "errand" then nm, extra = sp.name or nm, T("errandSub")
+            if sp and sp.kind == "farm" then nm, extra = sp.name, Core.T("farmSub", sp.lmin, sp.lmax, sp.n)
+            elseif sp and sp.kind == "pass" then extra = Core.T("tunnelVia")
+            elseif sp and sp.kind == "trail" then extra = Core.T(sp.out and "trailOutSub" or "trailInSub")
+            elseif sp and sp.kind == "gate" then extra = Core.T("gateVia")
+            elseif sp and sp.kind == "citycave" then nm, extra = sp.name or nm, Core.T("caveEnter")
+            elseif sp and sp.kind == "errand" then nm, extra = sp.name or nm, Core.T("errandSub")
             elseif sp and sp.kind == "boss" then nm = sp.name or nm   -- v1.49 : le chef de l'etape
-            elseif sp and sp.kind == "qm" then nm, extra = sp.label or nm, T("qmStopN", sp.idx or 1, sp.n or 1)
-            elseif sp and sp.kind == "zone" then nm, extra = sp.name ~= "" and sp.name or nm, T("zoneCamp", sp.idx or 1, sp.n or 2)
-            elseif sp and sp.kind == "enter" then extra = T("caveEnter") elseif sp and sp.kind == "exit" then extra = T("caveExit"):lower() end
-            if fl then nm, extra = fl.from.name, T("flight") .. " > " .. fl.to.name
-            elseif tr then nm, extra = Est.MAPNAME[tr.from[1]] or nm, T(tr.kind == "boat" and "boat" or "zep") .. " > " .. tr.dest end
-            if f.destName then f.destName:SetText(nm ~= "" and nm or (Est.MAPNAME[first.m] or "")) end
+            elseif sp and sp.kind == "qm" then nm, extra = sp.label or nm, Core.T("qmStopN", sp.idx or 1, sp.n or 1)
+            elseif sp and sp.kind == "zone" then nm, extra = sp.name ~= "" and sp.name or nm, Core.T("zoneCamp", sp.idx or 1, sp.n or 2)
+            elseif sp and sp.kind == "enter" then extra = Core.T("caveEnter") elseif sp and sp.kind == "exit" then extra = Core.T("caveExit"):lower() end
+            if fl then nm, extra = fl.from.name, Core.T("flight") .. " > " .. fl.to.name
+            elseif tr then nm, extra = Est.MAPNAME[tr.from[1]] or nm, Core.T(tr.kind == "boat" and "boat" or "zep") .. " > " .. tr.dest end
+            if Core.f.destName then Core.f.destName:SetText(nm ~= "" and nm or (Est.MAPNAME[first.m] or "")) end
             local cx, cy = first.x, first.y
             if fl then cx, cy = fl.from.x, fl.from.y elseif tr then cx, cy = tr.from[2], tr.from[3] end
             -- v1.41 (audit) : la precision seulement ; les coordonnees passent dans l'infobulle du bloc
-            f.coord:SetText(extra or ""); f.coord:SetShown(extra ~= nil and extra ~= "")
-            f.destCoord = string.format("%.1f, %.1f", cx, cy) .. ((Est.MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) and ("  ·  " .. Est.MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) or "")
-            if f.dest then f.dest:Show() end
+            Core.f.coord:SetText(extra or ""); Core.f.coord:SetShown(extra ~= nil and extra ~= "")
+            Core.f.destCoord = string.format("%.1f, %.1f", cx, cy) .. ((Est.MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) and ("  ·  " .. Est.MAPNAME[fl and fl.from.m or (tr and tr.from[1]) or first.m]) or "")
+            if Core.f.dest then Core.f.dest:Show() end
         else
-            distTarget = nil
-            f.coord:SetText(""); f.coord:Hide()
-            if f.dest then f.dest:Hide() end
+            Skin.distTarget = nil
+            Core.f.coord:SetText(""); Core.f.coord:Hide()
+            if Core.f.dest then Core.f.dest:Hide() end
             -- pas de point sur la carte : le lieu reste dans le texte
             if lead and lead ~= "" then
                 body = live and (lead .. " :\n" .. body) or (lead .. (body ~= "" and ("\n\n" .. body) or ""))
-                f.text:SetText(body); f.text:SetShown(body ~= "")
+                Core.f.text:SetText(body); Core.f.text:SetShown(body ~= "")
             end
         end
         -- A suivre : les 4 prochaines etapes (ordre optimise pour les donjons), cliquables
         local seq = {}
-        if dynOrder then
+        if Core.dynOrder then
             local after = false
-            for _, j in ipairs(dynOrder) do
+            for _, j in ipairs(Core.dynOrder) do
                 if after then seq[#seq + 1] = j end
                 if j == i then after = true end
             end
-            if not after then seq = {} for _, j in ipairs(dynOrder) do if j ~= i then seq[#seq + 1] = j end end end
+            if not after then seq = {} for _, j in ipairs(Core.dynOrder) do if j ~= i then seq[#seq + 1] = j end end end
             local entrance
             for j = 1, n do if State.steps[j].t == "go" then entrance = j; break end end
             -- apres l'entree : seulement les remises (les objectifs du donjon sont dans le journal du donjon)
@@ -844,7 +839,7 @@ function RefreshInner(forceWP)
             end
         end
         local items, passed = {}, 0
-        local me = PlayerWP()
+        local me = Route.PlayerWP()
         for _, j in ipairs(seq) do
             if #items >= 4 then break end
             local t = State.steps[j]
@@ -852,16 +847,16 @@ function RefreshInner(forceWP)
                 passed = passed + 1
             else
                 local nm = Core.QName(t) or Core.StepText(t):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 45)
-                local verb = T(t.t) or ""
-                verb = verb ~= "" and (Upper(verb:sub(1, 1)) .. verb:sub(2):lower() .. " ") or ""
+                local verb = Core.T(t.t) or ""
+                verb = verb ~= "" and (Core.Upper(verb:sub(1, 1)) .. verb:sub(2):lower() .. " ") or ""
                 local label = verb .. (Core.chainOf[j] and ("|cffa99cc0" .. nm .. "|r") or nm)
                 local right
-                local w = me and t.m and t.x and WP(t.m, t.x, t.y)
-                if w and w[3] == me[3] then right = T("dist", math.floor(Route.Dist(me[1], me[2], w[1], w[2]) + 0.5)) end
+                local w = me and t.m and t.x and Route.WP(t.m, t.x, t.y)
+                if w and w[3] == me[3] then right = Core.T("dist", math.floor(Route.Dist(me[1], me[2], w[1], w[2]) + 0.5)) end
                 items[#items + 1] = { idx = j, text = label, icon = STEP_ICON[t.t], tint = STEP_TINT[t.t], right = right }
             end
         end
-        f.list:SetText(#items > 0 and (Caps(T("thenLbl")) .. (dynOrder and ("   |cffcdbb8e" .. T("optimized") .. "|r") or "")) or "")
+        Core.f.list:SetText(#items > 0 and (Caps(Core.T("thenLbl")) .. (Core.dynOrder and ("   |cffcdbb8e" .. Core.T("optimized") .. "|r") or "")) or "")
         SetUpcoming(items, passed)
         -- chaine : cliquer ramene a la premiere etape de la chaine qui reste a faire
         local ch = Core.chainOf[i]
@@ -871,57 +866,57 @@ function RefreshInner(forceWP)
                 if Core.Applies(State.steps[j]) and not State.doneCache[j] then firstTodo = j; break end
             end
         end
-        f.chainBtn.target = (firstTodo and firstTodo ~= i) and firstTodo or nil
+        Core.f.chainBtn.target = (firstTodo and firstTodo ~= i) and firstTodo or nil
         SetChain(ch)
-        if not State.peek and not State.focus and DB.dgOut and DB.dgOut[DB.guide] and Flow.InDgInstance() then
+        if not State.peek and not State.focus and State.DB.dgOut and State.DB.dgOut[State.DB.guide] and Flow.InDgInstance() then
             SetSkip("dgBack")
         elseif Flow.Restorable(i) then
             SetSkip("restore")
-            f.kind:SetText(f.kind:GetText() .. "   |cffd69a66" .. T("restoreHint") .. "|r")
+            Core.f.kind:SetText(Core.f.kind:GetText() .. "   |cffd69a66" .. Core.T("restoreHint") .. "|r")
         else
             SetSkip((s.t == "note" or s.t == "go" or s.t == "level") and "ok" or "ignore")
         end
         -- quete sautee faute de prerequis : on la montre, cliquable
-        local locks = (not State.peek) and LockCandidates() or {}
-        f.lockBtn.list = locks
+        local locks = (not State.peek) and Est.LockCandidates() or {}
+        Core.f.lockBtn.list = locks
         local li = locks[1]
         if li then
             local need = Est.ChainFor(State.steps[li].id) or {}
-            f.lockBtn.idx = li
-            f.lockBtn.label:SetText("|cffd69a66" .. T("lockLine", Core.QName(State.steps[li]) or "?") .. "|r  |cff8c7f62"
-                .. T("lockNeed", #need) .. (#locks > 1 and ("  (+" .. (#locks - 1) .. ")") or "") .. "|r")
-            f.lockBtn:Show()
+            Core.f.lockBtn.idx = li
+            Core.f.lockBtn.label:SetText("|cffd69a66" .. Core.T("lockLine", Core.QName(State.steps[li]) or "?") .. "|r  |cff8c7f62"
+                .. Core.T("lockNeed", #need) .. (#locks > 1 and ("  (+" .. (#locks - 1) .. ")") or "") .. "|r")
+            Core.f.lockBtn:Show()
         else
-            f.lockBtn.idx = nil
-            f.lockBtn:Hide()
+            Core.f.lockBtn.idx = nil
+            Core.f.lockBtn:Hide()
         end
         -- conseil : journal plein, pierre de foyer
-        local adv = (not State.peek) and Advice and Advice(i, g) or nil
-        currentAdvice = adv
+        local adv = (not State.peek) and Hearth.Advice and Hearth.Advice(i, g) or nil
+        Skin.currentAdvice = adv
         adviceArgs = (not State.peek) and { i, g } or nil   -- pour le revoir quand tu te deplaces (UpdateDistance)
-        if adv and f.advice then
-            f.advice.icon:SetTexture(adv.icon); f.advice.label:SetText(adv.text); f.advice:Show()
+        if adv and Core.f.advice then
+            Core.f.advice.icon:SetTexture(adv.icon); Core.f.advice.label:SetText(adv.text); Core.f.advice:Show()
             local c = adv.tint or { 1, 1, 1 }
-            if f.advice.icon.SetVertexColor then f.advice.icon:SetVertexColor(c[1], c[2], c[3]) end
-            if HearthButton then pcall(HearthButton, adv.kind == "use") end
-        elseif f.advice then f.advice:Hide(); if HearthButton then pcall(HearthButton, false) end end
+            if Core.f.advice.icon.SetVertexColor then Core.f.advice.icon:SetVertexColor(c[1], c[2], c[3]) end
+            if Window.HearthButton then pcall(Window.HearthButton, adv.kind == "use") end
+        elseif Core.f.advice then Core.f.advice:Hide(); if Window.HearthButton then pcall(Window.HearthButton, false) end end
         if ns.Targets then ns.Targets.Update(det and g or s) end
         local wpKey = (det and ("pre" .. det.id .. (det.done and "d" or "") .. ">") or "") .. (sp and (sp.kind .. sp.x .. ":" .. sp.y .. ">") or "") .. i .. (tr and (":" .. tr.id) or "") .. (fl and (":fl:" .. fl.from.key .. ">" .. fl.to.key) or "")
         -- v1.46 : de quoi deplacer la fleche sans tout reconstruire (RetargetLight), seulement a pied vers l'objectif
         lightCtx = (not State.peek and not det and not tr and not fl and sp) and { i = i, kind = sp.kind, out = sp.out,
-            area = distTarget and distTarget[4] or false, t = GetTime and GetTime() or 0 } or nil
+            area = Skin.distTarget and Skin.distTarget[4] or false, t = GetTime and GetTime() or 0 } or nil
         if not State.peek and (forceWP or State.lastWP ~= wpKey) then
             State.lastWP = wpKey
             if fl then
-                SetWaypoint({ m = fl.from.m, x = fl.from.x, y = fl.from.y, quest = T("flight") .. " -> " .. fl.to.name })
+                Route.SetWaypoint({ m = fl.from.m, x = fl.from.x, y = fl.from.y, quest = Core.T("flight") .. " -> " .. fl.to.name })
             elseif tr then
-                SetWaypoint({ m = tr.from[1], x = tr.from[2], y = tr.from[3],
-                    quest = T(tr.kind == "boat" and "boat" or "zep") .. " -> " .. tr.dest })
+                Route.SetWaypoint({ m = tr.from[1], x = tr.from[2], y = tr.from[3],
+                    quest = Core.T(tr.kind == "boat" and "boat" or "zep") .. " -> " .. tr.dest })
             else
-                SetWaypoint(g)
+                Route.SetWaypoint(g)
             end
         end
-        UpdateDistance()
+        Skin.UpdateDistance()
         Layout()
     end
     if ns.UI and ns.UI.RefreshOptions then ns.UI.RefreshOptions() end
@@ -931,33 +926,33 @@ end
 -- la fleche et le bloc destination sans reconstruire la fenetre ni recalculer les vols. Avant, Refresh(true)
 -- toutes les 2 s faisait sauter l'image. Renvoie false si une mise a jour complete est necessaire.
 local LIGHT_KINDS = { obj = true, trail = true, pass = true, gate = true, enter = true, exit = true, corpse = true }
-function RetargetLight(sp)
+function Skin.RetargetLight(sp)
     local c = lightCtx
-    if not (c and sp and f and State.steps) or State.peek or State.focus then return false end
+    if not (c and sp and Core.f and State.steps) or State.peek or State.focus then return false end
     local s = State.steps[State.current]
     if not s or c.i ~= State.current or sp.kind ~= c.kind or sp.out ~= c.out or not LIGHT_KINDS[sp.kind] then return false end
     local now = GetTime and GetTime() or 0
     if now - (c.t or 0) > 10 then return false end      -- une vraie mise a jour de temps en temps (vols, conseils)
     local g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest }
-    distTarget = { sp.m, sp.x, sp.y, c.area }
-    if f.destName then f.destName:SetText((g.zone and g.zone ~= "") and g.zone or (Est.MAPNAME[sp.m] or "")) end
-    f.destCoord = string.format("%.1f, %.1f", sp.x, sp.y) .. (Est.MAPNAME[sp.m] and ("  ·  " .. Est.MAPNAME[sp.m]) or "")
+    Skin.distTarget = { sp.m, sp.x, sp.y, c.area }
+    if Core.f.destName then Core.f.destName:SetText((g.zone and g.zone ~= "") and g.zone or (Est.MAPNAME[sp.m] or "")) end
+    Core.f.destCoord = string.format("%.1f, %.1f", sp.x, sp.y) .. (Est.MAPNAME[sp.m] and ("  ·  " .. Est.MAPNAME[sp.m]) or "")
     State.lastWP = sp.kind .. sp.x .. ":" .. sp.y .. ">" .. State.current
-    SetWaypoint(g)
-    UpdateDistance()
-    if UpdateMini then pcall(UpdateMini) end
+    Route.SetWaypoint(g)
+    Skin.UpdateDistance()
+    if Window.UpdateMini then pcall(Window.UpdateMini) end
     return true
 end
 
 -- Refresh protege : une erreur d'affichage est signalee clairement dans le chat (une fois par message)
 local shownErr = {}
-function Refresh(forceWP)
-    local ok, err = pcall(RefreshInner, forceWP)
-    if ok and UpdateMini then ok, err = pcall(UpdateMini) end
-    if HearthPlace then pcall(HearthPlace) end
+function Skin.Refresh(forceWP)
+    local ok, err = pcall(Skin.RefreshInner, forceWP)
+    if ok and Window.UpdateMini then ok, err = pcall(Window.UpdateMini) end
+    if Window.HearthPlace then pcall(Window.HearthPlace) end
     if not ok then
         local m = tostring(err)
-        if not shownErr[m] then shownErr[m] = true; say(T("errDisplay", m), "error") end
+        if not shownErr[m] then shownErr[m] = true; Core.say(Core.T("errDisplay", m), "error") end
     end
 end
 
@@ -966,7 +961,7 @@ end
 ------------------------------------------------------------------
 do
     local tip
-    function Tip()
+    function Skin.Tip()
         if tip then return tip end
         if WARPATH_TEST or not (CreateFrame and UIParent) then return GameTooltip end
         local ok, t = pcall(CreateFrame, "GameTooltip", "WarpathTooltip", UIParent, "GameTooltipTemplate")
@@ -1133,7 +1128,7 @@ do
         if not (CreateFrame and UIParent) then return end
         if not toast then
             toast = CreateFrame("Button", "WarpathToast", UIParent)
-            toast:SetSize(W, 38); toast:SetFrameStrata("HIGH")
+            toast:SetSize(Skin.W, 38); toast:SetFrameStrata("HIGH")
             local bg = Tex(toast, COL.panel or COL.bg, 0.97, "BACKGROUND"); bg:SetAllPoints()
             Border(toast, COL.accent, 0.6)
             local bar = Tex(toast, COL.accent, 1, "ARTWORK"); bar:SetWidth(3); bar:SetPoint("TOPLEFT"); bar:SetPoint("BOTTOMLEFT")
@@ -1220,7 +1215,7 @@ function HeadButton(parent, label)
     b.fs = FS(b, 11, COL.accent, FONT, "CENTER"); b.fs:SetPoint("CENTER", 0, 0)
     b.fs:SetText(Glyph(b, label, COL.accent) and "" or (label or ""))
     local h = Tex(b, COL.accent, 0.15, "HIGHLIGHT"); h:SetAllPoints()
-    b:SetScript("OnLeave", function() Tip():Hide() end)
+    b:SetScript("OnLeave", function() Skin.Tip():Hide() end)
     return b
 end
 function ScaleGrip(frame, get, set)
@@ -1232,7 +1227,7 @@ function ScaleGrip(frame, get, set)
     if gt.SetVertexColor then gt:SetVertexColor(COL.accent[1], COL.accent[2], COL.accent[3]) end
     local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetScript("OnMouseDown", function(self)
-        if (DB and DB.locked) or (InCombatLockdown and InCombatLockdown()) or not GetCursorPosition then return end
+        if (State.DB and State.DB.locked) or (InCombatLockdown and InCombatLockdown()) or not GetCursorPosition then return end
         local s, left, top = frame:GetScale() or 1, frame:GetLeft(), frame:GetTop()
         if not (left and top) then return end
         local ui = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
@@ -1250,13 +1245,13 @@ function ScaleGrip(frame, get, set)
         self.drag = nil
         if set then set(math.floor((frame:GetScale() or 1) * 100 + 0.5) / 100) end
     end)
-    grip:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("winResize"), 1, 1, 1, true); Tip():Show() end)
-    grip:SetScript("OnLeave", function() Tip():Hide() end)
+    grip:SetScript("OnEnter", function(self) Skin.Tip():SetOwner(self, "ANCHOR_RIGHT"); Skin.Tip():AddLine(Core.T("winResize"), 1, 1, 1, true); Skin.Tip():Show() end)
+    grip:SetScript("OnLeave", function() Skin.Tip():Hide() end)
     if get and frame.SetScale then frame:SetScale(get() or 1) end
     return grip
 end
 
-POPUP_HEAD = { WARPATH_DUNGEON = "popDungeon", WARPATH_DGSWITCH = "popDungeon", WARPATH_CHAIN = "popChain",
+Skin.POPUP_HEAD = { WARPATH_DUNGEON = "popDungeon", WARPATH_DGSWITCH = "popDungeon", WARPATH_CHAIN = "popChain",
                WARPATH_ZONEUP = "popZone", WARPATH_PROFS = "popProfs", WARPATH_WEAPON = "popWeapon", WARPATH_NEWS = "popNews" }
 do
     local dlg, cur, curName, answered, replacing
@@ -1310,7 +1305,7 @@ do
             if d and d.OnHide then pcall(d.OnHide, dlg) end
             local nxt = (not replacing) and table.remove(queue, 1)
             if nxt then
-                if C_Timer and C_Timer.After then C_Timer.After(0.3, function() Popup(nxt[1], nxt[2]) end) else Popup(nxt[1], nxt[2]) end
+                if C_Timer and C_Timer.After then C_Timer.After(0.3, function() Skin.Popup(nxt[1], nxt[2]) end) else Skin.Popup(nxt[1], nxt[2]) end
             end
         end)
         if UISpecialFrames then table.insert(UISpecialFrames, "WarpathDialog") end
@@ -1320,7 +1315,7 @@ do
 
     function PopupVisible() return dlg and dlg:IsShown() or false end
 
-    function Popup(name, txt)
+    function Skin.Popup(name, txt)
         local d = StaticPopupDialogs and StaticPopupDialogs[name]
         if WARPATH_TEST or not (d and CreateFrame and UIParent) then
             if StaticPopup_Show then return StaticPopup_Show(name, txt) end
@@ -1341,8 +1336,8 @@ do
         if txt and text:find("%%s") then text = text:format(txt) end
         dlg.text:SetText(text)
         -- v1.41 : titre propre a chaque question (« DONJON SUGGÉRÉ »...) au lieu de « OGHOULE'S WARPATH » partout
-        local hk = d.headKey or POPUP_HEAD[name]   -- v1.43 : une question peut choisir son titre (classe, métiers)
-        dlg.head:SetText(Caps(hk and T(hk) or "Oghoule's Warpath"))
+        local hk = d.headKey or Skin.POPUP_HEAD[name]   -- v1.43 : une question peut choisir son titre (classe, métiers)
+        dlg.head:SetText(Caps(hk and Core.T(hk) or "Oghoule's Warpath"))
         local labels = { d.button1, d.button2, d.button3, d.button4 }
         for i, b in ipairs(dlg.buttons) do b:SetText(labels[i] or ""); b:SetShown(labels[i] ~= nil) end
         if d.OnShow then pcall(d.OnShow, dlg) end
@@ -1371,64 +1366,19 @@ end
 -- crochet quand c'est complete, details au clic) au lieu d'une liste d'etapes "fais ceci".
 -- "Sortie du donjon" (ou toutes les quetes completes) : le guide reprend pour aller les rendre.
 ------------------------------------------------------------------
-local function DgEntrance()
-    if not State.steps then return nil end
-    for j = 1, #State.steps do if State.steps[j].t == "go" then return j end end
-end
 -- texte d'ambiance de l'entree du donjon (Lore.lua), sinon le message general
 function DungeonLore(zone)
     local name = (UnitName and UnitName("player")) or "?"
-    local l = ns.Lore and ns.Lore[DB.guide]
-    if l then return string.format((Lang() == "en") and l.en or l.fr, name) end
-    return T("dgAssemble", name, zone)
-end
-function DungeonLogActive()
-    if not (DB and State.steps and Core.IS_DUNGEON[DB.guide]) then return false end
-    if DB.dgOut and DB.dgOut[DB.guide] then return false end
-    local ent = DgEntrance()
-    if not ent or not State.doneCache[ent] or State.current <= ent then return false end
-    local s = State.steps[State.current]
-    return s ~= nil and s.t ~= "turnin"
-end
-local function QProg(q)
-    if Core.logById[q] == true then return Core.CHECK end
-    local have, need = 0, 0
-    if C_QuestLog and C_QuestLog.GetQuestObjectives then
-        local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
-        if ok and type(objs) == "table" then
-            for _, o in ipairs(objs) do have = have + (o.numFulfilled or 0); need = need + (o.numRequired or 0) end
-        end
-    end
-    if need > 0 then return "|cffd6b866" .. have .. "/" .. need .. "|r" end
-    return "|cffd6b866…|r"
-end
-function DungeonLogList()
-    local out, seen = {}, {}
-    local ent = DgEntrance(); if not ent then return out end
-    for j = ent + 1, #State.steps do
-        local s = State.steps[j]
-        if Core.Applies(s) and (s.t == "do" or s.t == "accept" or s.t == "turnin") then
-            for _, q in ipairs(Core.Ids(s)) do
-                if not seen[q] and not Rendue(q) and not (DB.ignored and DB.ignored[q]) then
-                    if Core.logById[q] ~= nil then
-                        seen[q] = true
-                        out[#out + 1] = { q = q, name = Core.QuestTitle(q) or (Est.EST[q] and Est.EST[q].n) or s.quest or ("#" .. q), prog = QProg(q), done = Core.logById[q] == true }
-                    elseif s.t == "accept" then
-                        seen[q] = true
-                        out[#out + 1] = { q = q, name = Core.QuestTitle(q) or (Est.EST[q] and Est.EST[q].n) or s.quest or ("#" .. q), prog = "", later = true, acc = s }
-                    end
-                end
-            end
-        end
-    end
-    return out
+    local l = ns.Lore and ns.Lore[State.DB.guide]
+    if l then return string.format((Core.Lang() == "en") and l.en or l.fr, name) end
+    return Core.T("dgAssemble", name, zone)
 end
 local function HasQ(s, q) for _, id in ipairs(Core.Ids(s)) do if id == q then return true end end return false end
 local function QDetails(row)
     local q = row.q
-    local ent = DgEntrance() or 0
+    local ent = Flow.DgEntrance() or 0
     local lines = {}
-    if row.later then lines[#lines + 1] = "|cff8c7f62" .. T("dgStartsIn") .. "|r  " .. Core.StepText(row.acc) end
+    if row.later then lines[#lines + 1] = "|cff8c7f62" .. Core.T("dgStartsIn") .. "|r  " .. Core.StepText(row.acc) end
     -- v1.41 : quete dans ton journal : une ligne par objectif (monstre ou objet) avec son compteur, plutot que
     -- le long texte de l'etape (« tue 7 Deviate Ravagers, 7 Deviate Vipers... »). Les objectifs finis sont grises.
     local objLines = {}
@@ -1456,73 +1406,73 @@ local function QDetails(row)
         end
     end
     if Est.EST[q] and Core.logById[q] == false then
-        for _, dr in ipairs(Estimate({ q }, false).drops) do
-            lines[#lines + 1] = "|cff8c7f62" .. T("dropLbl") .. " :|r " .. (dr.name or "?") .. " |cffffd100" .. math.floor(dr.rate * 100 + 0.5) .. " %|r"
+        for _, dr in ipairs(Est.Estimate({ q }, false).drops) do
+            lines[#lines + 1] = "|cff8c7f62" .. Core.T("dropLbl") .. " :|r " .. (dr.name or "?") .. " |cffffd100" .. math.floor(dr.rate * 100 + 0.5) .. " %|r"
         end
     end
     local tip = ns.Tips and ns.Tips[q]
-    if DB.tips ~= false and tip then lines[#lines + 1] = "|cffd6b866" .. T("tipLbl") .. "|r  " .. ((Lang() == "en") and tip[2] or tip[1]) end
+    if State.DB.tips ~= false and tip then lines[#lines + 1] = "|cffd6b866" .. Core.T("tipLbl") .. "|r  " .. ((Core.Lang() == "en") and tip[2] or tip[1]) end
     for j = ent + 1, #State.steps do
         local s = State.steps[j]
-        if s.t == "turnin" and Core.Applies(s) and HasQ(s, q) then lines[#lines + 1] = "|cff8c7f62" .. T("dgTurnin") .. "|r  " .. Core.StepText(s); break end
+        if s.t == "turnin" and Core.Applies(s) and HasQ(s, q) then lines[#lines + 1] = "|cff8c7f62" .. Core.T("dgTurnin") .. "|r  " .. Core.StepText(s); break end
     end
     return table.concat(lines, "\n\n")
 end
 local function DlogRow(k)
-        local r = DL.rows[k]
+        local r = Skin.DL.rows[k]
     if r then return r end
-    r = CreateFrame("Button", nil, f); r:SetSize(INNER, 17)
+    r = CreateFrame("Button", nil, Core.f); r:SetSize(INNER, 17)
     local hl = Tex(r, COL.accent, 0.08, "HIGHLIGHT"); hl:SetAllPoints()
     r.arrow = FS(r, 10, COL.gold, FONT, "LEFT"); r.arrow:SetPoint("LEFT", 0, 0)
     r.name = FS(r, 12, COL.white, FONT, "LEFT"); r.name:SetPoint("LEFT", 14, 0); r.name:SetWidth(INNER - 70)
     if r.name.SetWordWrap then r.name:SetWordWrap(false) end
     r.prog = FS(r, 11, COL.accent, FONT, "RIGHT"); r.prog:SetPoint("RIGHT", 0, 0)
     r:SetScript("OnClick", function(self)
-        if DL.open == self.q then DL.open = nil else DL.open = self.q end
-        Refresh(true)
+        if Skin.DL.open == self.q then Skin.DL.open = nil else Skin.DL.open = self.q end
+        Skin.Refresh(true)
     end)
-    DL.rows[k] = r
+    Skin.DL.rows[k] = r
     return r
 end
 function DungeonLogHide()
-    if f and DL.rows then for _, r in ipairs(DL.rows) do r:Hide() end end
-    if f and DL.tip then DL.tip:Hide() end
-    if f then DL.n = 0 end
+    if Core.f and Skin.DL.rows then for _, r in ipairs(Skin.DL.rows) do r:Hide() end end
+    if Core.f and Skin.DL.tip then Skin.DL.tip:Hide() end
+    if Core.f then Skin.DL.n = 0 end
 end
 function DungeonLogRender()
     SetObjRows(nil)
-    local list = DungeonLogList()
+    local list = Flow.DungeonLogList()
     local zone = Core.Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", ""):gsub("^[^:]+:%s*", "")
     local done = 0
     for _, r in ipairs(list) do if r.done then done = done + 1 end end
     local nq = 0; for _, r in ipairs(list) do if not r.later then nq = nq + 1 end end
-    SetHeader(zone, T("dgCount", done, nq), nq > 0 and done / nq or 0)
-    if f.badge then f.badge:Hide(); f.qsub:Hide(); f.dest:Hide() end
-    f.kind:SetText("|cffcdbb8e" .. Caps(T("dgLog")) .. "|r"); f.kind:Show(); f.dist:SetText("")
-    f.qtitle:Hide(); f.text:SetText("|cffd69a66" .. T("dgGroup") .. "|r"); f.text:Show(); SetRoute({}); f.coord:Hide(); f.chainBtn:Hide(); f.lockBtn:Hide()
-    if f.caveBtn then f.caveBtn:Hide() end
-    if f.nowBtn then f.nowBtn:Hide() end
-    if f.advice then f.advice:Hide() end
-    SetUpcoming({}); SetChain(nil); distTarget = nil
-    if not DL.tip then
-        DL.tip = FS(f, 11, COL.soft, FONT, "LEFT"); DL.tip:SetWidth(INNER - 14)
-        if DL.tip.SetSpacing then DL.tip:SetSpacing(2) end
+    SetHeader(zone, Core.T("dgCount", done, nq), nq > 0 and done / nq or 0)
+    if Core.f.badge then Core.f.badge:Hide(); Core.f.qsub:Hide(); Core.f.dest:Hide() end
+    Core.f.kind:SetText("|cffcdbb8e" .. Caps(Core.T("dgLog")) .. "|r"); Core.f.kind:Show(); Core.f.dist:SetText("")
+    Core.f.qtitle:Hide(); Core.f.text:SetText("|cffd69a66" .. Core.T("dgGroup") .. "|r"); Core.f.text:Show(); SetRoute({}); Core.f.coord:Hide(); Core.f.chainBtn:Hide(); Core.f.lockBtn:Hide()
+    if Core.f.caveBtn then Core.f.caveBtn:Hide() end
+    if Core.f.nowBtn then Core.f.nowBtn:Hide() end
+    if Core.f.advice then Core.f.advice:Hide() end
+    SetUpcoming({}); SetChain(nil); Skin.distTarget = nil
+    if not Skin.DL.tip then
+        Skin.DL.tip = FS(Core.f, 11, COL.soft, FONT, "LEFT"); Skin.DL.tip:SetWidth(INNER - 14)
+        if Skin.DL.tip.SetSpacing then Skin.DL.tip:SetSpacing(2) end
     end
     DungeonLogHide()
     for k, row in ipairs(list) do
         if k > 12 then break end
         local r = DlogRow(k)
         r.q = row.q
-        local open = DL.open == row.q
+        local open = Skin.DL.open == row.q
         r.arrow:SetText(open and "v" or ">")
         r.name:SetText(row.later and ("|cff8c7f62" .. row.name .. "|r") or row.name)
-        r.prog:SetText(row.later and ("|cff8c7f62" .. T("dgLater") .. "|r") or row.prog)
+        r.prog:SetText(row.later and ("|cff8c7f62" .. Core.T("dgLater") .. "|r") or row.prog)
         r:Show()
-        if open then DL.tip:SetText(QDetails(row)); DL.tip:Show(); DL.after = k end
+        if open then Skin.DL.tip:SetText(QDetails(row)); Skin.DL.tip:Show(); Skin.DL.after = k end
     end
-    DL.n = math.min(#list, 12)
-    if #list > 12 then f.text:SetText("|cffd69a66" .. T("dgGroup") .. "|r\n|cff8c7f62" .. T("dgMore", #list - 12) .. "|r") end
-    if #list == 0 then f.text:SetText(T("dgEmpty")); f.text:Show() end
+    Skin.DL.n = math.min(#list, 12)
+    if #list > 12 then Core.f.text:SetText("|cffd69a66" .. Core.T("dgGroup") .. "|r\n|cff8c7f62" .. Core.T("dgMore", #list - 12) .. "|r") end
+    if #list == 0 then Core.f.text:SetText(Core.T("dgEmpty")); Core.f.text:Show() end
     SetSkip("dgExit")
     if ns.Targets then ns.Targets.Update(State.steps[State.current]) end
     Layout()
@@ -1540,8 +1490,6 @@ do
     M.Diamond = Diamond
     M.DiamondCheck = DiamondCheck
     M.Divider = Divider
-    M.DungeonLogActive = DungeonLogActive
-    M.DungeonLogList = DungeonLogList
     M.FONT = FONT
     M.FS = FS
     M.FadeIn = FadeIn
@@ -1563,6 +1511,5 @@ do
     M.Tex = Tex
     M.TitledRule = TitledRule
     M.Toast = Toast
-    M.Upper = Upper
     M.WarpathName = WarpathName
 end

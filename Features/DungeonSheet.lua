@@ -4,10 +4,9 @@
 -- pour la question « Faire le donjon ? » et la liste des donjons (Options). Tout est calcule depuis les guides.
 -- Aucun bouton securise ici (fenetre libre, parent UIParent).
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local DungeonSheet = ns.Mod.DungeonSheet -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 -- v1.50 : module ns.Mod.DungeonSheet (publie en fin de fichier pour les autres fichiers)
 local DungeonAskLine, DungeonBadge, DungeonSheetDefault, DungeonSheetHide, DungeonSheetOpen
@@ -27,10 +26,10 @@ local function dungeonOf(key) for _, d in ipairs(Core.DUNGEONS) do if d.key == k
 -- Toutes les quetes du donjon pour toi, avec leur statut :
 -- take (a prendre), pre (pre-quete manquante), inside (dans le donjon), ready (prete a rendre), log (en cours),
 -- later (niveau trop bas), done (rendue), skip (ignoree).
-function DungeonQuests(key)
-    local g = Core.Guides[key]; if not (g and DB) then return nil end
+function DungeonSheet.DungeonQuests(key)
+    local g = Core.Guides[key]; if not (g and State.DB) then return nil end
     local me = UnitLevel and UnitLevel("player") or 1
-    local en = Lang and Lang() == "en"
+    local en = Core.Lang and Core.Lang() == "en"
     local rows, seen = {}, {}
     local n = { take = 0, pre = 0, inside = 0, ready = 0, log = 0, later = 0, done = 0, skip = 0 }
     local laterLvl, xp, nxp, zone
@@ -47,15 +46,15 @@ function DungeonQuests(key)
                     local npc = txt:match("^(.-)%s?: ")
                     if npc and #npc <= 40 and npc ~= r.name then r.npc = npc end
                     local miss
-                    for _, p in ipairs(s.preg or {}) do if not Rendue(p) and not miss then miss = p end end
+                    for _, p in ipairs(s.preg or {}) do if not Core.Rendue(p) and not miss then miss = p end end
                     if s.pre and not miss then
                         local ok = false
-                        for _, p in ipairs(s.pre) do if Rendue(p) then ok = true end end
+                        for _, p in ipairs(s.pre) do if Core.Rendue(p) then ok = true end end
                         if not ok then miss = s.pre[1] end
                     end
                     local st
-                    if Rendue(id) then st = "done"
-                    elseif DB.ignored[id] then st = "skip"
+                    if Core.Rendue(id) then st = "done"
+                    elseif State.DB.ignored[id] then st = "skip"
                     elseif Core.logById[id] == true then st = "ready"
                     elseif Core.logById[id] == false then st = "log"
                     elseif miss then st = "pre"; r.miss = Core.QuestTitle(miss) or (Est.EST[miss] and Est.EST[miss].n) or ("#" .. miss)
@@ -76,7 +75,7 @@ end
 
 -- compteurs : a prendre maintenant, bloquees par le niveau (et le 1er niveau qui en debloque une)
 function DungeonBadge(key)
-    local ok, q = pcall(DungeonQuests, key)
+    local ok, q = pcall(DungeonSheet.DungeonQuests, key)
     if not (ok and q) then return 0, 0, nil end
     return q.n.take, q.n.later, q.laterLvl, q
 end
@@ -86,12 +85,12 @@ function DungeonAskLine(key)
     local take, later, lvl, q = DungeonBadge(key)
     if not q or #q.rows == 0 then return "" end
     local G, R, S = "|cff" .. Skin.HEX.accent, "|cff" .. Skin.HEX.red, "|cff" .. Skin.HEX.soft
-    local out = "\n\n" .. (take > 0 and (G .. "! " .. take .. "|r  " .. T(take == 1 and "dsAskLine1" or "dsAskLine", Est.FormatNum(q.xp)))
-        or (S .. T("dsAskNone", Est.FormatNum(q.xp)) .. "|r"))
+    local out = "\n\n" .. (take > 0 and (G .. "! " .. take .. "|r  " .. Core.T(take == 1 and "dsAskLine1" or "dsAskLine", Est.FormatNum(q.xp)))
+        or (S .. Core.T("dsAskNone", Est.FormatNum(q.xp)) .. "|r"))
     local extra = {}
-    if later > 0 then extra[#extra + 1] = R .. "+" .. later .. "|r " .. T("dsAskLater", lvl) end
-    if q.n.inside > 0 then extra[#extra + 1] = T("dsAskInside", q.n.inside) end
-    if q.n.pre > 0 then extra[#extra + 1] = T("dsAskPre", q.n.pre) end
+    if later > 0 then extra[#extra + 1] = R .. "+" .. later .. "|r " .. Core.T("dsAskLater", lvl) end
+    if q.n.inside > 0 then extra[#extra + 1] = Core.T("dsAskInside", q.n.inside) end
+    if q.n.pre > 0 then extra[#extra + 1] = Core.T("dsAskPre", q.n.pre) end
     if #extra > 0 then out = out .. "\n" .. S .. table.concat(extra, " · ") .. "|r" end
     return out
 end
@@ -146,22 +145,22 @@ local function rowFrame(k)
     local gh = Skin.Tex(r.go, Skin.COL.accent, 0.15, "HIGHLIGHT"); gh:SetAllPoints()
     r.go:SetScript("OnClick", function(self)
         local q = self:GetParent().q
-        if q and q.m and Near.SetErrand then Near.SetErrand(q.m, q.x, q.y, q.npc or q.name); say(T("dsArrowSay", q.npc or q.name)) end
+        if q and q.m and Near.SetErrand then Near.SetErrand(q.m, q.x, q.y, q.npc or q.name); Core.say(Core.T("dsArrowSay", q.npc or q.name)) end
     end)
     r.go:SetScript("OnEnter", function(self)
         local q = self:GetParent().q
-        Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("dsArrowTip", q and (q.npc or q.name) or "?"), 1, 1, 1); Tip():Show()
+        Skin.Tip():SetOwner(self, "ANCHOR_RIGHT"); Skin.Tip():AddLine(Core.T("dsArrowTip", q and (q.npc or q.name) or "?"), 1, 1, 1); Skin.Tip():Show()
     end)
-    r.go:SetScript("OnLeave", function() Tip():Hide() end)
+    r.go:SetScript("OnLeave", function() Skin.Tip():Hide() end)
     r:SetScript("OnEnter", function(self)
         local q = self.q; if not q then return end
         local e = Est.EST[q.id] or {}
-        Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(q.name)
-        if e.t then Tip():AddLine(e.t, 1, 1, 1, true) end
-        Tip():AddLine(T("dsTipLvl", e.l or 0, q.req or 1), 0.84, 0.72, 0.4)
-        Tip():Show()
+        Skin.Tip():SetOwner(self, "ANCHOR_LEFT"); Skin.Tip():AddLine(q.name)
+        if e.t then Skin.Tip():AddLine(e.t, 1, 1, 1, true) end
+        Skin.Tip():AddLine(Core.T("dsTipLvl", e.l or 0, q.req or 1), 0.84, 0.72, 0.4)
+        Skin.Tip():Show()
     end)
-    r:SetScript("OnLeave", function() Tip():Hide() end)
+    r:SetScript("OnLeave", function() Skin.Tip():Hide() end)
     pool[k] = r
     return r
 end
@@ -175,7 +174,7 @@ end
 local function render()
     if not (sheet and curKey) then return end
     local d = dungeonOf(curKey)
-    local q = DungeonQuests(curKey)
+    local q = DungeonSheet.DungeonQuests(curKey)
     if not (d and q) then sheet:Hide(); return end
     sheet.title:SetText(Skin.Caps(Flow.DungeonName(d)))
     -- une seule ligne : police plus petite si le nom est long
@@ -183,13 +182,13 @@ local function render()
         sheet.title:SetFont(Skin.FONT, 12, "")
         if (sheet.title:GetStringWidth() or 0) > SW - 64 then sheet.title:SetFont(Skin.FONT, 10, "") end
     end
-    sheet.sub:SetText(T("dsSub", q.zone or "?", d.min, d.max))
+    sheet.sub:SetText(Core.T("dsSub", q.zone or "?", d.min, d.max))
     -- XP et niveau
     sheet.big:SetText("+" .. Est.FormatNum(q.xp) .. " XP")
-    sheet.nq:SetText(T(q.nxp == 1 and "dsQuests1" or "dsQuests", q.nxp))
+    sheet.nq:SetText(Core.T(q.nxp == 1 and "dsQuests1" or "dsQuests", q.nxp))
     local me = UnitLevel and UnitLevel("player") or 1
     local lvl, pct = project(q.xp)
-    sheet.lvl:SetText(lvl > me and T("dsAfter", me, lvl, pct) or T("dsAfterSame", lvl, pct))
+    sheet.lvl:SetText(lvl > me and Core.T("dsAfter", me, lvl, pct) or Core.T("dsAfterSame", lvl, pct))
     local bw = SW - 2 * SP - 14
     sheet.fill:SetWidth(math.max(1, bw * pct / 100))
     sheet.full:SetShown(lvl > me)
@@ -204,12 +203,12 @@ local function render()
             if a.req ~= b.req then return a.req < b.req end
             return a.name < b.name
         end)
-        local hide = sec.done and DB.dsHideDone ~= false
+        local hide = sec.done and State.DB.dsHideDone ~= false
         if #list > 0 then
             usedR = usedR + 1
             local ru = ruleFrame(usedR)
             ru:ClearAllPoints(); ru:SetPoint("TOPLEFT", SP, y - 6); ru:Show()
-            ru.label:SetText(Skin.Caps(T(sec.key)) .. "  ·  " .. #list)
+            ru.label:SetText(Skin.Caps(Core.T(sec.key)) .. "  ·  " .. #list)
             local c = sec.red and Skin.COL.red or Skin.COL.gold
             if ru.label.SetTextColor then ru.label:SetTextColor(c[1] + (sec.red and 0.2 or 0), c[2], c[3]) end
             y = y - 22
@@ -222,7 +221,7 @@ local function render()
                     local tg = TAG[r.st]
                     local tc = Skin.COL[tg[2]] or Skin.COL.soft
                     local hex = string.format("%02x%02x%02x", math.floor(math.min(1, tc[1] + (r.st == "later" and 0.2 or 0)) * 255), math.floor(tc[2] * 255), math.floor(tc[3] * 255))
-                    local tag = "|cff" .. hex .. Skin.Caps(T(tg[1], r.req)) .. "|r"
+                    local tag = "|cff" .. hex .. Skin.Caps(Core.T(tg[1], r.req)) .. "|r"
                     local where = {}
                     if r.st == "pre" then where[#where + 1] = r.miss end
                     if r.npc then where[#where + 1] = r.npc end
@@ -248,14 +247,14 @@ local function render()
     else sheet.empty:Hide() end
     -- bas : masquer les faites, boutons
     sheet.hide:ClearAllPoints(); sheet.hide:SetPoint("TOPLEFT", SP - 2, y - 8)
-    sheet.hide.mark:SetOn(DB.dsHideDone ~= false)
-    sheet.hide.label:SetText(T("dsHideDone"))
+    sheet.hide.mark:SetOn(State.DB.dsHideDone ~= false)
+    sheet.hide.label:SetText(Core.T("dsHideDone"))
     sheet.hide:SetShown((q.n.done + q.n.skip) > 0)
     y = y - 34
-    local active = DB.guide == curKey
-    sheet.go:SetLabel(Skin.Caps(T(active and "dsActive" or "dsGo")))
+    local active = State.DB.guide == curKey
+    sheet.go:SetLabel(Skin.Caps(Core.T(active and "dsActive" or "dsGo")))
     sheet.go:SetEnabled(not active)
-    sheet.close:SetLabel(Skin.Caps(T("dsClose")))
+    sheet.close:SetLabel(Skin.Caps(Core.T("dsClose")))
     sheet.go:ClearAllPoints(); sheet.go:SetPoint("TOPRIGHT", sheet, "TOPRIGHT", -SP, y)
     sheet.close:ClearAllPoints(); sheet.close:SetPoint("TOPLEFT", sheet, "TOPLEFT", SP, y)
     sheet:SetHeight(-y + 26 + SP)
@@ -288,12 +287,12 @@ local function makeSheet()
     local bar = Skin.Tex(xb, Skin.COL.faint, 1, "ARTWORK"); bar:SetHeight(5); bar:SetPoint("BOTTOMLEFT", 10, 7); bar:SetPoint("BOTTOMRIGHT", -4, 7)
     sheet.full = Skin.Tex(xb, Skin.COL.edge, 1, "ARTWORK"); sheet.full:SetHeight(5); sheet.full:SetPoint("BOTTOMLEFT", 10, 7); sheet.full:SetPoint("BOTTOMRIGHT", -4, 7)
     sheet.fill = Skin.Tex(xb, Skin.COL.accent, 1, "OVERLAY"); sheet.fill:SetHeight(5); sheet.fill:SetPoint("BOTTOMLEFT", 10, 7)
-    sheet.empty = Skin.FS(sheet, 11, Skin.COL.soft, Skin.FONT, "LEFT"); sheet.empty:SetWidth(SW - 2 * SP); sheet.empty:SetText(T("dsEmpty"))
+    sheet.empty = Skin.FS(sheet, 11, Skin.COL.soft, Skin.FONT, "LEFT"); sheet.empty:SetWidth(SW - 2 * SP); sheet.empty:SetText(Core.T("dsEmpty"))
     -- masquer les faites (case en losange)
     sheet.hide = CreateFrame("Button", nil, sheet); sheet.hide:SetSize(180, 18)
     sheet.hide.mark = Skin.DiamondCheck(sheet.hide, 10); sheet.hide.mark:SetPoint("LEFT", 0, 0)
     sheet.hide.label = Skin.FS(sheet.hide, 10, Skin.COL.soft, Skin.FONT, "LEFT"); sheet.hide.label:SetPoint("LEFT", sheet.hide.mark, "RIGHT", 4, 0)
-    sheet.hide:SetScript("OnClick", function() DB.dsHideDone = (DB.dsHideDone == false); render() end)
+    sheet.hide:SetScript("OnClick", function() State.DB.dsHideDone = (State.DB.dsHideDone == false); render() end)
     local bw = math.floor((SW - 2 * SP - 8) / 2)
     sheet.close = Skin.FlatButton(sheet, bw, 26, function() sheet:Hide() end)
     sheet.go = Skin.FlatButton(sheet, bw, 26, function()
@@ -324,7 +323,7 @@ function DungeonSheetOpen(key)
     curKey = key
     sheet:ClearAllPoints()
     local dlg = _G.WarpathDialog
-    local anchor = (dlg and dlg:IsShown() and dlg) or (f and f.IsShown and f:IsShown() and f) or nil
+    local anchor = (dlg and dlg:IsShown() and dlg) or (Core.f and Core.f.IsShown and Core.f:IsShown() and Core.f) or nil
     if anchor and anchor.GetLeft and anchor:GetLeft() and UIParent.GetWidth then
         local mid = ((anchor:GetLeft() or 0) + (anchor:GetRight() or 0)) / 2 * (anchor:GetEffectiveScale() or 1)
         local half = (UIParent:GetWidth() or 0) * (UIParent:GetEffectiveScale() or 1) / 2
@@ -345,7 +344,7 @@ end
 
 -- /warpath donjon fiche : le donjon du guide en cours, sinon le 1er donjon a ton niveau
 function DungeonSheetDefault()
-    if DB and Core.IS_DUNGEON[DB.guide] then return DungeonSheetOpen(DB.guide) end
+    if State.DB and Core.IS_DUNGEON[State.DB.guide] then return DungeonSheetOpen(State.DB.guide) end
     local me = UnitLevel and UnitLevel("player") or 1
     for _, d in ipairs(Core.DUNGEONS) do
         if Core.Guides[d.key] and me >= d.min and me <= d.max and (DungeonBadge(d.key)) > 0 then return DungeonSheetOpen(d.key) end

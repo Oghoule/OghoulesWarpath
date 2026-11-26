@@ -5,21 +5,22 @@
 --   - l'ennemi (niveau, classe, race, nom) est memorise quand tu le cibles ou le survoles ;
 --   - la difficulte (ta vie restante, la duree) est lue a la fin du combat.
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
+local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : module ns.Mod.PvP (publie en fin de fichier pour les autres fichiers)
 local PvPReport
 local Chronicle = ns.Mod.Chronicle -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
 
 do
-    local function L(fr, en) return (Lang and Lang() == "en") and en or fr end
+    local function L(fr, en) return (Core.Lang and Core.Lang() == "en") and en or fr end
     local function ok(v) return v ~= nil and not (issecretvalue and issecretvalue(v)) end
     local function now() return GetTime and GetTime() or 0 end
     local function P()
-        if not DB then return nil end
-        DB.pvp = DB.pvp or { k = {}, d = {} }
-        return DB.pvp
+        if not State.DB then return nil end
+        State.DB.pvp = State.DB.pvp or { k = {}, d = {} }
+        return State.DB.pvp
     end
     local function shown() return not (WarpathDropDB and WarpathDropDB._pvpShow == false) end
 
@@ -48,8 +49,8 @@ do
     -- ---------------------------------------------------------------- combats et victoires
     local fightStart, pending = nil, {}
     local function here()
-        if not PlayerPos then return nil end
-        local m, x, y = PlayerPos()
+        if not Route.PlayerPos then return nil end
+        local m, x, y = Route.PlayerPos()
         if not m then return nil end
         return m, math.floor(x * 10) / 10, math.floor(y * 10) / 10
     end
@@ -90,8 +91,8 @@ do
         if Chronicle.ChronAdd then pcall(Chronicle.ChronAdd, "pk") end
         pending[#pending + 1] = e
         if not (UnitAffectingCombat and UnitAffectingCombat("player")) then finish() end
-        if DB.pvpShot and Screenshot and C_Timer then C_Timer.After(0.3, function() pcall(Screenshot) end) end
-        say(L("|cffc24a3eVictoire !|r Un X rouge marque l'endroit sur ta carte.", "|cffc24a3eVictory!|r A red X marks the spot on your map."), true)
+        if State.DB.pvpShot and Screenshot and C_Timer then C_Timer.After(0.3, function() pcall(Screenshot) end) end
+        Core.say(L("|cffc24a3eVictoire !|r Un X rouge marque l'endroit sur ta carte.", "|cffc24a3eVictory!|r A red X marks the spot on your map."), true)
         if WarpathPvPRefresh then WarpathPvPRefresh() end
     end
     local function onDeath()
@@ -113,7 +114,7 @@ do
     for _, e in ipairs({ "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "PLAYER_FOCUS_CHANGED", "PLAYER_REGEN_DISABLED",
                          "PLAYER_REGEN_ENABLED", "PLAYER_PVP_KILLS_CHANGED", "PLAYER_DEAD" }) do pcall(f.RegisterEvent, f, e) end
     f:SetScript("OnEvent", function(_, e)
-        if not DB then return end
+        if not State.DB then return end
         if e == "PLAYER_TARGET_CHANGED" then note("target")
         elseif e == "UPDATE_MOUSEOVER_UNIT" then note("mouseover")
         elseif e == "PLAYER_FOCUS_CHANGED" then note("focus")
@@ -138,23 +139,23 @@ do
             e.rc or "", cls, e.nm and (" (" .. e.nm .. ")") or "")
     end
     local function tooltip(owner, list, death)
-        Tip():SetOwner(owner, "ANCHOR_RIGHT")
+        Skin.Tip():SetOwner(owner, "ANCHOR_RIGHT")
         local hc = death and Skin.COL.soft or { 0.76, 0.29, 0.24 }
-        Tip():AddLine(Skin.Caps(death and L("Tué par l'Alliance", "Killed by the Alliance") or L("Victoire sur l'Alliance", "Victory over the Alliance")), hc[1], hc[2], hc[3])
-        if #list > 1 then Tip():AddLine(string.format(death and L("%d morts ici", "%d deaths here") or L("%d victoires ici", "%d victories here"), #list), Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3]) end
+        Skin.Tip():AddLine(Skin.Caps(death and L("Tué par l'Alliance", "Killed by the Alliance") or L("Victoire sur l'Alliance", "Victory over the Alliance")), hc[1], hc[2], hc[3])
+        if #list > 1 then Skin.Tip():AddLine(string.format(death and L("%d morts ici", "%d deaths here") or L("%d victoires ici", "%d victories here"), #list), Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3]) end
         for i = #list, math.max(1, #list - 3), -1 do
             local e = list[i]
-            Tip():AddLine(" ")
-            Tip():AddLine(e.when .. " - " .. (e.z or ""), Skin.COL.gold[1], Skin.COL.gold[2], Skin.COL.gold[3])
-            Tip():AddLine(who(e), Skin.COL.white[1], Skin.COL.white[2], Skin.COL.white[3])
+            Skin.Tip():AddLine(" ")
+            Skin.Tip():AddLine(e.when .. " - " .. (e.z or ""), Skin.COL.gold[1], Skin.COL.gold[2], Skin.COL.gold[3])
+            Skin.Tip():AddLine(who(e), Skin.COL.white[1], Skin.COL.white[2], Skin.COL.white[3])
             if not death then
-                Tip():AddLine(string.format(L("Toi : niveau %s. Combat %s%s.", "You: level %s. Fight %s%s."), e.me or "?", diff(e),
+                Skin.Tip():AddLine(string.format(L("Toi : niveau %s. Combat %s%s.", "You: level %s. Fight %s%s."), e.me or "?", diff(e),
                     (e.hp and string.format(L(", %d%% de vie", ", %d%% health"), e.hp) or "") .. (e.dur and string.format(L(", %d s", ", %d s"), e.dur) or "")), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3], true)
             else
-                Tip():AddLine(string.format(L("Toi : niveau %s.", "You: level %s."), e.me or "?"), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3])
+                Skin.Tip():AddLine(string.format(L("Toi : niveau %s.", "You: level %s."), e.me or "?"), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3])
             end
         end
-        Tip():Show()
+        Skin.Tip():Show()
     end
 
     -- ---------------------------------------------------------------- epingles sur la carte du monde
@@ -176,7 +177,7 @@ do
             b.tex = b:CreateTexture(nil, "OVERLAY"); b.tex:SetAllPoints()
             b.n = Skin.FS(b, 9, Skin.COL.accent, Skin.FONT, "LEFT"); b.n:SetPoint("BOTTOMLEFT", b, "BOTTOMRIGHT", -2, -2)
             b:SetScript("OnEnter", function(self) tooltip(self, self.list, self.death) end)
-            b:SetScript("OnLeave", function() Tip():Hide() end)
+            b:SetScript("OnLeave", function() Skin.Tip():Hide() end)
             b:SetScript("OnClick", function(self) tooltip(self, self.list, self.death) end)
             pins[i] = b
         end
@@ -242,11 +243,11 @@ do
         cb.SetChecked = function() cb_sync() end
         cb_sync()
         cb:SetScript("OnEnter", function(self)
-            Tip():SetOwner(self, "ANCHOR_RIGHT")
-            Tip():AddLine(L("X rouges : tes victoires sur l'Alliance. Têtes grises : là où l'Alliance t'a tué.", "Red X: your victories over the Alliance. Grey skulls: where the Alliance killed you."), Skin.COL.white[1], Skin.COL.white[2], Skin.COL.white[3], true)
-            Tip():Show()
+            Skin.Tip():SetOwner(self, "ANCHOR_RIGHT")
+            Skin.Tip():AddLine(L("X rouges : tes victoires sur l'Alliance. Têtes grises : là où l'Alliance t'a tué.", "Red X: your victories over the Alliance. Grey skulls: where the Alliance killed you."), Skin.COL.white[1], Skin.COL.white[2], Skin.COL.white[3], true)
+            Skin.Tip():Show()
         end)
-        cb:SetScript("OnLeave", function() Tip():Hide() end)
+        cb:SetScript("OnLeave", function() Skin.Tip():Hide() end)
         WorldMapFrame:HookScript("OnShow", function() Skin.ChipScale(cb); cb:SetChecked(shown()); WarpathPvPRefresh(true) end)
         local acc = 0
         WorldMapFrame:HookScript("OnUpdate", function(_, el)
@@ -263,19 +264,19 @@ do
         local p = P(); if not p then return end
         arg = (arg or ""):lower()
         if arg == "photo on" or arg == "photo off" or arg == "shot on" or arg == "shot off" then
-            DB.pvpShot = arg:find("on") and true or false
-            say(DB.pvpShot and L("Capture d'écran automatique à chaque victoire : activée.", "Automatic screenshot on each victory: on.")
+            State.DB.pvpShot = arg:find("on") and true or false
+            Core.say(State.DB.pvpShot and L("Capture d'écran automatique à chaque victoire : activée.", "Automatic screenshot on each victory: on.")
                 or L("Capture d'écran automatique : désactivée.", "Automatic screenshot: off."))
         elseif arg == "test" then
             note("target")
             local e = recentEnemy(600)
-            say(e and (L("Ennemi capté : ", "Enemy captured: ") .. who(e)) or L("Aucun joueur ennemi capté (cible-en un).", "No enemy player captured (target one)."))
+            Core.say(e and (L("Ennemi capté : ", "Enemy captured: ") .. who(e)) or L("Aucun joueur ennemi capté (cible-en un).", "No enemy player captured (target one)."))
         elseif arg == "clear" then
-            DB.pvp = nil; WarpathPvPRefresh(true); say(L("Victoires et morts PvP effacées.", "PvP victories and deaths cleared."))
+            State.DB.pvp = nil; WarpathPvPRefresh(true); Core.say(L("Victoires et morts PvP effacées.", "PvP victories and deaths cleared."))
         else
-            say(string.format(L("Trophées de guerre : %d victoire(s), %d mort(s) face à l'Alliance.", "War Trophies: %d victory(ies), %d death(s) against the Alliance."), #p.k, #p.d))
-            for i = #p.k, math.max(1, #p.k - 4), -1 do local e = p.k[i]; say("  " .. e.when .. " - " .. (e.z or "") .. " : " .. who(e) .. ", " .. diff(e)) end
-            say(L("/warpath pvp photo on|off, /warpath pvp test, /warpath pvp clear", "/warpath pvp shot on|off, /warpath pvp test, /warpath pvp clear"))
+            Core.say(string.format(L("Trophées de guerre : %d victoire(s), %d mort(s) face à l'Alliance.", "War Trophies: %d victory(ies), %d death(s) against the Alliance."), #p.k, #p.d))
+            for i = #p.k, math.max(1, #p.k - 4), -1 do local e = p.k[i]; Core.say("  " .. e.when .. " - " .. (e.z or "") .. " : " .. who(e) .. ", " .. diff(e)) end
+            Core.say(L("/warpath pvp photo on|off, /warpath pvp test, /warpath pvp clear", "/warpath pvp shot on|off, /warpath pvp test, /warpath pvp clear"))
         end
     end
 end

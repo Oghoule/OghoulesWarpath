@@ -1,9 +1,8 @@
 -- Oghoule's Warpath : moteur (Estimate.lua) - voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Est = ns.Mod.Est -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 -- v1.50 : module ns.Mod.Est (publie en fin de fichier pour les autres fichiers)
 local BuildChainGuide, ChainFor, ChainSteps, DropRate, EST, FormatNum, HasBit, KillTime, MAPNAME, MobXP
@@ -17,7 +16,7 @@ local BASE_KILL, DROP_PRIOR, DROP_WEIGHT, KILL_WORD, OBJ_SECS, SPEC, ZeroDiff
 ------------------------------------------------------------------
 EST = ns.Est or {}
 RACEBIT = { Human = 1, Orc = 2, Dwarf = 4, NightElf = 8, Scourge = 16, Undead = 16, Tauren = 32, Gnome = 64, Troll = 128 }
-CLASSBIT = { WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8, PRIEST = 16, SHAMAN = 64, MAGE = 128, WARLOCK = 256, DRUID = 1024 }
+Est.CLASSBIT = { WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8, PRIEST = 16, SHAMAN = 64, MAGE = 128, WARLOCK = 256, DRUID = 1024 }
 DROP_PRIOR = 0.35     -- taux suppose tant qu'on n'a rien mesure (prudent)
 DROP_WEIGHT = 6       -- poids de cette supposition, en "monstres" : les vrais drops la remplacent vite
 OBJ_SECS = 15         -- un objet au sol, deplacement compris
@@ -34,7 +33,7 @@ function QAvailable(q)
             return false                                   -- nouvelle race (Skyborne) : quete reservee a l'Alliance
         end
     end
-    if e.cl and e.cl > 0 and CLASSBIT[State.myClass] and not HasBit(e.cl, CLASSBIT[State.myClass]) then return false end
+    if e.cl and e.cl > 0 and Est.CLASSBIT[State.myClass] and not HasBit(e.cl, Est.CLASSBIT[State.myClass]) then return false end
     return true
 end
 
@@ -148,12 +147,12 @@ function MySpec()
 end
 function KillTime()
     local sp = MySpec()
-    if sp then DB._spec = sp end
+    if sp then State.DB._spec = sp end
     -- mesure dans ta specialisation actuelle (un pretre sacre et un pretre ombre ne tuent pas au meme rythme)
-    local m = sp and DB.ktS and DB.ktS[sp]
+    local m = sp and State.DB.ktS and State.DB.ktS[sp]
     if m and (m[2] or 0) >= 8 then return m[1], true end
     -- ancienne mesure sans specialisation connue : valable seulement si on ne connait pas la specialisation
-    if not sp and DB.ktN and DB.ktN >= 8 and DB.kt then return DB.kt, true end
+    if not sp and State.DB.ktN and State.DB.ktN >= 8 and State.DB.kt then return State.DB.kt, true end
     local t = BASE_KILL[State.myClass] or 30
     if sp and SPEC[State.myClass] and SPEC[State.myClass][sp] then t = t * SPEC[State.myClass][sp] end
     local lvl = UnitLevel("player") or 1
@@ -178,17 +177,17 @@ function DropRate(d)
 end
 
 -- Estime une liste de quetes faites dans l'ordre (trajets compris, a partir de ta position).
-function Estimate(list, withTravel)
+function Est.Estimate(list, withTravel)
     local p = UnitLevel("player") or 1
     local kt = KillTime()
     local r = { qxp = 0, mxp = 0, secs = 0, kills = 0, dropKills = 0, travel = 0, drops = {} }
-    local pos = withTravel and PlayerWP() or nil
-    local known = (DB.useFlights ~= false) and KnownFlights() or {}
+    local pos = withTravel and Route.PlayerWP() or nil
+    local known = (State.DB.useFlights ~= false) and Route.KnownFlights() or {}
     local function go(t)
         if not (pos and t) then return end
-        local w = WP(t[1], t[2], t[3])
+        local w = Route.WP(t[1], t[2], t[3])
         if not w then return end
-        local c = TravelCost(pos, w, known)
+        local c = Route.TravelCost(pos, w, known)
         if c then r.travel = r.travel + c / RUN end
         pos = w
     end
@@ -241,13 +240,13 @@ function ChainFor(q, withSelf)
     local function visit(id)
         if seen[id] or bad then return end
         seen[id] = true
-        if Rendue(id) then return end
+        if Core.Rendue(id) then return end
         if not QAvailable(id) then bad = id; return end
         local e = EST[id]
         for _, pq in ipairs(e.p or {}) do visit(pq) end
         if e.p1 then
             local ok = false
-            for _, pq in ipairs(e.p1) do if Rendue(pq) or Core.logById[pq] ~= nil then ok = true end end
+            for _, pq in ipairs(e.p1) do if Core.Rendue(pq) or Core.logById[pq] ~= nil then ok = true end end
             if not ok then
                 local pick
                 for _, pq in ipairs(e.p1) do if QAvailable(pq) then pick = pq; break end end
@@ -267,7 +266,7 @@ function ChainSteps(q, withSelf)
     if not order or #order == 0 or not EST[q] then return nil end
     local list = {}
     local function at(row, p) if p then row.m, row.x, row.y = p[1], p[2], p[3] end; return row end
-    local notes = D.CHAINNOTES or {}
+    local notes = Core.D.CHAINNOTES or {}
     for _, id in ipairs(order) do
         local e = EST[id]
         if Core.logById[id] == nil then
@@ -303,12 +302,12 @@ function BuildChainGuide(q, withSelf)
     return { title = "Chaine : " .. target.n, title_en = "Chain: " .. target.n, races = { State.myRace }, steps = list, side = true }
 end
 
-function LockCandidates()
+function Est.LockCandidates()
     local out = {}
     if not State.steps then return out end
     for i = math.max(1, State.current - 25), #State.steps do
         local s = State.steps[i]
-        if Core.blockedBy[i] and s.t == "accept" and not DB.lockHide[s.id] and type(s.id) == "number" and ChainFor(s.id) then
+        if Core.blockedBy[i] and s.t == "accept" and not State.DB.lockHide[s.id] and type(s.id) == "number" and ChainFor(s.id) then
             out[#out + 1] = i
         end
     end
@@ -316,31 +315,31 @@ function LockCandidates()
 end
 
 -- Rythme reel : temps entre deux monstres tues (combat et recuperation compris)
-lastKill = nil
+Est.lastKill = nil
 KILL_WORD = (COMBATLOG_XPGAIN_FIRSTPERSON or "%s dies, you gain %d experience."):match("%%s(.-),") or " dies"
 function OnXPGain(msg)
     if type(msg) ~= "string" or not msg:find(KILL_WORD, 1, true) then return end
     local now = GetTime and GetTime() or 0
-    if lastKill and now - lastKill < 150 then
-        local sample = math.max(8, math.min(120, now - lastKill))
-        DB.kt = DB.kt and (DB.kt * 0.9 + sample * 0.1) or sample
-        DB.ktN = (DB.ktN or 0) + 1
+    if Est.lastKill and now - Est.lastKill < 150 then
+        local sample = math.max(8, math.min(120, now - Est.lastKill))
+        State.DB.kt = State.DB.kt and (State.DB.kt * 0.9 + sample * 0.1) or sample
+        State.DB.ktN = (State.DB.ktN or 0) + 1
         local sp = MySpec()
         if sp then
-            DB.ktS = DB.ktS or {}
-            local m = DB.ktS[sp]
-            DB.ktS[sp] = m and { m[1] * 0.9 + sample * 0.1, m[2] + 1 } or { sample, 1 }
-            DB._spec = sp
+            State.DB.ktS = State.DB.ktS or {}
+            local m = State.DB.ktS[sp]
+            State.DB.ktS[sp] = m and { m[1] * 0.9 + sample * 0.1, m[2] + 1 } or { sample, 1 }
+            State.DB._spec = sp
         end
     end
-    lastKill = now
+    Est.lastKill = now
 end
 
 ------------------------------------------------------------------
 -- Zones ajoutees par Forever : on retrouve leur numero de carte par leur nom (une fois, a la connexion)
 ------------------------------------------------------------------
 function ResolveNewMaps()
-    local NEW = D.NEWMAPS or {}
+    local NEW = Core.D.NEWMAPS or {}
     local want, found = {}, {}
     local function norm(n) return (n:lower():gsub("^the ", ""):gsub("^les? ", ""):gsub("^la ", ""):gsub("[%s'%-]", "")) end
     for neg, names in pairs(NEW) do for _, n in ipairs(names) do want[norm(n)] = neg end end
@@ -389,7 +388,7 @@ function ResolveNewMaps()
         tr.from, tr.to = fixPos(tr.from), fixPos(tr.to)
         if not tr.from or not tr.to then table.remove(Route.TRANSPORTS, k) end
     end
-    wipe(wpCache)
+    wipe(Route.wpCache)
     return found
 end
 

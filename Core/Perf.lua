@@ -6,13 +6,12 @@
 -- repere du jeu, et la memoire allouee par seconde (Warpath / tous addons). Resultat dans le chat et dans
 -- WarpathDropDB._perf. Rien n'est mesure en dehors d'une mesure demandee : les fonctions d'origine sont remises.
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
+local Perf = ns.Mod.Perf -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 -- v1.50 : module ns.Mod.Perf (publie en fin de fichier pour les autres fichiers)
 local PerfMark, PerfMem, PerfStart
 
-PerfOn = false
+Perf.PerfOn = false
 
 local NAMES = { "UpdateDistance", "NearTick", "NearPick", "StepPoint", "TrailPoint", "CaveTrack", "Refresh",
     "RefreshInner", "RetargetLight", "UpdateMini", "HearthPlace", "Advice", "BestFlight", "TravelCost", "Walk",
@@ -61,10 +60,11 @@ local function wrap(name, fn)
 end
 
 local function install()
-    local env = ns.CoreEnv
+    -- v1.50 : chaque fonction est remplacee dans son module (ns.Mod) ; tout l'addon l'appelle par le module
     for _, n in ipairs(NAMES) do
-        local fn = rawget(env, n)
-        if type(fn) == "function" then saved[#saved + 1] = { env, n, fn }; env[n] = wrap(n, fn) end
+        local m = ns.ModIndex and ns.ModIndex[n]
+        local fn = m and rawget(m, n)
+        if type(fn) == "function" then saved[#saved + 1] = { m, n, fn }; m[n] = wrap(n, fn) end
     end
     for _, p in ipairs(TABLES) do
         local t = ns[p[1]]
@@ -81,33 +81,33 @@ end
 local function report(secs)
     local list = {}
     for name, st in pairs(stats) do list[#list + 1] = { name = name, n = st.n, t = st.t, mx = st.mx, kb = st.kb } end
-    local out = { T("perfHead", secs, Core.VERSION or "?") }
+    local out = { Core.T("perfHead", secs, Core.VERSION or "?") }
     table.sort(list, function(a, b) return a.t > b.t end)
-    for i = 1, math.min(8, #list) do local e = list[i]; out[#out + 1] = T("perfLine", e.name, e.n, e.t, e.mx, e.kb) end
+    for i = 1, math.min(8, #list) do local e = list[i]; out[#out + 1] = Core.T("perfLine", e.name, e.n, e.t, e.mx, e.kb) end
     -- memoire : les plus gros producteurs (souvent les memes, mais pas toujours)
     table.sort(list, function(a, b) return a.kb > b.kb end)
-    out[#out + 1] = T("perfMemHead")
-    for i = 1, math.min(6, #list) do local e = list[i]; out[#out + 1] = T("perfMemLine", e.name, e.kb / secs, e.n > 0 and e.kb * 1024 / e.n or 0) end
+    out[#out + 1] = Core.T("perfMemHead")
+    for i = 1, math.min(6, #list) do local e = list[i]; out[#out + 1] = Core.T("perfMemLine", e.name, e.kb / secs, e.n > 0 and e.kb * 1024 / e.n or 0) end
     -- saccades : nombre, intervalle moyen, part pendant un nettoyage de memoire du jeu
     local gap = 0
     if #hitchT > 1 then gap = (hitchT[#hitchT] - hitchT[1]) / (#hitchT - 1) end
-    out[#out + 1] = T("perfHitch", frames, hitches, gap)
+    out[#out + 1] = Core.T("perfHitch", frames, hitches, gap)
     for i = 1, math.min(5, #hitchList) do
         local h = hitchList[i]
-        out[#out + 1] = T("perfHitchItem", h.ms, h.wp, h.top or "-", h.gc and T("perfGcYes") or "")
+        out[#out + 1] = Core.T("perfHitchItem", h.ms, h.wp, h.top or "-", h.gc and Core.T("perfGcYes") or "")
     end
-    out[#out + 1] = T("perfGC", gcFrames, hitchGC, hitches)
-    out[#out + 1] = T("perfWP", wpSet, wpClear)
-    out[#out + 1] = T("perfMem", wpKB / secs, memSum / secs)
-    for _, l in ipairs(out) do say(l, true) end
-    say(T("perfSaved"), true)
+    out[#out + 1] = Core.T("perfGC", gcFrames, hitchGC, hitches)
+    out[#out + 1] = Core.T("perfWP", wpSet, wpClear)
+    out[#out + 1] = Core.T("perfMem", wpKB / secs, memSum / secs)
+    for _, l in ipairs(out) do Core.say(l, true) end
+    Core.say(Core.T("perfSaved"), true)
     if WarpathDropDB then
         WarpathDropDB._perf = { when = date and date("%Y-%m-%d %H:%M") or "", lines = out }
     end
 end
 
 function PerfStart(secs)
-    if PerfOn then say(T("perfBusy"), true); return end
+    if Perf.PerfOn then Core.say(Core.T("perfBusy"), true); return end
     secs = math.max(10, math.min(300, secs or 60))
     stats, depth, frameMs, frameTop, frameTopMs = {}, 0, 0, nil, 0
     frames, avg, hitches, hitchList, hitchT, hitchGC = 0, nil, 0, {}, {}, 0
@@ -115,12 +115,12 @@ function PerfStart(secs)
     -- poses et effacements du repere du jeu, par n'importe qui (hooksecurefunc ne gene pas le jeu)
     if not hooked and hooksecurefunc and C_Map then
         hooked = true
-        pcall(hooksecurefunc, C_Map, "SetUserWaypoint", function() if PerfOn then wpSet = wpSet + 1 end end)
-        pcall(hooksecurefunc, C_Map, "ClearUserWaypoint", function() if PerfOn then wpClear = wpClear + 1 end end)
+        pcall(hooksecurefunc, C_Map, "SetUserWaypoint", function() if Perf.PerfOn then wpSet = wpSet + 1 end end)
+        pcall(hooksecurefunc, C_Map, "ClearUserWaypoint", function() if Perf.PerfOn then wpClear = wpClear + 1 end end)
     end
     install()
-    PerfOn = true
-    say(T("perfStart", secs), true)
+    Perf.PerfOn = true
+    Core.say(Core.T("perfStart", secs), true)
     local fr = CreateFrame("Frame")
     local t = 0
     fr:SetScript("OnUpdate", function(self, el)
@@ -150,7 +150,7 @@ function PerfStart(secs)
         frameMs, frameTop, frameTopMs = 0, nil, 0
         if t >= secs then
             self:SetScript("OnUpdate", nil)
-            PerfOn = false
+            Perf.PerfOn = false
             uninstall()
             pcall(report, secs)
         end

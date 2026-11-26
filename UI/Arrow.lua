@@ -1,9 +1,9 @@
 -- Oghoule's Warpath : moteur (Arrow.lua) - fleche de l'addon (style "pointe fine"), voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
+local Route = ns.Mod.Route -- v1.50 : module
 local Perf = ns.Mod.Perf -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
 
@@ -18,7 +18,7 @@ do
     -- endroit de l'ecran ; la nouvelle position est sauvee (DB.arrowPos, en TOPLEFT).
     local function ApplyScale()
         if not frame then return end
-        local s = DB.arrowScale or 1
+        local s = State.DB.arrowScale or 1
         local old = frame:GetEffectiveScale()
         if math.abs((frame:GetScale() or 1) - s) < 0.001 then return end
         local cx, cy = tex:GetCenter()
@@ -32,7 +32,7 @@ do
         x, y = math.floor(x * 10 + 0.5) / 10, math.floor(y * 10 + 0.5) / 10
         frame:ClearAllPoints()
         frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
-        DB.arrowPos = { "TOPLEFT", x, y }
+        State.DB.arrowPos = { "TOPLEFT", x, y }
     end
     local ON_COURSE = math.rad(12) -- losange rouge si on vise a moins de 12 degres
     local ARRIVE = 8          -- metres : en dessous, la fleche devient un losange "tu y es"
@@ -46,8 +46,8 @@ do
         frame:SetSize(64, 84)
         frame:SetFrameStrata("MEDIUM")
         frame:SetClampedToScreen(true)
-        frame:SetScale(DB.arrowScale or 1)   -- v1.47 : l'echelle avant la position (decalages en unites de la fleche)
-        local p = DB.arrowPos
+        frame:SetScale(State.DB.arrowScale or 1)   -- v1.47 : l'echelle avant la position (decalages en unites de la fleche)
+        local p = State.DB.arrowPos
         if p then frame:SetPoint(p[1], UIParent, p[1], p[2], p[3]) else frame:SetPoint("TOP", UIParent, "TOP", 0, -140) end
         tex = frame:CreateTexture(nil, "ARTWORK")
         tex:SetSize(64, 64); tex:SetPoint("TOP")
@@ -60,22 +60,22 @@ do
         frame:EnableMouse(true)
         frame:RegisterForDrag("LeftButton")
         frame:SetMovable(true)
-        frame:SetScript("OnDragStart", function(self) if not DB.locked then self:StartMoving() end end)
+        frame:SetScript("OnDragStart", function(self) if not State.DB.locked then self:StartMoving() end end)
         frame:SetScript("OnDragStop", function(self)
             self:StopMovingOrSizing()
             local point, _, _, x, y = self:GetPoint(1)
-            DB.arrowPos = { point, math.floor(x + 0.5), math.floor(y + 0.5) }
+            State.DB.arrowPos = { point, math.floor(x + 0.5), math.floor(y + 0.5) }
         end)
         frame:SetScript("OnEnter", function(self)
-            Tip():SetOwner(self, "ANCHOR_BOTTOM"); Tip():AddLine(T("arrowTipShort"), 1, 1, 1, true)
-            Tip():AddLine(T("arrowTipKeys"), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3], true); Tip():Show()
+            Skin.Tip():SetOwner(self, "ANCHOR_BOTTOM"); Skin.Tip():AddLine(Core.T("arrowTipShort"), 1, 1, 1, true)
+            Skin.Tip():AddLine(Core.T("arrowTipKeys"), Skin.COL.soft[1], Skin.COL.soft[2], Skin.COL.soft[3], true); Skin.Tip():Show()
         end)
-        frame:SetScript("OnLeave", function() Tip():Hide() end)
+        frame:SetScript("OnLeave", function() Skin.Tip():Hide() end)
         -- v1.46 : Ctrl + molette = taille (sans Ctrl, la molette ne fait rien sur la fleche)
         frame:EnableMouseWheel(true)
         frame:SetScript("OnMouseWheel", function(_, delta)
             if not (IsControlKeyDown and IsControlKeyDown()) then return end
-            DB.arrowScale = math.max(0.6, math.min(1.6, math.floor(((DB.arrowScale or 1) + delta * 0.05) * 20 + 0.5) / 20))
+            State.DB.arrowScale = math.max(0.6, math.min(1.6, math.floor(((State.DB.arrowScale or 1) + delta * 0.05) * 20 + 0.5) / 20))
             ApplyScale()
             if ns.UI and ns.UI.RefreshOptions then pcall(ns.UI.RefreshOptions) end
         end)
@@ -100,8 +100,8 @@ do
                 { "arrowMenuOpts", function() if ns.UI and ns.UI.OpenOptionsTab then ns.UI.OpenOptionsTab(6) end end },
                 { "arrowReset", function() if ns.Arrow then ns.Arrow.Reset() end end },
                 { "arrowMenuHide", function()
-                    DB.ownArrow = false; State.lastWP = nil; Refresh(true)
-                    say(T("arrowHidden"))
+                    State.DB.ownArrow = false; State.lastWP = nil; Skin.Refresh(true)
+                    Core.say(Core.T("arrowHidden"))
                 end },
             }
             menu.btns = {}
@@ -117,7 +117,7 @@ do
             end)
             menu:SetScript("OnShow", function() idle = 0 end)
         end
-        for _, b in ipairs(menu.btns) do b:SetLabel(Skin.Caps(T(b.key))) end
+        for _, b in ipairs(menu.btns) do b:SetLabel(Skin.Caps(Core.T(b.key))) end
         menu:ClearAllPoints(); menu:SetPoint("TOP", anchor, "BOTTOM", 0, -4)
         menu:Show()
     end
@@ -126,12 +126,12 @@ do
     -- meme sans objectif ou une fois arrive
     local preview = false
     local function Preview()
-        if not (DB and DB.wp ~= false and DB.ownArrow ~= false) then return end
+        if not (State.DB and State.DB.wp ~= false and State.DB.ownArrow ~= false) then return end
         Create()
         if mode ~= "preview" then
             mode, lastD = "preview", nil
             tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\Arrow")
-            dist:SetText(Skin.Caps(T("arrowPreview")))
+            dist:SetText(Skin.Caps(Core.T("arrowPreview")))
         end
         tex:SetRotation(0)
         gem:SetRotation(0); gem:SetVertexColor(0.80, 0.14, 0.18); gem:Show()
@@ -140,23 +140,23 @@ do
     end
 
     local function Update()
-        if not DB or DB.wp == false or DB.ownArrow == false or not distTarget then
+        if not State.DB or State.DB.wp == false or State.DB.ownArrow == false or not Skin.distTarget then
             if frame then frame:Hide() end; return
         end
         local inst = IsInInstance and IsInInstance()
         if inst then if frame then frame:Hide() end; return end
         local facing = GetPlayerFacing and GetPlayerFacing()
-        local me = PlayerWP()
-        local w = WP(distTarget[1], distTarget[2], distTarget[3])
+        local me = Route.PlayerWP()
+        local w = Route.WP(Skin.distTarget[1], Skin.distTarget[2], Skin.distTarget[3])
         if type(facing) ~= "number" or not me or not w or me[3] ~= w[3] then
             if frame then frame:Hide() end; return
         end
         Create()
         local dx, dy = w[1] - me[1], w[2] - me[2]          -- x : nord, y : ouest
         local d = math.sqrt(dx * dx + dy * dy)
-        local tk = distTarget[1] .. ":" .. distTarget[2] .. ":" .. distTarget[3]
+        local tk = Skin.distTarget[1] .. ":" .. Skin.distTarget[2] .. ":" .. Skin.distTarget[3]
         if tk ~= areaKey then areaKey = tk; inArea = false end   -- nouvelle etape : on repart de zero
-        if distTarget[4] then
+        if Skin.distTarget[4] then
             if d < AREA_IN then inArea = true elseif d > AREA_OUT then inArea = false end
             if inArea then frame:Hide(); return end
         else inArea = false end
@@ -166,7 +166,7 @@ do
             if mode ~= "here" then
                 mode, lastD = "here", nil
                 tex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\ArrowHere"); tex:SetRotation(0); gem:Hide()
-                dist:SetText(Skin.Caps(T("arrowHere")))
+                dist:SetText(Skin.Caps(Core.T("arrowHere")))
             end
         else
             if mode ~= "arrow" then
@@ -178,7 +178,7 @@ do
             tex:SetRotation(ang); gem:SetRotation(ang)
             if math.abs(ang) < ON_COURSE then gem:SetVertexColor(0.80, 0.14, 0.18) else gem:SetVertexColor(0.55, 0.55, 0.55) end
             local di = math.floor(d + 0.5)
-            if di ~= lastD then lastD = di; dist:SetText(Skin.Caps(T("dist", di))) end
+            if di ~= lastD then lastD = di; dist:SetText(Skin.Caps(Core.T("dist", di))) end
         end
         ApplyScale()
         frame:Show()
@@ -192,7 +192,7 @@ do
     -- grandit et s'efface, derriere l'icone de la minicarte et le repere de la carte du monde (option mapPin)
     local PULSE = 1.6   -- secondes par pulsation
     local function Pulse(halo, base)
-        if DB.mapPin == false then halo:Hide(); return end
+        if State.DB.mapPin == false then halo:Hide(); return end
         local ph = ((GetTime and GetTime() or 0) % PULSE) / PULSE
         local s = base * (1 + ph * 1.4)
         halo:SetSize(s, s); halo:SetAlpha(0.8 * (1 - ph)); halo:Show()
@@ -206,12 +206,12 @@ do
     local IN = { 300, 240, 180, 120, 80, 50 }
     local function UpdatePin()
         local mmap = _G.Minimap
-        if not mmap or not DB or DB.wp == false or DB.mmPin == false or not distTarget
+        if not mmap or not State.DB or State.DB.wp == false or State.DB.mmPin == false or not Skin.distTarget
             or (IsInInstance and IsInInstance()) then
             if pin then pin:Hide() end; return
         end
-        local me = PlayerWP()
-        local w = WP(distTarget[1], distTarget[2], distTarget[3])
+        local me = Route.PlayerWP()
+        local w = Route.WP(Skin.distTarget[1], Skin.distTarget[2], Skin.distTarget[3])
         if not me or not w or me[3] ~= w[3] then if pin then pin:Hide() end; return end
         if not pin then
             pin = CreateFrame("Frame", "WarpathMinimapPin", mmap)
@@ -260,8 +260,8 @@ do
     local function UpdateMapPin()
         local wm = _G.WorldMapFrame
         local child = wm and wm.ScrollContainer and wm.ScrollContainer.Child
-        if not (child and wm:IsShown()) or not DB or DB.wp == false or DB.mapPin == false or not distTarget
-            or not (wm.GetMapID and wm:GetMapID() == distTarget[1]) then
+        if not (child and wm:IsShown()) or not State.DB or State.DB.wp == false or State.DB.mapPin == false or not Skin.distTarget
+            or not (wm.GetMapID and wm:GetMapID() == Skin.distTarget[1]) then
             if wpin then wpin:Hide() end; return
         end
         if not wpin then
@@ -274,7 +274,7 @@ do
         local cs = child:GetScale() or 1
         wpin:SetScale(1 / cs)
         wpin:ClearAllPoints()
-        wpin:SetPoint("CENTER", child, "TOPLEFT", distTarget[2] / 100 * child:GetWidth() * cs, -distTarget[3] / 100 * child:GetHeight() * cs)
+        wpin:SetPoint("CENTER", child, "TOPLEFT", Skin.distTarget[2] / 100 * child:GetWidth() * cs, -Skin.distTarget[3] / 100 * child:GetHeight() * cs)
         Pulse(wpin.halo, WPIN)
         wpin:Show()
     end
@@ -287,7 +287,7 @@ do
     local fill, fillA = nil, 0
     local FILL_MAX, FILL_SPEED = 0.65, 2.5 -- opacite au maximum ; vitesse du fondu (par seconde)
     local function UpdateDestIcon(el)
-        local ic = f and rawget(f, "dest") and f.dest.arrow
+        local ic = Core.f and rawget(Core.f, "dest") and Core.f.dest.arrow
         if not (ic and ic.SetRotation) then return end
         if not fill then
             fill = ic:GetParent():CreateTexture(nil, "ARTWORK", nil, -1)
@@ -298,9 +298,9 @@ do
         end
         local ang, aim = 0, false
         local facing = GetPlayerFacing and GetPlayerFacing()
-        if distTarget and type(facing) == "number" and not (IsInInstance and IsInInstance()) then
-            local me = PlayerWP()
-            local w = WP(distTarget[1], distTarget[2], distTarget[3])
+        if Skin.distTarget and type(facing) == "number" and not (IsInInstance and IsInInstance()) then
+            local me = Route.PlayerWP()
+            local w = Route.WP(Skin.distTarget[1], Skin.distTarget[2], Skin.distTarget[3])
             if me and w and me[3] == w[3] then
                 local dx, dy = w[1] - me[1], w[2] - me[2]
                 if dx * dx + dy * dy >= ARRIVE * ARRIVE then
@@ -323,8 +323,8 @@ do
         acc = acc + el
         if acc < 0.04 then return end
         acc = 0
-        local m0 = PerfOn and Perf.PerfMem and Perf.PerfMem()                     -- v1.47 : /warpath perf
-        local t0 = PerfOn and debugprofilestop and debugprofilestop()
+        local m0 = Perf.PerfOn and Perf.PerfMem and Perf.PerfMem()                     -- v1.47 : /warpath perf
+        local t0 = Perf.PerfOn and debugprofilestop and debugprofilestop()
         local ok = pcall(Update)
         if not ok and frame then frame:Hide() end
         if preview and not (frame and frame:IsShown()) then pcall(Preview) end
@@ -335,7 +335,7 @@ do
     end)
 
     ns.Arrow = {
-        Reset = function() DB.arrowPos = nil; if frame then frame:ClearAllPoints(); frame:SetPoint("TOP", UIParent, "TOP", 0, -140) end end,
+        Reset = function() State.DB.arrowPos = nil; if frame then frame:ClearAllPoints(); frame:SetPoint("TOP", UIParent, "TOP", 0, -140) end end,
         Preview = function(on) preview = on and true or false end,
     }
 end

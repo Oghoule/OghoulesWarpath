@@ -1,7 +1,5 @@
 -- Oghoule's Warpath : moteur (Targets.lua) - petite fenetre de ciblage, voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
 local Core = ns.Mod.Core -- v1.50 : module
@@ -36,21 +34,21 @@ do
         local mode = moving
         moving = nil
         panel:StopMovingOrSizing()
-        if mode == "size" then DB.tgtW = math.floor((panel:GetWidth() or W) + 0.5); lastDock = nil end
+        if mode == "size" then State.DB.tgtW = math.floor((panel:GetWidth() or W) + 0.5); lastDock = nil end
         local point, _, _, x, y = panel:GetPoint(1)
-        if point and (mode == "move" or DB.tgtPos) then
-            DB.tgtPos = { point, math.floor(x + 0.5), math.floor(y + 0.5), panel:GetScale() }
+        if point and (mode == "move" or State.DB.tgtPos) then
+            State.DB.tgtPos = { point, math.floor(x + 0.5), math.floor(y + 0.5), panel:GetScale() }
         end
     end
 
     local function Create()
         if panel then return end
         panel = CreateFrame("Frame", "WarpathTargets", UIParent)
-        W = math.max(140, math.min(420, tonumber(DB.tgtW) or W))
+        W = math.max(140, math.min(420, tonumber(State.DB.tgtW) or W))
         panel:SetSize(W, HDR + 6 + RH)
         panel:SetFrameStrata("MEDIUM")
         panel:SetClampedToScreen(true)
-        local p = DB.tgtPos
+        local p = State.DB.tgtPos
         if p then panel:SetScale(p[4] or 1); panel:SetPoint(p[1], UIParent, p[1], p[2], p[3]) else panel:SetPoint("CENTER", UIParent, "CENTER", -300, -120) end
         -- clic droit : la recoller sous la fenetre du guide
         panel:SetScript("OnMouseUp", function(_, btn) if btn == "RightButton" then ns.Targets.Reset() end end)
@@ -64,13 +62,13 @@ do
         title = Skin.FS(panel, 10, Skin.COL.white, Skin.FONT, "LEFT"); title:SetPoint("LEFT", panel, "TOPLEFT", 22, -HDR / 2)
         local help = Skin.HeadButton(panel, "?"); help:SetPoint("RIGHT", panel, "TOPRIGHT", -5, -HDR / 2)
         help:SetScript("OnEnter", function(self)
-            Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("helpHead"))
-            for k = 1, 4 do Tip():AddLine("|cffccba8f" .. T("tgtHelpK" .. k) .. "|r  " .. T("tgtHelpV" .. k), 1, 1, 1, true) end
-            Tip():Show()
+            Skin.Tip():SetOwner(self, "ANCHOR_RIGHT"); Skin.Tip():AddLine(Core.T("helpHead"))
+            for k = 1, 4 do Skin.Tip():AddLine("|cffccba8f" .. Core.T("tgtHelpK" .. k) .. "|r  " .. Core.T("tgtHelpV" .. k), 1, 1, 1, true) end
+            Skin.Tip():Show()
         end)
         panel:EnableMouse(true); panel:SetMovable(true); panel:RegisterForDrag("LeftButton")
         panel:SetScript("OnDragStart", function(self)
-            if not DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving(); moving = "move" end
+            if not State.DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving(); moving = "move" end
         end)
         -- v1.49 : en combat, le jeu bloque StopMovingOrSizing (boutons securises dans la fenetre) ; le
         -- deplacement est deja termine a l'entree en combat (PLAYER_REGEN_DISABLED, plus bas)
@@ -85,12 +83,12 @@ do
         gt:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up"); gt:SetVertexColor(Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3])
         local gh = grip:CreateTexture(nil, "HIGHLIGHT"); gh:SetAllPoints(); gh:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
         grip:SetScript("OnMouseDown", function()
-            if DB.locked or (InCombatLockdown and InCombatLockdown()) then return end
+            if State.DB.locked or (InCombatLockdown and InCombatLockdown()) then return end
             panel:StartSizing("RIGHT"); moving = "size"
         end)
         grip:SetScript("OnMouseUp", function() if not (InCombatLockdown and InCombatLockdown()) then EndMove() end end)
-        grip:SetScript("OnEnter", function(self) Tip():SetOwner(self, "ANCHOR_RIGHT"); Tip():AddLine(T("tgtResize"), 1, 1, 1, true); Tip():Show() end)
-        grip:SetScript("OnLeave", function() Tip():Hide() end)
+        grip:SetScript("OnEnter", function(self) Skin.Tip():SetOwner(self, "ANCHOR_RIGHT"); Skin.Tip():AddLine(Core.T("tgtResize"), 1, 1, 1, true); Skin.Tip():Show() end)
+        grip:SetScript("OnLeave", function() Skin.Tip():Hide() end)
         for i = 1, MAX do
             local b = CreateFrame("Button", "WarpathTarget" .. i, panel, "SecureActionButtonTemplate")
             -- largeur liee a celle de la fenetre (ancres gauche et droite) : rien a recalculer quand on l'elargit
@@ -116,13 +114,13 @@ do
             if i > 1 then local sep = Skin.Tex(b, Skin.COL.faint, 0.8); sep:SetHeight(1); sep:SetPoint("TOPLEFT", 20, 0); sep:SetPoint("TOPRIGHT", 0, 0) end
             if b.fs.SetWordWrap then b.fs:SetWordWrap(false) end
             b:SetScript("OnEnter", function(self)
-                Tip():SetOwner(self, "ANCHOR_RIGHT")
-                Tip():AddLine(self.name or "")
-                Tip():AddLine(T("tgtClick"), 0.8, 0.73, 0.56, true)
-                if not DB.tgtPos then Tip():AddLine(T("tgtDock"), 0.55, 0.5, 0.4, true) end
-                Tip():Show()
+                Skin.Tip():SetOwner(self, "ANCHOR_RIGHT")
+                Skin.Tip():AddLine(self.name or "")
+                Skin.Tip():AddLine(Core.T("tgtClick"), 0.8, 0.73, 0.56, true)
+                if not State.DB.tgtPos then Skin.Tip():AddLine(Core.T("tgtDock"), 0.55, 0.5, 0.4, true) end
+                Skin.Tip():Show()
             end)
-            b:SetScript("OnLeave", function() Tip():Hide() end)
+            b:SetScript("OnLeave", function() Skin.Tip():Hide() end)
             b:Hide()
             rows[i] = b
         end
@@ -157,8 +155,8 @@ do
         local u = (e == "NAME_PLATE_UNIT_ADDED" and unit) or (e == "PLAYER_TARGET_CHANGED" and "target") or "mouseover"
         local ok, new = pcall(learn, u)
         -- nouveau nom appris : la liste est refaite (au plus toutes les 2 s)
-        if ok and new and GetTime and GetTime() - lastLearn > 2 and ns.CoreEnv and ns.CoreEnv.Refresh then
-            lastLearn = GetTime(); pcall(ns.CoreEnv.Refresh, true)
+        if ok and new and GetTime and GetTime() - lastLearn > 2 and ns.Mod.Skin.Refresh then
+            lastLearn = GetTime(); pcall(ns.Mod.Skin.Refresh, true)
         end
     end)
 
@@ -185,8 +183,8 @@ do
             local n = (C_Item and C_Item.GetItemCount) and C_Item.GetItemCount(item) or 0
             return (n or 0) >= (need or 1)
         end
-        if currentAdvice and currentAdvice.kind == "bind" then add(currentAdvice.npc, "inn") end
-        if currentAdvice and currentAdvice.kind == "buy" then add(currentAdvice.npc, "buy") end
+        if Skin.currentAdvice and Skin.currentAdvice.kind == "bind" then add(Skin.currentAdvice.npc, "inn") end
+        if Skin.currentAdvice and Skin.currentAdvice.kind == "buy" then add(Skin.currentAdvice.npc, "buy") end
         if State.flightPlan and State.flightPlan.from and ns.FlightNodeNpc then add(ns.FlightNodeNpc[State.flightPlan.from.key], "fly") end
         local groups = {}   -- un groupe par objectif : on les prend tour a tour, pour que chaque objectif ait sa place
         if s then
@@ -233,14 +231,14 @@ do
         if InCombatLockdown and InCombatLockdown() then waiting = true; return end
         waiting = false
         local L = wanted or {}
-        local off = DB.targets == false or #L == 0 or DB.shown == false
+        local off = State.DB.targets == false or #L == 0 or State.DB.shown == false
         local key = off and "off" or ""
         if not off then for _, t in ipairs(L) do key = key .. t.id .. ":" .. (t.pct or "") .. t.kind .. "," end end
         if key == shownKey then return end
         shownKey = key
         if off then if panel then panel:Hide() end; return end
         Create()
-        title:SetText(Skin.Caps(T("tgtTitle")))
+        title:SetText(Skin.Caps(Core.T("tgtTitle")))
         for i, b in ipairs(rows) do
             local t = L[i]
             if t then
@@ -268,7 +266,7 @@ do
     -- Par defaut, collee sous la fenetre du guide. Pas d'ancrage direct (un bouton securise ancre a la
     -- fenetre bloquerait ses changements de taille en combat) : on recopie sa position hors combat.
     function Dock()
-        if not panel or DB.tgtPos or (InCombatLockdown and InCombatLockdown()) then return end
+        if not panel or State.DB.tgtPos or (InCombatLockdown and InCombatLockdown()) then return end
         local f = _G.WarpathFrame
         -- mode compact (v1.40) : collee sous la petite fenetre
         local mini = _G.WarpathMini
@@ -284,7 +282,7 @@ do
         panel:ClearAllPoints()
         panel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, b - 2)
         -- largeur choisie avec la poignee, sinon celle de la fenetre du guide
-        panel:SetWidth(tonumber(DB.tgtW) or w)
+        panel:SetWidth(tonumber(State.DB.tgtW) or w)
     end
     -- monstres pas en vue (sans plaque de nom a l'ecran) : ligne grisee, pour savoir tout de suite sur qui cliquer.
     -- Si aucune plaque n'est visible (plaques desactivees), on ne grise rien.
@@ -331,7 +329,7 @@ do
         Update = function(s) wanted = Build(s); local ok = pcall(Apply); if not ok then shownKey = nil end end,
         Refresh = function() shownKey = nil; pcall(Apply) end,
         Reset = function()
-            DB.tgtPos = nil
+            State.DB.tgtPos = nil
             lastDock = nil
             pcall(Dock)
         end,

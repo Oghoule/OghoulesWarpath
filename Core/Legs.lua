@@ -6,8 +6,8 @@
 -- La fleche vise le prochain point du trajet le plus proche de toi ; loin de tout trajet (mort, detour), elle
 -- revient a l'objectif et aux autres regles (passages, grottes, portes de ville), qui restent prioritaires.
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
+local State = ns.State
+local Core = ns.Mod.Core -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : module ns.Mod.Legs (publie en fin de fichier pour les autres fichiers)
 local LegPoint
@@ -25,13 +25,13 @@ local function legsFor(s)
     if w == nil then
         w = false
         local raw = ns.Legs[key]
-        local g = raw and WP(s.m, s.x, s.y)
+        local g = raw and Route.WP(s.m, s.x, s.y)
         if g then
             w = {}
             for _, leg in ipairs(raw) do
                 local pts, ok = {}, true
                 for i, p in ipairs(leg) do
-                    local v = WP(p[1], p[2], p[3])
+                    local v = Route.WP(p[1], p[2], p[3])
                     if not v or v[3] ~= g[3] then ok = false; break end
                     pts[i] = { v[1], v[2], p[1], p[2], p[3] }
                 end
@@ -56,7 +56,7 @@ end
 
 -- le point a viser pour l'etape s, ou nil (pas de trajet, ou tu en es trop loin)
 function LegPoint(s, me)
-    if not (DB and DB.legs ~= false and me) then return nil end
+    if not (State.DB and State.DB.legs ~= false and me) then return nil end
     local legs = legsFor(s)
     if not legs then return nil end
     local best
@@ -77,7 +77,7 @@ function LegPoint(s, me)
     while k < #pts and Route.Dist(me[1], me[2], pts[k][1], pts[k][2]) <= PASSED do k = k + 1 end
     if k >= #pts then return nil end -- plus rien entre toi et l'objectif : la fleche normale suffit
     local p = pts[k]
-    return { m = p[3], x = p[4], y = p[5], name = T("legVia"), kind = "leg" }
+    return { m = p[3], x = p[4], y = p[5], name = Core.T("legVia"), kind = "leg" }
 end
 
 -- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Legs)

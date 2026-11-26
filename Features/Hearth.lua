@@ -1,9 +1,8 @@
 -- Oghoule's Warpath : moteur (Hearth.lua) - pierre de foyer strategique + journal de quetes plein, voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Hearth = ns.Mod.Hearth -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
 local Est = ns.Mod.Est -- v1.50 : module
@@ -28,9 +27,9 @@ do
     local function Now() return GetTime and GetTime() or 0 end
 
     -- ou est liee la pierre : apprise en jeu (lien ou retour par la pierre), sinon devinee par le nom de l'auberge
-    function HearthPos()
+    function Hearth.HearthPos()
         local name = GetBindLocation and GetBindLocation()
-        local h = DB.hearth
+        local h = State.DB.hearth
         if h and h.m and (not name or h.name == name) then return h end
         if name then
             for _, inn in ipairs(ns.Inns or {}) do
@@ -48,13 +47,13 @@ do
         local start, dur
         if C_Container and C_Container.GetItemCooldown then start, dur = C_Container.GetItemCooldown(HS_ITEM)
         elseif GetItemCooldown then start, dur = GetItemCooldown(HS_ITEM) end
-        if dur and dur > 60 then DB.hearthLen = dur end
-        local len = DB.hearthLen or 3600
+        if dur and dur > 60 then State.DB.hearthLen = dur end
+        local len = State.DB.hearthLen or 3600
         if not start or start == 0 or not dur or dur <= 1.5 then return 0, len end
         return math.max(0, start + dur - Now()), len
     end
 
-    local function Known() return KnownFlights() end
+    local function Known() return Route.KnownFlights() end
 
     -- positions des prochaines etapes, avec le temps estime pour y arriver
     local function Upcoming(i, from, horizon)
@@ -63,9 +62,9 @@ do
         for j = i, math.min(#State.steps, i + LOOK) do
             local s = State.steps[j]
             if s and Core.Applies(s) and not State.doneCache[j] and s.m and s.x then
-                local w = WP(s.m, s.x, s.y)
+                local w = Route.WP(s.m, s.x, s.y)
                 if w then
-                    local c = prev and TravelCost(prev, w, known)
+                    local c = prev and Route.TravelCost(prev, w, known)
                     if c then eta = eta + c / Est.RUN end
                     out[#out + 1] = { j = j, w = w, s = s, leg = c, eta = eta }
                     eta = eta + (s.t == "do" and 150 or 15)
@@ -80,8 +79,8 @@ do
     -- ce que la pierre ferait gagner (secondes) sur un trajet a -> b
     local function Gain(H, a, b, known)
         if not (H and a and b) then return 0 end
-        local normal = TravelCost(a, b, known)
-        local via = TravelCost(H, b, known)
+        local normal = Route.TravelCost(a, b, known)
+        local via = Route.TravelCost(H, b, known)
         if not normal or not via then return 0 end
         return (normal - via) / Est.RUN - HS_COST
     end
@@ -126,10 +125,10 @@ do
         end
         table.sort(cand, function(a, b) if a.grey ~= b.grey then return a.grey and true or false end return a.name < b.name end)
         local names = {}
-        for k = 1, math.min(3, #cand) do names[#names + 1] = cand[k].name .. (cand[k].grey and (" (" .. T("grey") .. ")") or "") end
+        for k = 1, math.min(3, #cand) do names[#names + 1] = cand[k].name .. (cand[k].grey and (" (" .. Core.T("grey") .. ")") or "") end
         return { kind = "log", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoAccept", tint = Skin.COL.accent,
-                 text = T(n >= LOG_MAX and "logFull" or "logNear", n, LOG_MAX)
-                     .. (#names > 0 and ("  " .. T("logDrop", table.concat(names, ", "))) or "") }
+                 text = Core.T(n >= LOG_MAX and "logFull" or "logNear", n, LOG_MAX)
+                     .. (#names > 0 and ("  " .. Core.T("logDrop", table.concat(names, ", "))) or "") }
     end
 
     -- objets de quete qui s'achetent : rappel quand tu passes pres d'un marchand qui les vend,
@@ -139,7 +138,7 @@ do
         return (C_Item and C_Item.GetItemCount and C_Item.GetItemCount(item)) or (GetItemCount and GetItemCount(item)) or 0
     end
     local function ShopAdvice(i)
-        local here = PlayerWP()
+        local here = Route.PlayerWP()
         if not here or not ns.Vendors then return nil end
         local seen = {}
         for j = i, math.min(#State.steps, i + SHOP_LOOK) do
@@ -150,12 +149,12 @@ do
                     for _, b in ipairs((e and e.b) or {}) do
                         local item, need, name = b[1], b[2], b[3]
                         local miss = need - Have(item)
-                        if not seen[item] and miss > 0 and not Rendue(q) then
+                        if not seen[item] and miss > 0 and not Core.Rendue(q) then
                             seen[item] = true
                             local best, bestD
                             for k = 4, #b do
                                 local v = ns.Vendors[b[k]]
-                                local w = v and v[1] and WP(v[1], v[2], v[3])
+                                local w = v and v[1] and Route.WP(v[1], v[2], v[3])
                                 if w and w[3] == here[3] then
                                     local d = Route.Dist(here[1], here[2], w[1], w[2])
                                     if not bestD or d < bestD then best, bestD = b[k], d end
@@ -164,11 +163,11 @@ do
                             local vn = best and (ns.NpcNames or {})[best] or "?"
                             if best and bestD < 120 then
                                 return { kind = "buy", npc = best, icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoShop", tint = Skin.COL.accent,
-                                         text = (j == i) and T("buyNow", miss, name, vn) or ((j - i == 1) and T("buyHere1", miss, name, vn, Core.QName(s) or name) or T("buyHere", miss, name, vn, j - i, Core.QName(s) or name)) }
+                                         text = (j == i) and Core.T("buyNow", miss, name, vn) or ((j - i == 1) and Core.T("buyHere1", miss, name, vn, Core.QName(s) or name) or Core.T("buyHere", miss, name, vn, j - i, Core.QName(s) or name)) }
                             elseif j == i and s.t ~= "accept" then
                                 local v = best and ns.Vendors[best]
                                 return { kind = "buyFar", npc = best, icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoShop", tint = Skin.COL.accent,
-                                         text = T("buyMissing", miss, name, vn, v and (Est.MAPNAME[v[1]] or "") or "") }
+                                         text = Core.T("buyMissing", miss, name, vn, v and (Est.MAPNAME[v[1]] or "") or "") }
                             end
                         end
                     end
@@ -178,31 +177,31 @@ do
     end
 
     local function HearthAdvice(i, g)
-        if DB.hearthTips == false then return nil end
+        if State.DB.hearthTips == false then return nil end
         if (IsInInstance and IsInInstance()) or (UnitOnTaxi and UnitOnTaxi("player")) then return nil end
         local cd, len = HearthCD()
         if not cd then return nil end
-        local here = PlayerWP()
+        local here = Route.PlayerWP()
         if not here then return nil end
-        local h = HearthPos()
-        local H = h and WP(h.m, h.x, h.y)
+        local h = Hearth.HearthPos()
+        local H = h and Route.WP(h.m, h.x, h.y)
         local up = Upcoming(i, here, len + 600)
         local known = Known()
         -- 1) lier ici ? (tu es pres d'un aubergiste et cette auberge rapporterait nettement plus)
         for _, inn in ipairs(ns.Inns or {}) do
-            local w = inn.m and WP(inn.m, inn.x, inn.y)
+            local w = inn.m and Route.WP(inn.m, inn.x, inn.y)
             if w and w[3] == here[3] and Route.Dist(here[1], here[2], w[1], w[2]) < 60 and not (h and h.inn == inn.id) then
                 local vNew, vCur = InnValue(w, up, len), InnValue(H, up, len)
                 if vNew > MIN_GAIN and vNew > vCur + 90 then
                     return { kind = "bind", npc = inn.id, icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoInn", tint = Skin.COL.accent,
-                             text = T("hsBind", (ns.NpcNames or {})[inn.id] or "?", math.floor(vNew / 60 + 0.5)) }
+                             text = Core.T("hsBind", (ns.NpcNames or {})[inn.id] or "?", math.floor(vNew / 60 + 0.5)) }
                 end
             end
         end
         if not H or not g or not g.m or not g.x then return nil end
         -- deja a ton auberge (ou juste a cote) : la pierre ne te ferait rien gagner
         if H[3] == here[3] and Route.Dist(here[1], here[2], H[1], H[2]) < 150 then return nil end
-        local T1 = WP(g.m, g.x, g.y)
+        local T1 = Route.WP(g.m, g.x, g.y)
         local now = Gain(H, here, T1, known)
         if now < MIN_GAIN then return nil end
         local mins = math.floor(now / 60 + 0.5)
@@ -210,7 +209,7 @@ do
             -- en recharge : l'attendre vaut-il le coup ?
             if cd < now - MIN_GAIN then
                 return { kind = "wait", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoHearth", tint = Skin.COL.accent,
-                         text = T("hsWait", math.ceil(cd / 60), math.floor((now - cd) / 60 + 0.5)) }
+                         text = Core.T("hsWait", math.ceil(cd / 60), math.floor((now - cd) / 60 + 0.5)) }
             end
             return nil
         end
@@ -230,9 +229,9 @@ do
         local need = (now < SMALL) and now or now * 1.3
         if bestU and best >= MIN_GAIN and best >= need then
             return { kind = "hold", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoHearth", tint = Skin.COL.accent,
-                     text = T("hsHold", math.floor(best / 60 + 0.5), math.max(1, math.floor(bestU.eta / 60 + 0.5)), Core.QName(bestU.s) or bestU.s.zone or Est.MAPNAME[bestU.s.m] or "?") }
+                     text = Core.T("hsHold", math.floor(best / 60 + 0.5), math.max(1, math.floor(bestU.eta / 60 + 0.5)), Core.QName(bestU.s) or bestU.s.zone or Est.MAPNAME[bestU.s.m] or "?") }
         end
-        return { kind = "use", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoHearth", tint = Skin.COL.accent, text = T("hsUse", h.name or "?", mins, math.floor(len / 60 + 0.5)) }
+        return { kind = "use", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoHearth", tint = Skin.COL.accent, text = Core.T("hsUse", h.name or "?", mins, math.floor(len / 60 + 0.5)) }
     end
 
     -- quete de l'etape ratee (escorte, delai) : la reprendre chez le donneur
@@ -242,21 +241,21 @@ do
         for _, id in ipairs(Core.Ids(s)) do
             if Core.logById[id] ~= nil and C_QuestLog.IsFailed(id) then
                 return { kind = "failed", icon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoAccept", tint = Skin.COL.red,
-                         text = T("questFailed", Core.QuestTitle(id) or Core.QName(s) or ("#" .. id)) }
+                         text = Core.T("questFailed", Core.QuestTitle(id) or Core.QName(s) or ("#" .. id)) }
             end
         end
         return nil
     end
 
     -- appele par l'affichage ; resultat garde quelques secondes (calcul de trajets)
-    function Advice(i, g)
+    function Hearth.Advice(i, g)
         -- pas de cache : l'echec doit s'afficher tout de suite
         local okF, fail = pcall(FailAdvice, i)
         if okF and fail then return fail end
-        local here = PlayerWP()
+        local here = Route.PlayerWP()
         local cd = HearthCD()
         local key = i .. ":" .. (here and (math.floor(here[1] / 40) .. ":" .. math.floor(here[2] / 40)) or "") .. ":"
-            .. tostring(cd and cd > 0) .. ":" .. (g and g.m and (g.m .. g.x .. g.y) or "") .. ":" .. tostring(DB.hearthTips)
+            .. tostring(cd and cd > 0) .. ":" .. (g and g.m and (g.m .. g.x .. g.y) or "") .. ":" .. tostring(State.DB.hearthTips)
         if cache.key == key and cache.t and Now() - cache.t < 5 then return cache.adv end
         local ok, adv = pcall(LogAdvice, i)
         if not ok then adv = nil end
@@ -268,14 +267,14 @@ do
 
     -- apprendre ou est liee la pierre
     local function Learn()
-        local m, x, y = PlayerPos and PlayerPos()
+        local m, x, y = Route.PlayerPos and Route.PlayerPos()
         if not m or not x then return end
         local name = GetBindLocation and GetBindLocation()
         local best
         for _, inn in ipairs(ns.Inns or {}) do
             if inn.m == m and Route.Dist(x, y, inn.x, inn.y) < 3 then best = inn.id end
         end
-        DB.hearth = { m = m, x = x, y = y, name = name, inn = best }
+        State.DB.hearth = { m = m, x = x, y = y, name = name, inn = best }
         cache.key = nil
     end
     local ev = CreateFrame("Frame")
@@ -284,7 +283,7 @@ do
     ev:RegisterEvent("PLAYER_ENTERING_WORLD")
     ev:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     ev:SetScript("OnEvent", function(_, event, unit, _, spell)
-        if not DB then return end
+        if not State.DB then return end
         if event == "HEARTHSTONE_BOUND" then
             pcall(Learn)
         elseif event == "UNIT_SPELLCAST_SUCCEEDED" then

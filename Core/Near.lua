@@ -3,14 +3,14 @@
 -- 2) En passant : un PNJ a moins de 25 m dont une etape proche a besoin passe en premier.
 -- 3) Explications : quetes a prendre plus tard / jamais prises pres de toi, quetes en attente d'un niveau.
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Near = ns.Mod.Near -- v1.50 : module
+local Trail = ns.Mod.Trail -- v1.50 : module
+local Style = ns.Mod.Style -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
 local Profs = ns.Mod.Profs -- v1.50 : module
-local Comfort = ns.Mod.Comfort -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
 local Flow = ns.Mod.Flow -- v1.50 : module
 -- v1.50 : module ns.Mod.Near (publie en fin de fichier pour les autres fichiers)
@@ -37,7 +37,7 @@ function ListBlock(title, items, col, icon)
     return table.concat(out, "\n")
 end
 State.baseCurrent = nil   -- etape courante dans l'ordre du guide (avant le choix par proximite)
-nearKind = nil      -- "near" (le plus proche du groupe) ou "pass" (en passant), pour l'affichage
+Near.nearKind = nil      -- "near" (le plus proche du groupe) ou "pass" (en passant), pour l'affichage
 local PASS_R, LOOK, CLUSTER, HUB_R = 25, 15, 12, 80
 local lastPick
 
@@ -49,19 +49,19 @@ function Actionable(j)
         local any = false
         for _, id in ipairs(Core.Ids(s)) do
             if Core.logById[id] == true then any = true
-            elseif not Rendue(id) then return false end
+            elseif not Core.Rendue(id) then return false end
         end
         return any
     elseif s.t == "accept" then
         if (s.req or 0) > (UnitLevel("player") or 1) then return false end
-        for _, p in ipairs(s.preg or {}) do if not Rendue(p) then return false end end
+        for _, p in ipairs(s.preg or {}) do if not Core.Rendue(p) then return false end end
         if s.pre then
             local ok = false
-            for _, p in ipairs(s.pre) do if Rendue(p) then ok = true end end
+            for _, p in ipairs(s.pre) do if Core.Rendue(p) then ok = true end end
             if not ok then return false end
         end
         for _, id in ipairs(Core.Ids(s)) do
-            if Core.logById[id] ~= nil or Rendue(id) or DB.ignored[id] then return false end
+            if Core.logById[id] ~= nil or Core.Rendue(id) or State.DB.ignored[id] then return false end
         end
         return true
     end
@@ -70,16 +70,16 @@ end
 
 local function distTo(me, s)
     if not (s and s.m and s.x) then return nil end
-    local g = WP(s.m, s.x, s.y)
+    local g = Route.WP(s.m, s.x, s.y)
     if not g or g[3] ~= me[3] then return nil end
     return Route.Dist(me[1], me[2], g[1], g[2])
 end
 
 -- renvoie l'etape a faire en premier (ou nil = garder l'ordre du guide)
-function NearPick(cur)
-    nearKind = nil
-    if not (State.steps and cur and State.steps[cur]) or Core.IS_DUNGEON[DB.guide] or DB.near == false then return nil end
-    local me = PlayerWP(); if not me then return nil end
+function Near.NearPick(cur)
+    Near.nearKind = nil
+    if not (State.steps and cur and State.steps[cur]) or Core.IS_DUNGEON[State.DB.guide] or State.DB.near == false then return nil end
+    local me = Route.PlayerWP(); if not me then return nil end
     local s0 = State.steps[cur]
     local best, bd, kind
     if s0.t == "accept" or s0.t == "turnin" then
@@ -91,7 +91,7 @@ function NearPick(cur)
                 -- seulement dans le meme camp que l'etape du guide (pas de saut d'un camp a l'autre)
                 local same = j == cur
                 if not same and s0.m and s.m then
-                    local a, b = WP(s0.m, s0.x, s0.y), WP(s.m, s.x, s.y)
+                    local a, b = Route.WP(s0.m, s0.x, s0.y), Route.WP(s.m, s.x, s.y)
                     same = a and b and a[3] == b[3] and Route.Dist(a[1], a[2], b[1], b[2]) < HUB_R
                 end
                 if same and (j == cur or Actionable(j)) then
@@ -126,43 +126,43 @@ function NearPick(cur)
         j = j + 1
     end
     lastPick = best
-    if best and best ~= cur then nearKind = kind; return best end
+    if best and best ~= cur then Near.nearKind = kind; return best end
     return nil
 end
 
 -- appele en marchant (toutes les 2 s) : change l'etape affichee si un PNJ plus proche devient pertinent
 local lastTick = 0
 local lastPointKey = ""
-function NearTick()
+function Near.NearTick()
     local t = GetTime and GetTime() or 0
     if t - lastTick < 2 then return end
     lastTick = t
     if not State.steps or State.peek or State.focus or not State.baseCurrent or State.computingOther then return end
-    if Skin.DungeonLogActive and Skin.DungeonLogActive() then return end
-    pcall(CaveTrack)
+    if Flow.DungeonLogActive() then return end
+    pcall(Near.CaveTrack)
     -- v1.49 : prise laissee derriere toi (StepDone) : on refait le calcul quand tu arrives pres de son PNJ
     -- ou que tu t'en eloignes (seulement les quelques prises du camp de l'ancre ou en attente de niveau)
-    for i, was in pairs(heldNear) do
+    for i, was in pairs(Core.heldNear) do
         local s = State.steps[i]
         if s and Core.NearNpc(s, was) ~= was then pcall(Flow.Advance); return end
     end
     local sp
     local ok, pk = pcall(function()
-        sp = StepPoint(State.steps[State.current])
+        sp = Near.StepPoint(State.steps[State.current])
         return (sp and (sp.kind .. sp.m .. ":" .. sp.x .. ":" .. sp.y) or "") .. (TrainDetour(State.steps[State.current]) and "T" or "")
     end)
     if ok and pk ~= lastPointKey then
         lastPointKey = pk
         -- v1.46 : seul le point a bouge (meme etape, meme genre) : la fleche se deplace sans tout reconstruire
         local okL, light = false, false
-        if pk:sub(-1) ~= "T" and RetargetLight then okL, light = pcall(RetargetLight, sp) end
-        if not (okL and light) then State.lastWP = nil; Refresh(true) end
+        if pk:sub(-1) ~= "T" and Skin.RetargetLight then okL, light = pcall(Skin.RetargetLight, sp) end
+        if not (okL and light) then State.lastWP = nil; Skin.Refresh(true) end
         return
     end
-    local j = NearPick(State.baseCurrent) or State.baseCurrent
+    local j = Near.NearPick(State.baseCurrent) or State.baseCurrent
     if j ~= State.current and State.steps[j] then
-        State.current = j; DB.step[DB.guide] = State.current
-        State.lastWP = nil; Refresh(true)
+        State.current = j; State.DB.step[State.DB.guide] = State.current
+        State.lastWP = nil; Skin.Refresh(true)
     end
 end
 
@@ -172,12 +172,12 @@ function LevelWaitLines(s)
     if not (s and s.t == "do") then return out end
     local lvl = UnitLevel("player") or 1
     for _, q in ipairs(Core.Ids(s)) do
-        if Core.logById[q] == nil and not Rendue(q) and not DB.ignored[q] then
+        if Core.logById[q] == nil and not Core.Rendue(q) and not State.DB.ignored[q] then
             for _, a in ipairs(State.steps) do
                 if a.t == "accept" and (a.req or 0) > lvl and Core.Applies(a) then
                     local has = false
                     for _, id in ipairs(Core.Ids(a)) do if id == q then has = true end end
-                    if has then out[#out + 1] = T("lvlWaitItem", Core.QuestTitle(q) or a.quest or ("#" .. q), a.req); break end
+                    if has then out[#out + 1] = Core.T("lvlWaitItem", Core.QuestTitle(q) or a.quest or ("#" .. q), a.req); break end
                 end
             end
         end
@@ -188,8 +188,8 @@ end
 -- pres d'un camp : quetes que le guide prendra plus tard, ou ne prend pas (pas rentables)
 function HubNotes(i)
     local s = State.steps and State.steps[i]
-    if not s or (s.t ~= "accept" and s.t ~= "turnin") or Core.IS_DUNGEON[DB.guide] then return nil end
-    local me = PlayerWP(); if not me then return nil end
+    if not s or (s.t ~= "accept" and s.t ~= "turnin") or Core.IS_DUNGEON[State.DB.guide] then return nil end
+    local me = Route.PlayerWP(); if not me then return nil end
     local here = distTo(me, s)
     if not here or here > 40 then return nil end
     local later, skip, seen = {}, {}, {}
@@ -200,9 +200,9 @@ function HubNotes(i)
             local d = distTo(me, a)
             if d and d < 30 then
                 for _, q in ipairs(Core.Ids(a)) do
-                    if not seen[q] and Core.logById[q] == nil and not Rendue(q) then
+                    if not seen[q] and Core.logById[q] == nil and not Core.Rendue(q) then
                         seen[q] = true
-                        if #later < 3 then later[#later + 1] = (Core.QuestTitle(q) or a.quest or ("#" .. q)) .. " (" .. T("stepN", j) .. ")" end
+                        if #later < 3 then later[#later + 1] = (Core.QuestTitle(q) or a.quest or ("#" .. q)) .. " (" .. Core.T("stepN", j) .. ")" end
                     end
                 end
             end
@@ -212,42 +212,42 @@ function HubNotes(i)
     local lvl = UnitLevel("player") or 1
     for _, e in ipairs((ns.Skipped and ns.Skipped[pm]) or {}) do
         local q, x, y, rc, req, nm = e[1], e[2], e[3], e[4], e[5], e[6]
-        if #skip < 3 and Core.logById[q] == nil and not Rendue(q) and req <= lvl
+        if #skip < 3 and Core.logById[q] == nil and not Core.Rendue(q) and req <= lvl
             and (rc == 0 or not Est.RACEBIT[State.myRace] or Est.HasBit(rc, Est.RACEBIT[State.myRace])) then
             local d = distTo(me, { m = pm, x = x, y = y })
             if d and d < 30 then skip[#skip + 1] = Core.QuestTitle(q) or nm end
         end
     end
     local lines = {}
-    if #later > 0 then lines[#lines + 1] = ListBlock(T("hubLater"), later, "8c7f62") end
-    if #skip > 0 then lines[#lines + 1] = ListBlock(T("hubSkip"), skip, "8c7f62") end
+    if #later > 0 then lines[#lines + 1] = ListBlock(Core.T("hubLater"), later, "8c7f62") end
+    if #skip > 0 then lines[#lines + 1] = ListBlock(Core.T("hubSkip"), skip, "8c7f62") end
     return #lines > 0 and table.concat(lines, "\n") or nil
 end
 
 -- "faire" : la prochaine etape est ailleurs -> on l'annonce pour avancer en tuant
-function ThenLine(i)
+function Near.ThenLine(i)
     local s = State.steps and State.steps[i]
     if not s or s.t ~= "do" then return nil end
     local j = Core.NextApplicable(i)
     while j <= #State.steps and State.doneCache[j] do j = Core.NextApplicable(j) end
     local nx = State.steps[j]
     if not (nx and nx.m and nx.x and s.m and s.x) then return nil end
-    local a, b = WP(s.m, s.x, s.y), WP(nx.m, nx.x, nx.y)
+    local a, b = Route.WP(s.m, s.x, s.y), Route.WP(nx.m, nx.x, nx.y)
     if not (a and b) or a[3] ~= b[3] or Route.Dist(a[1], a[2], b[1], b[2]) < 100 then return nil end
     local what = (Core.QName(nx) and Core.QName(nx) ~= "") and Core.QName(nx) or Core.StepText(nx):sub(1, 50)
-    return ListBlock(T("thenHdr", (T(nx.t) or ""):lower()), { what .. (nx.zone and (" · " .. nx.zone) or "") })
+    return ListBlock(Core.T("thenHdr", (Core.T(nx.t) or ""):lower()), { what .. (nx.zone and (" · " .. nx.zone) or "") })
 end
 
 -- plusieurs remises faisables au meme endroit : on les annonce ensemble
 function TurninGroup(i)
     local s = State.steps and State.steps[i]
     if not s or s.t ~= "turnin" or not (s.m and s.x) then return nil end
-    local a = WP(s.m, s.x, s.y); if not a then return nil end
+    local a = Route.WP(s.m, s.x, s.y); if not a then return nil end
     local names, seen = {}, {}
     for j = math.max(1, (State.baseCurrent or i) - 0), math.min(#State.steps, i + LOOK) do
         local t = State.steps[j]
         if t.t == "turnin" and (j == i or Actionable(j)) and t.m and t.x then
-            local b = WP(t.m, t.x, t.y)
+            local b = Route.WP(t.m, t.x, t.y)
             if b and b[3] == a[3] and Route.Dist(a[1], a[2], b[1], b[2]) < 30 then
                 for _, q in ipairs(Core.Ids(t)) do
                     if not seen[q] and (Core.logById[q] == true or j == i) then
@@ -258,7 +258,7 @@ function TurninGroup(i)
         end
     end
     if #names < 2 then return nil end
-    return ListBlock(T("turninHere"), names, "9cc7a8", InlineIcon("IcoTurnin", 12, { 156, 199, 168 }))
+    return ListBlock(Core.T("turninHere"), names, "9cc7a8", InlineIcon("IcoTurnin", 12, { 156, 199, 168 }))
 end
 
 ------------------------------------------------------------------
@@ -273,7 +273,7 @@ local function itemCount(it)
     return n or 0
 end
 local CAVE_PAT = { "caverne", "grotte", " mine", "coven", " cave", "tunnel" }
-function IsCaveStep(s)
+function Near.IsCaveStep(s)
     if not (s and s.t == "do" and s.m and s.x) then return false end
     local t = ((s.text or "") .. " " .. (s.en or "")):lower()
     for _, p in ipairs(CAVE_PAT) do if t:find(p, 1, true) then return true end end
@@ -291,10 +291,10 @@ local function entrances()
 end
 -- entree la plus proche d'un point (objectif de la grotte, ou toi), a moins de r metres
 local function nearestEntrance(m, x, y, r)
-    local g = WP(m, x, y); if not g then return nil end
+    local g = Route.WP(m, x, y); if not g then return nil end
     local best, bd
     for _, e in ipairs(entrances()) do
-        local w = WP(e.m, e.x, e.y)
+        local w = Route.WP(e.m, e.x, e.y)
         if w and w[3] == g[3] then
             local d = Route.Dist(g[1], g[2], w[1], w[2])
             if d < r and (not bd or d < bd) then best, bd = e, d end
@@ -303,10 +303,10 @@ local function nearestEntrance(m, x, y, r)
     return best
 end
 local lastOut, caveOut   -- derniere position dehors ; entree de la grotte ou tu es
-function CaveTrack()
-    if not (DB and State.steps and WarpathDropDB) then return end
+function Near.CaveTrack()
+    if not (State.DB and State.steps and WarpathDropDB) then return end
     local indoors = IsIndoors and IsIndoors() or false
-    local pm, px, py = PlayerPos()
+    local pm, px, py = Route.PlayerPos()
     if not (pm and px) then return end
     if not indoors then
         lastOut = { pm, px, py }
@@ -316,12 +316,12 @@ function CaveTrack()
     -- on vient d'entrer pres d'une grotte du guide (n'importe quelle etape, meme en avance) :
     -- l'endroit ou tu etais dehors est son entree
     if lastOut then
-        local me = WP(lastOut[1], lastOut[2], lastOut[3])
+        local me = Route.WP(lastOut[1], lastOut[2], lastOut[3])
         local near = false
         if me then
             for _, t in ipairs(State.steps) do
-                if IsCaveStep(t) and Core.Applies(t) then
-                    local g = WP(t.m, t.x, t.y)
+                if Near.IsCaveStep(t) and Core.Applies(t) then
+                    local g = Route.WP(t.m, t.x, t.y)
                     if g and g[3] == me[3] and Route.Dist(me[1], me[2], g[1], g[2]) < 150 then near = true; break end
                 end
             end
@@ -350,7 +350,7 @@ local function objPoint(s, me)
                 if sp and #sp <= 7 and #d < 7 and itemCount(d[1]) < (d[2] or 1) then
                     local m = sp[1]
                     for k = 2, #sp - 1, 2 do
-                        local g = WP(m, sp[k], sp[k + 1])
+                        local g = Route.WP(m, sp[k], sp[k + 1])
                         if g and g[3] == me[3] then
                             local key = m .. ":" .. sp[k] .. ":" .. sp[k + 1]
                             local dd = Route.Dist(me[1], me[2], g[1], g[2])
@@ -372,7 +372,7 @@ function PassageKey(s, q)
     if s.t == "do" then return q end
     return (s.t == "turnin" and "rendre:" or "prendre:") .. q
 end
-function PassageFor(s, q)
+function Near.PassageFor(s, q)
     local k = PassageKey(s, q)
     local own = WarpathDropDB and WarpathDropDB._pass and WarpathDropDB._pass[k]
     if own == "x" then return nil end
@@ -380,7 +380,7 @@ function PassageFor(s, q)
     -- v1.41 : un passage loin de l'objectif (autre continent, ou a plus de 800 m) a ete enregistre par erreur
     -- (ex. l'ascenseur de Thunder Bluff sur Goblin Invaders, dans Stonetalon) : on l'ignore
     if v and s and s.m and s.x then
-        local a, b = WP(v[1], v[2], v[3]), WP(s.m, s.x, s.y)
+        local a, b = Route.WP(v[1], v[2], v[3]), Route.WP(s.m, s.x, s.y)
         if a and b and (a[3] ~= b[3] or Route.Dist(a[1], a[2], b[1], b[2]) > 800) then return nil end
     end
     return v
@@ -394,7 +394,7 @@ local function caveEntrance(c)
 end
 -- la grotte qui contient ce PNJ (par son nom) ou ce point (a moins de 1,5 % de la carte d'un PNJ connu)
 function CityCaveFor(m, x, y, npc)
-    for _, c in ipairs(D.CITYCAVES or {}) do
+    for _, c in ipairs(Core.D.CITYCAVES or {}) do
         if c.m == m then
             for _, n in ipairs(c.npcs or {}) do if npc and n == npc then return c end end
             if x and y then
@@ -406,11 +406,11 @@ function CityCaveFor(m, x, y, npc)
     end
 end
 -- dehors et loin de l'entree : la fleche vise l'entree de la grotte ; dedans (ou sur le seuil) : le PNJ
-function CityCavePoint(m, x, y, npc, me)
+function Near.CityCavePoint(m, x, y, npc, me)
     local c = CityCaveFor(m, x, y, npc)
     if not c or (IsIndoors and IsIndoors()) then return nil end
     local ex, ey = caveEntrance(c)
-    local w = WP(c.m, ex, ey)
+    local w = Route.WP(c.m, ex, ey)
     if not (w and me and w[3] == me[3]) or Route.Dist(me[1], me[2], w[1], w[2]) <= 8 then return nil end
     return { m = c.m, x = ex, y = ey, name = c.name, kind = "citycave" }
 end
@@ -418,47 +418,47 @@ end
 function PassageCmd(arg)
     local s = State.steps and State.steps[State.focus or State.current]
     local q = s and Core.Ids(s)[1]
-    if not (s and q and s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept")) then say(T("passNoStep")); return end
+    if not (s and q and s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept")) then Core.say(Core.T("passNoStep")); return end
     WarpathDropDB._pass = WarpathDropDB._pass or {}
     local k = PassageKey(s, q)
     local name = Core.QName(s) or ("#" .. q)
     arg = (arg or ""):lower()
     -- v1.41 : passages de ville, pas lies a une quete
     if arg == "ville" or arg == "city" or arg == "grotte" or arg == "cave" then
-        local pm, px, py = PlayerPos()
+        local pm, px, py = Route.PlayerPos()
         local city = pm and Route.ZoneOf(pm)
-        if not (city and px and (city == 1454 or city == 1456 or city == 1458)) then say(T("passNotCity")); return end
+        if not (city and px and (city == 1454 or city == 1456 or city == 1458)) then Core.say(Core.T("passNotCity")); return end
         local x, y = math.floor(px * 10 + 0.5) / 10, math.floor(py * 10 + 0.5) / 10
         if arg == "ville" or arg == "city" then
             WarpathDropDB._cityExit = WarpathDropDB._cityExit or {}
             WarpathDropDB._cityExit[city] = { pm, x, y }
-            say(T("passCitySaved", Est.MAPNAME[city] or tostring(city), x, y))
+            Core.say(Core.T("passCitySaved", Est.MAPNAME[city] or tostring(city), x, y))
         else
             WarpathDropDB._cityCave = WarpathDropDB._cityCave or {}
             WarpathDropDB._cityCave[city] = { x, y }
-            say(T("passCaveSaved", Est.MAPNAME[city] or tostring(city), x, y))
+            Core.say(Core.T("passCaveSaved", Est.MAPNAME[city] or tostring(city), x, y))
         end
-        State.lastWP = nil; Refresh(true)
+        State.lastWP = nil; Skin.Refresh(true)
         return
     end
     if arg == "efface" or arg == "clear" or arg == "x" then
-        WarpathDropDB._pass[k] = "x"; say(T("passCleared", name))
+        WarpathDropDB._pass[k] = "x"; Core.say(Core.T("passCleared", name))
     elseif arg == "liste" or arg == "list" then
         local n = 0
         for key, v in pairs(WarpathDropDB._pass) do
-            if type(v) == "table" then n = n + 1; say(string.format("  %s : %s %.1f, %.1f", tostring(key), Est.MAPNAME[v[1]] or tostring(v[1]), v[2], v[3])) end
+            if type(v) == "table" then n = n + 1; Core.say(string.format("  %s : %s %.1f, %.1f", tostring(key), Est.MAPNAME[v[1]] or tostring(v[1]), v[2], v[3])) end
         end
-        if n == 0 then say(T("passNone")) end
+        if n == 0 then Core.say(Core.T("passNone")) end
         return
     else
-        local pm, px, py = PlayerPos()
-        if not (pm and px) then say(T("passNoPos")); return end
+        local pm, px, py = Route.PlayerPos()
+        if not (pm and px) then Core.say(Core.T("passNoPos")); return end
         local x, y = math.floor(px * 10 + 0.5) / 10, math.floor(py * 10 + 0.5) / 10
         WarpathDropDB._pass[k] = { pm, x, y }
-        say(T("passSaved", name, Est.MAPNAME[pm] or tostring(pm), x, y))
-        say(T("passHint"))   -- rappel : ce point sert a CETTE quete ; pour une ville, /warpath passage ville ou grotte
+        Core.say(Core.T("passSaved", name, Est.MAPNAME[pm] or tostring(pm), x, y))
+        Core.say(Core.T("passHint"))   -- rappel : ce point sert a CETTE quete ; pour une ville, /warpath passage ville ou grotte
     end
-    State.lastWP = nil; Refresh(true)
+    State.lastWP = nil; Skin.Refresh(true)
 end
 
 -- Camps separes (Data/MobZones.lua) : la fleche va au camp dont les objectifs ne sont pas finis.
@@ -494,7 +494,7 @@ local function zoneLabel(q, z)
     return table.concat(names, " · ")
 end
 function MobZonePoint(s, me)
-    if not (s and s.t == "do" and ns.MobZones and C_QuestLog and C_QuestLog.GetQuestObjectives) or Core.IS_DUNGEON[DB.guide] then return nil end
+    if not (s and s.t == "do" and ns.MobZones and C_QuestLog and C_QuestLog.GetQuestObjectives) or Core.IS_DUNGEON[State.DB.guide] then return nil end
     local list, total = {}, 0
     for _, q in ipairs(Core.Ids(s)) do
         local zs = ns.MobZones[q]
@@ -526,10 +526,10 @@ function MobZonePoint(s, me)
     if zoneSticky[sk] and UnitAffectingCombat and UnitAffectingCombat("player") and zoneLast[sk] then return zoneLast[sk] end
     -- deja dans un camp : celui-la ; sinon d'abord le camp le plus loin de l'etape suivante (on finit pres d'elle)
     local nx = State.steps[Core.NextApplicable(State.current)]
-    local nw = nx and nx.m and nx.x and WP(nx.m, nx.x, nx.y)
+    local nw = nx and nx.m and nx.x and Route.WP(nx.m, nx.x, nx.y)
     local best, bscore
     for _, c in ipairs(list) do
-        local w = WP(c.z[1], c.z[2], c.z[3])
+        local w = Route.WP(c.z[1], c.z[2], c.z[3])
         if w and me and w[3] == me[3] and Route.Dist(me[1], me[2], w[1], w[2]) < 120 then return point(c) end
         local score = (w and nw and w[3] == nw[3]) and Route.Dist(w[1], w[2], nw[1], nw[2]) or 0
         if not bscore or score > bscore then best, bscore = c, score end
@@ -540,15 +540,15 @@ end
 -- le meilleur compromis entre densite, niveau (ideal : le tien +1) et distance. Pas avec "Manque d'XP : Donjon".
 function FarmSpot(s, me)
     if not (s and s.t == "level" and ns.FarmSpots) then return nil end
-    local st = Comfort.StyleGet and Comfort.StyleGet()
+    local st = Style.StyleGet and Style.StyleGet()
     if st and st.xpMode == "dungeon" then return nil end
-    local pm = PlayerPos(); local list = pm and ns.FarmSpots[pm]
+    local pm = Route.PlayerPos(); local list = pm and ns.FarmSpots[pm]
     if not list then return nil end
     local L = UnitLevel and UnitLevel("player") or 1
     local best, bs
     for _, sp in ipairs(list) do
         if sp[4] >= L and sp[3] <= L + 2 then
-            local w = WP(pm, sp[1], sp[2])
+            local w = Route.WP(pm, sp[1], sp[2])
             if w and me and w[3] == me[3] then
                 local d = Route.Dist(me[1], me[2], w[1], w[2])
                 local fit = 1 - 0.25 * math.abs((sp[3] + sp[4]) / 2 - (L + 1))
@@ -565,23 +565,23 @@ end
 -- Course en ville (v1.39) : maitre d'armes, entraineur... La fleche y va en priorite, puis revient au guide
 -- une fois sur place (8 m), a l'ouverture de l'entraineur, ou apres 15 min.
 function SetErrand(m, x, y, name)
-    if not (DB and m and x and y) then return end
-    DB.errand = { m = m, x = x, y = y, name = name, t = time and time() or 0 }
+    if not (State.DB and m and x and y) then return end
+    State.DB.errand = { m = m, x = x, y = y, name = name, t = time and time() or 0 }
     State.lastWP = nil
-    Refresh(true)
+    Skin.Refresh(true)
 end
 function ClearErrand()
-    if not (DB and DB.errand) then return end
-    DB.errand = nil
+    if not (State.DB and State.DB.errand) then return end
+    State.DB.errand = nil
     State.lastWP = nil
-    Refresh(true)
+    Skin.Refresh(true)
 end
 function ErrandPoint(me)
-    local e = DB and DB.errand
+    local e = State.DB and State.DB.errand
     if not e then return nil end
-    local w = WP(e.m, e.x, e.y)
+    local w = Route.WP(e.m, e.x, e.y)
     if (time and e.t and time() - e.t > 900) or (w and me and w[3] == me[3] and Route.Dist(me[1], me[2], w[1], w[2]) < 8) then
-        DB.errand = nil
+        State.DB.errand = nil
         return nil
     end
     return { m = e.m, x = e.x, y = e.y, name = e.name, kind = "errand" }
@@ -600,22 +600,22 @@ function CityGatePoint(s, me)
     local other = (city == zTo) and zMe or zTo
     -- v1.45 : un vol fait gagner du temps (ex. Thunder Bluff -> Ratchet) : pas de porte, la fleche et le conseil
     -- de vol visent l'objectif. Avant : la porte (l'ascenseur) passait avant, et le vol n'etait jamais propose.
-    if DB.useFlights ~= false and BestFlight and KnownFlights and not (UnitOnTaxi and UnitOnTaxi("player")) then
+    if State.DB.useFlights ~= false and Route.BestFlight and Route.KnownFlights and not (UnitOnTaxi and UnitOnTaxi("player")) then
         local now = GetTime and GetTime() or 0
         local key = s.m .. ":" .. s.x .. ":" .. s.y .. ":" .. math.floor(me[1] / 30) .. ":" .. math.floor(me[2] / 30)
         if not (gateFly.key == key and now - gateFly.t < 5) then
-            local g = WP(s.m, s.x, s.y)
-            local ok, fl = pcall(BestFlight, me, g, KnownFlights())
+            local g = Route.WP(s.m, s.x, s.y)
+            local ok, fl = pcall(Route.BestFlight, me, g, Route.KnownFlights())
             gateFly.key, gateFly.t, gateFly.fly = key, now, (ok and fl) and true or false
         end
         if gateFly.fly then return nil end
     end
     local best, bd
-    for _, g in ipairs(D.GATES or {}) do
+    for _, g in ipairs(Core.D.GATES or {}) do
         local z1, z2 = g.z[1], g.z[2]
         -- dehors : seulement une porte qui donne sur ta zone ; dedans : n'importe quelle porte de la ville
         if (z1 == city or z2 == city) and (city == zMe or z1 == other or z2 == other) then
-            local w = WP(g.m, g.x, g.y)
+            local w = Route.WP(g.m, g.x, g.y)
             if w and w[3] == me[3] then
                 local d = Route.Dist(me[1], me[2], w[1], w[2])
                 if not bd or d < bd then best, bd = g, d end
@@ -628,7 +628,7 @@ function CityGatePoint(s, me)
             local own = WarpathDropDB and WarpathDropDB._cityExit and WarpathDropDB._cityExit[city]
             local inner = (type(own) == "table" and own) or best.inner
             if inner then
-                local w = WP(inner[1], inner[2], inner[3])
+                local w = Route.WP(inner[1], inner[2], inner[3])
                 if w and w[3] == me[3] and Route.Dist(me[1], me[2], w[1], w[2]) > 12 then
                     return { m = inner[1], x = inner[2], y = inner[3], name = Est.MAPNAME[city] or "", kind = "gate" }
                 elseif w then return nil end
@@ -643,10 +643,10 @@ end
 -- Seulement si le chef est pres du point de l'etape (meme camp, < 300 m) et pas elite.
 local BOSS_R = 300
 local function bossPoint(s, me)
-    if not (s and s.t == "do" and s.m and s.x and Est.EST) or Core.IS_DUNGEON[DB.guide] then return nil end
+    if not (s and s.t == "do" and s.m and s.x and Est.EST) or Core.IS_DUNGEON[State.DB.guide] then return nil end
     local ids = Core.Ids(s)
     if #ids < 2 then return nil end
-    local base = WP(s.m, s.x, s.y)
+    local base = Route.WP(s.m, s.x, s.y)
     if not (base and base[3] == me[3]) then return nil end
     local loc = WarpathDropDB and WarpathDropDB._npcLoc and WarpathDropDB._npcLoc[(GetLocale and GetLocale()) or "enUS"] or {}
     local function npcName(id) return loc[id] or (ns.NpcNames or {})[id] end
@@ -654,7 +654,7 @@ local function bossPoint(s, me)
         local e = Est.EST[q]
         local h = e and e.h
         if h and Core.logById[q] == false then
-            local w = WP(h[1], h[2], h[3])
+            local w = Route.WP(h[1], h[2], h[3])
             if w and w[3] == me[3] and Route.Dist(w[1], w[2], base[1], base[2]) < BOSS_R then
                 local name
                 -- objet unique (d[5]) lache par un seul PNJ (ex. la tete d'un chef) ; pas les objets communs
@@ -669,18 +669,18 @@ local function bossPoint(s, me)
     return nil
 end
 
-function StepPoint(s)
-    if not (s and DB) then return nil end
-    local me = PlayerWP(); if not me then return nil end
-    local smart = DB.smartArrow ~= false
+function Near.StepPoint(s)
+    if not (s and State.DB) then return nil end
+    local me = Route.PlayerWP(); if not me then return nil end
+    local smart = State.DB.smartArrow ~= false
     -- mort (fantome) : la fleche va a ton corps
     if smart and UnitIsGhost and UnitIsGhost("player") and C_DeathInfo and C_DeathInfo.GetCorpseMapPosition then
-        local pm = PlayerPos()
+        local pm = Route.PlayerPos()
         local ok, p = pcall(C_DeathInfo.GetCorpseMapPosition, pm)
         if ok and p then
             local x, y = p.x, p.y
             if (not x) and p.GetXY then x, y = p:GetXY() end
-            if x and y then return { m = pm, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10, name = T("corpse"), kind = "corpse" } end
+            if x and y then return { m = pm, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10, name = Core.T("corpse"), kind = "corpse" } end
         end
     end
     -- course en ville demandee par toi (maitre d'armes, entraineur)
@@ -690,8 +690,8 @@ function StepPoint(s)
     local qp = Quartermaster.QMPoint and Quartermaster.QMPoint()
     if qp then
         -- PNJ dans une grotte de la ville (Pools of Vision...) : d'abord l'entree
-        local cc = CityCavePoint(qp.m, qp.x, qp.y, qp.name, me)
-        if cc then cc.label, cc.idx, cc.n, cc.kind = qp.label, qp.idx, qp.n, "qm"; cc.name = T("caveIn") .. " · " .. cc.name end
+        local cc = Near.CityCavePoint(qp.m, qp.x, qp.y, qp.name, me)
+        if cc then cc.label, cc.idx, cc.n, cc.kind = qp.label, qp.idx, qp.n, "qm"; cc.name = Core.T("caveIn") .. " · " .. cc.name end
         return cc or qp
     end
     if not smart then return nil end
@@ -700,21 +700,21 @@ function StepPoint(s)
     local gate = CityGatePoint(s, me)
     if gate then return gate end
     -- etape dont le PNJ est dans une grotte de la ville (ex. Apothecary Zamah, Pools of Vision)
-    local cc = s.m and s.x and CityCavePoint(s.m, s.x, s.y, nil, me)
+    local cc = s.m and s.x and Near.CityCavePoint(s.m, s.x, s.y, nil, me)
     if cc then return cc end
     -- v1.42 : chemin garde (fil d'Ariane, Trail.lua) : la fleche le suit
-    local tp = TrailPoint and TrailPoint(s, me)
+    local tp = Trail.TrailPoint and Trail.TrailPoint(s, me)
     if tp then return tp end
     -- point de passage (tunnel, rampe, pont...) : l'entree tant que tu es du mauvais cote, puis l'objectif
     if s.m and s.x and (s.t == "do" or s.t == "turnin" or s.t == "accept") then
         for _, q in ipairs(Core.Ids(s)) do
-            local v = PassageFor(s, q)
+            local v = Near.PassageFor(s, q)
             if v and (s.t ~= "do" or Core.logById[q] == false) then
-                local g, w = WP(s.m, s.x, s.y), WP(v[1], v[2], v[3])
+                local g, w = Route.WP(s.m, s.x, s.y), Route.WP(v[1], v[2], v[3])
                 if g and w and g[3] == me[3] and w[3] == me[3] then
                     local dMe, dV = Route.Dist(me[1], me[2], g[1], g[2]), Route.Dist(w[1], w[2], g[1], g[2])
                     if dMe > dV + 15 and Route.Dist(me[1], me[2], w[1], w[2]) > 10 then
-                        return { m = v[1], x = v[2], y = v[3], name = T("tunnelIn"), kind = "pass" }
+                        return { m = v[1], x = v[2], y = v[3], name = Core.T("tunnelIn"), kind = "pass" }
                     end
                 end
             end
@@ -722,22 +722,22 @@ function StepPoint(s)
     end
     local indoors = IsIndoors and IsIndoors() or false
     -- entree de la grotte de l'etape (apprise par toi ou par un autre joueur), a moins de 200 m de l'objectif
-    local here = IsCaveStep(s) and nearestEntrance(s.m, s.x, s.y, 200) or nil
+    local here = Near.IsCaveStep(s) and nearestEntrance(s.m, s.x, s.y, 200) or nil
     -- sortie d'une grotte alors que l'etape en cours est ailleurs
     if indoors and caveOut and not (here and here.k == caveOut.k) then
-        return { m = caveOut.m, x = caveOut.x, y = caveOut.y, name = T("caveExit"), kind = "exit" }
+        return { m = caveOut.m, x = caveOut.x, y = caveOut.y, name = Core.T("caveExit"), kind = "exit" }
     end
     if here and not indoors then
-        local g = WP(here.m, here.x, here.y)
+        local g = Route.WP(here.m, here.x, here.y)
         if g and g[3] == me[3] and Route.Dist(me[1], me[2], g[1], g[2]) > 12 then
-            return { m = here.m, x = here.x, y = here.y, name = T("caveIn"), kind = "enter" }
+            return { m = here.m, x = here.x, y = here.y, name = Core.T("caveIn"), kind = "enter" }
         end
     end
     -- v1.50 : trajet a pied pre-calcule (Legs.lua) : contourne montagnes et falaises par les points qui comptent.
     -- Etape "faire" : seulement en route (loin de la zone), sur place les regles de la zone de chasse decident.
     local lp = Legs.LegPoint(s, me)
     if lp then
-        local g = s.t == "do" and WP(s.m, s.x, s.y)
+        local g = s.t == "do" and Route.WP(s.m, s.x, s.y)
         if not g or Route.Dist(me[1], me[2], g[1], g[2]) > 150 then return lp end
     end
     return objPoint(s, me) or bossPoint(s, me) or MobZonePoint(s, me) or DungeonDoorPoint(s)
@@ -745,19 +745,19 @@ end
 -- v1.45 : etape de l'interieur du donjon (sans position) alors que tu es dehors, donjon pas quitte
 -- (mort, course en fantome : le corps est dans l'instance, le jeu ne le situe pas) : l'entree du donjon
 function DungeonDoorPoint(s)
-    if not (DB and State.steps and Core.IS_DUNGEON and Core.IS_DUNGEON[DB.guide]) or (s and s.m and s.x) then return nil end
-    if not (DB.dgIn and DB.dgIn[DB.guide]) or (DB.dgOut and DB.dgOut[DB.guide]) then return nil end
+    if not (State.DB and State.steps and Core.IS_DUNGEON and Core.IS_DUNGEON[State.DB.guide]) or (s and s.m and s.x) then return nil end
+    if not (State.DB.dgIn and State.DB.dgIn[State.DB.guide]) or (State.DB.dgOut and State.DB.dgOut[State.DB.guide]) then return nil end
     if IsInInstance and IsInInstance() then return nil end
     for j = 1, #State.steps do
         local g = State.steps[j]
         if g.t == "go" and g.m and g.x then
-            local name = Core.Title and Core.Guides and Core.Title(Core.Guides[DB.guide]) or ""
-            return { m = g.m, x = g.x, y = g.y, name = T("dgBack", name), kind = "dgdoor" }
+            local name = Core.Title and Core.Guides and Core.Title(Core.Guides[State.DB.guide]) or ""
+            return { m = g.m, x = g.x, y = g.y, name = Core.T("dgBack", name), kind = "dgdoor" }
         end
     end
 end
 function StepPointKey(s)
-    local p = StepPoint(s)
+    local p = Near.StepPoint(s)
     return p and (p.kind .. p.m .. ":" .. p.x .. ":" .. p.y) or ""
 end
 
@@ -765,27 +765,27 @@ end
 function DeathTip(i)
     local s = State.steps and State.steps[i]
     if not s or (UnitLevel("player") or 1) >= 10 or s.t ~= "turnin" or not s.m then return nil end
-    if DB.deathTip == false then return nil end
-    local me = PlayerWP(); if not me then return nil end
-    local g = WP(s.m, s.x, s.y)
+    if State.DB.deathTip == false then return nil end
+    local me = Route.PlayerWP(); if not me then return nil end
+    local g = Route.WP(s.m, s.x, s.y)
     if not g or g[3] ~= me[3] or Route.Dist(me[1], me[2], g[1], g[2]) < 450 then return nil end
-    return T("deathTip")
+    return Core.T("deathTip")
 end
 
 -- etat des grottes pour /warpath diag : dedans ou dehors, etape de grotte, entree connue, cible de la fleche
 function CaveDiag()
     local s = State.steps and State.steps[State.current]
-    local out = { indoors = IsIndoors and IsIndoors() or false, cave = IsCaveStep(s), exitKnown = caveOut ~= nil }
+    local out = { indoors = IsIndoors and IsIndoors() or false, cave = Near.IsCaveStep(s), exitKnown = caveOut ~= nil }
     if out.cave then
         local e = nearestEntrance(s.m, s.x, s.y, 200)
         if e then
             out.entry = e
             out.own = WarpathDropDB and WarpathDropDB._caves and type(WarpathDropDB._caves[e.k]) == "table" or false
-            local me, w = PlayerWP(), WP(e.m, e.x, e.y)
+            local me, w = Route.PlayerWP(), Route.WP(e.m, e.x, e.y)
             if me and w and me[3] == w[3] then out.dist = math.floor(Route.Dist(me[1], me[2], w[1], w[2]) + 0.5) end
         end
     end
-    local p = s and StepPoint(s)
+    local p = s and Near.StepPoint(s)
     out.aim = p and p.kind or "step"
     return out
 end
@@ -796,15 +796,15 @@ function ForgetCave()
     local cv = WarpathDropDB and WarpathDropDB._caves
     if not cv then return end
     -- "x" : ni ton entree, ni celle des autres joueurs ; reapprise a ta prochaine entree
-    if IsCaveStep(s) then
+    if Near.IsCaveStep(s) then
         for _, e in ipairs(entrances()) do
-            local g, w = WP(s.m, s.x, s.y), WP(e.m, e.x, e.y)
+            local g, w = Route.WP(s.m, s.x, s.y), Route.WP(e.m, e.x, e.y)
             if g and w and g[3] == w[3] and Route.Dist(g[1], g[2], w[1], w[2]) < 200 then cv[e.k] = "x" end
         end
     end
     if caveOut then cv[caveOut.k] = "x"; caveOut = nil end
-    say(T("caveForgot"))
-    State.lastWP = nil; Refresh(true)
+    Core.say(Core.T("caveForgot"))
+    State.lastWP = nil; Skin.Refresh(true)
 end
 
 -- Nouveaux sorts (niveau pair) et entraineur de classe a moins de 250 m : etape temporaire avant l'etape en cours.
@@ -812,8 +812,8 @@ end
 local TRAIN_R = 250
 local trainLatch
 function TrainDetour(s)
-    if not (DB and DB.trainDue and State.myClass and DB.trainer ~= false) then return nil end
-    if DB.trainSkip == DB.trainDue or Core.IS_DUNGEON[DB.guide] then return nil end
+    if not (State.DB and State.DB.trainDue and State.myClass and State.DB.trainer ~= false) then return nil end
+    if State.DB.trainSkip == State.DB.trainDue or Core.IS_DUNGEON[State.DB.guide] then return nil end
     if IsInInstance then local inI = IsInInstance(); if inI then return nil end end
     -- v1.49 : jamais pendant une chasse (etape Faire, escortes comprises, ou « Monte au niveau ») : plus
     -- d'interruption en plein combat. Le rappel attend la prochaine prise, remise, note ou etape « Aller ».
@@ -823,17 +823,17 @@ function TrainDetour(s)
     if not (e and d) then return nil end
     -- deja proposee pour ce niveau : un peu plus de marge (pas de va-et-vient a la limite), mais plus de
     -- fleche qui te ramene de loin
-    if d > (trainLatch == DB.trainDue and TRAIN_R * 1.5 or TRAIN_R) then return nil end
-    trainLatch = DB.trainDue
+    if d > (trainLatch == State.DB.trainDue and TRAIN_R * 1.5 or TRAIN_R) then return nil end
+    trainLatch = State.DB.trainDue
     return { id = 0, done = true, train = true, m = e[1], x = e[2], y = e[3], name = e[4] }
 end
 
 -- En chemin : objets de quete encore a ramasser (semes un peu partout) pres du trajet vers l'etape en cours
-function OnTheWay(i)
+function Near.OnTheWay(i)
     local s = State.steps and State.steps[i]
     if not s or s.t == "do" or not (s.m and s.x) or not ns.ObjSpawns then return nil end
-    local me = PlayerWP(); if not me then return nil end
-    local b = WP(s.m, s.x, s.y)
+    local me = Route.PlayerWP(); if not me then return nil end
+    local b = Route.WP(s.m, s.x, s.y)
     if not b or b[3] ~= me[3] then return nil end
     local L2 = (b[1] - me[1]) ^ 2 + (b[2] - me[2]) ^ 2
     if L2 < 60 * 60 then return nil end
@@ -845,7 +845,7 @@ function OnTheWay(i)
                 local sp = ns.ObjSpawns[d[1]]
                 if sp and #d < 7 and not seen[d[1]] and itemCount(d[1]) < (d[2] or 1) then
                     for k = 2, #sp - 1, 2 do
-                        local g = WP(sp[1], sp[k], sp[k + 1])
+                        local g = Route.WP(sp[1], sp[k], sp[k + 1])
                         if g and g[3] == me[3] then
                             local t = math.max(0, math.min(1, ((g[1] - me[1]) * (b[1] - me[1]) + (g[2] - me[2]) * (b[2] - me[2])) / L2))
                             local cx, cy = me[1] + t * (b[1] - me[1]), me[2] + t * (b[2] - me[2])
@@ -861,7 +861,7 @@ function OnTheWay(i)
         end
     end
     if #names == 0 then return nil end
-    return ListBlock(T("onTheWayHdr"), names, "9cc7a8")
+    return ListBlock(Core.T("onTheWayHdr"), names, "9cc7a8")
 end
 
 -- Etape "faire" : intro de l'etape (avant les « : ») + objectifs du jeu en direct, groupes par action.
@@ -874,7 +874,7 @@ local function cleanObj(t)
     return t
 end
 function LiveObjectives(s)
-    if not (s and s.t == "do" and C_QuestLog and C_QuestLog.GetQuestObjectives) or DB.liveObj == false then return nil end
+    if not (s and s.t == "do" and C_QuestLog and C_QuestLog.GetQuestObjectives) or State.DB.liveObj == false then return nil end
     local txt = Core.StepText(s) or ""
     local lead = txt:match("^(.-)%s*:%s") or txt:match("^(.-)%s*:$")
     local blocks, n = {}, 0
@@ -899,15 +899,15 @@ function LiveObjectives(s)
                 if key == "objUseOn" then
                     local it = e.u[1]
                     local nm = it and ((C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(it)) or "")
-                    verb = T(key, nm ~= "" and nm or "?")
+                    verb = Core.T(key, nm ~= "" and nm or "?")
                 elseif key == "objLoot" then
                     local src = ""
                     for _, d in ipairs(e.d or {}) do
-                        if #d >= 7 and type(o.text) == "string" and d[6] and o.text:find(d[6], 1, true) then src = T("objFromMobs") end
-                        if #d < 7 and type(o.text) == "string" and d[6] and o.text:find(d[6], 1, true) then src = T("objFromGround") end
+                        if #d >= 7 and type(o.text) == "string" and d[6] and o.text:find(d[6], 1, true) then src = Core.T("objFromMobs") end
+                        if #d < 7 and type(o.text) == "string" and d[6] and o.text:find(d[6], 1, true) then src = Core.T("objFromGround") end
                     end
-                    verb = T(key) .. src
-                else verb = T(key) end
+                    verb = Core.T(key) .. src
+                else verb = Core.T(key) end
                 if verb ~= lastVerb then lines[#lines + 1] = "|cffcdbb8e" .. verb .. "|r"; rows[#rows + 1] = { k = "verb", text = verb }; lastVerb = verb end
                 local have, need = o.numFulfilled or 0, o.numRequired or 1
                 local name = cleanObj(o.text)
@@ -934,7 +934,7 @@ function FollowUpAccepts(i)
     if not s or s.t ~= "turnin" then return nil end
     local npcs = {}
     for _, q in ipairs(Core.Ids(s)) do for _, n in ipairs((Est.EST[q] or {}).en or {}) do npcs[n] = true end end
-    local a = s.m and s.x and WP(s.m, s.x, s.y)
+    local a = s.m and s.x and Route.WP(s.m, s.x, s.y)
     local names, seen = {}, {}
     local j = Core.NextApplicable(i)
     while j <= #State.steps and #names < 4 do
@@ -943,29 +943,29 @@ function FollowUpAccepts(i)
         local same = false
         for _, q in ipairs(Core.Ids(t)) do for _, n in ipairs((Est.EST[q] or {}).g or {}) do if npcs[n] then same = true end end end
         if not same and a and t.m and t.x then
-            local b = WP(t.m, t.x, t.y)
+            local b = Route.WP(t.m, t.x, t.y)
             same = b and b[3] == a[3] and Route.Dist(a[1], a[2], b[1], b[2]) < 8 or false
         end
         if not same then break end
         for _, q in ipairs(Core.Ids(t)) do
-            if not seen[q] and Core.logById[q] == nil and not Rendue(q) then seen[q] = true; names[#names + 1] = Core.QuestTitle(q) or t.quest or ("#" .. q) end
+            if not seen[q] and Core.logById[q] == nil and not Core.Rendue(q) then seen[q] = true; names[#names + 1] = Core.QuestTitle(q) or t.quest or ("#" .. q) end
         end
         j = Core.NextApplicable(j)
     end
     if #names == 0 then return nil end
-    return ListBlock(T("thenTalk"), names, "d6b866", InlineIcon("IcoAccept", 12, { 214, 184, 102 }))
+    return ListBlock(Core.T("thenTalk"), names, "d6b866", InlineIcon("IcoAccept", 12, { 214, 184, 102 }))
 end
 
 -- plusieurs quetes a prendre au meme endroit : on les annonce ensemble
 function AcceptGroup(i)
     local s = State.steps and State.steps[i]
     if not s or s.t ~= "accept" or not (s.m and s.x) then return nil end
-    local a = WP(s.m, s.x, s.y); if not a then return nil end
+    local a = Route.WP(s.m, s.x, s.y); if not a then return nil end
     local names, seen = {}, {}
     for j = i, math.min(#State.steps, i + LOOK) do
         local t = State.steps[j]
         if t.t == "accept" and (j == i or Actionable(j)) and t.m and t.x and Core.Applies(t) and not State.doneCache[j] then
-            local b = WP(t.m, t.x, t.y)
+            local b = Route.WP(t.m, t.x, t.y)
             if b and b[3] == a[3] and Route.Dist(a[1], a[2], b[1], b[2]) < 30 then
                 for _, q in ipairs(Core.Ids(t)) do
                     if not seen[q] and Core.logById[q] == nil then seen[q] = true; names[#names + 1] = Core.QuestTitle(q) or t.quest or ("#" .. q) end
@@ -974,7 +974,7 @@ function AcceptGroup(i)
         end
     end
     if #names < 2 then return nil end
-    return ListBlock(T("acceptHere"), names, "d69a66", InlineIcon("IcoAccept", 12, { 214, 184, 102 }))
+    return ListBlock(Core.T("acceptHere"), names, "d69a66", InlineIcon("IcoAccept", 12, { 214, 184, 102 }))
 end
 
 -- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Near)

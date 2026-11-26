@@ -1,7 +1,5 @@
 -- Oghoule's Warpath : moteur (Commands.lua) - voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
 local Core = ns.Mod.Core -- v1.50 : module
@@ -32,21 +30,21 @@ function ListGuides()
     for k in pairs(Core.Guides) do if not Core.IS_DUNGEON[k] then keys[#keys + 1] = k end end
     table.sort(keys)
     for _, k in ipairs(keys) do
-        say(string.format("  %s%s - %s", k, k == DB.guide and T("active") or "", Core.Title(Core.Guides[k])))
+        Core.say(string.format("  %s%s - %s", k, k == State.DB.guide and Core.T("active") or "", Core.Title(Core.Guides[k])))
     end
-    say(T("dList"))
-    say(T("guideHelp"))
+    Core.say(Core.T("dList"))
+    Core.say(Core.T("guideHelp"))
 end
 
 SLASH_WARPATH1 = "/warpath"
 SLASH_WARPATH2 = "/hg"
 SLASH_WARPATH3 = "/wpath"
 SlashCmdList["WARPATH"] = function(msg)
-    if not DB or not f then return end
+    if not State.DB or not Core.f then return end
     local cmd, arg = (msg or ""):match("^(%S*)%s*(.-)$")
     cmd = (cmd or ""):lower()
     if cmd == "" or cmd == "toggle" then
-        Window.ShowGuide(DB.shown == false)
+        Window.ShowGuide(State.DB.shown == false)
     elseif cmd == "compact" or cmd == "mini" then
         Window.ToggleMini()
     elseif cmd == "intendance" or cmd == "quartermaster" or cmd == "qm" then
@@ -55,55 +53,55 @@ SlashCmdList["WARPATH"] = function(msg)
         Flow.Ignore()
     elseif cmd == "unskip" then
         if arg == "all" or arg == "tout" then
-            wipe(DB.ignored); wipe(DB.seen); DB.lvlWait = nil; say(T("unskipAll"))
+            wipe(State.DB.ignored); wipe(State.DB.seen); State.DB.lvlWait = nil; Core.say(Core.T("unskipAll"))
         elseif tonumber(arg) then
-            DB.ignored[tonumber(arg)] = nil; say(T("unskipOne", arg))
+            State.DB.ignored[tonumber(arg)] = nil; Core.say(Core.T("unskipOne", arg))
         else
             local list = {}
-            for id in pairs(DB.ignored) do list[#list + 1] = tostring(id) end
+            for id in pairs(State.DB.ignored) do list[#list + 1] = tostring(id) end
             table.sort(list)
-            say(T("ignoredList", #list > 0 and table.concat(list, ", ") or T("none")))
-            say(T("unskipHelp"))
+            Core.say(Core.T("ignoredList", #list > 0 and table.concat(list, ", ") or Core.T("none")))
+            Core.say(Core.T("unskipHelp"))
         end
-        Flow.Advance(); Refresh(true)
+        Flow.Advance(); Skin.Refresh(true)
     elseif cmd == "next" then
         Flow.Peek(1)
     elseif cmd == "prev" then
         Flow.Peek(-1)
     elseif cmd == "now" or cmd == "sync" then
-        State.peek = nil; if Route.optCache then Route.optCache.key = nil end; Flow.Advance(); Refresh(true)
+        State.peek = nil; if Route.optCache then Route.optCache.key = nil end; Flow.Advance(); Skin.Refresh(true)
         if State.steps then
-            if State.current > #State.steps then say(T("doneByQuests", Core.Title(State.G)))
-            else say(T("stepNow", State.current, #State.steps)) end
+            if State.current > #State.steps then Core.say(Core.T("doneByQuests", Core.Title(State.G)))
+            else Core.say(Core.T("stepNow", State.current, #State.steps)) end
         end
     elseif cmd == "trajet" or cmd == "route" then
         -- detail du trajet vers l'etape affichee : a pied (chemin reel) contre le meilleur vol connu
         local st = State.steps and State.steps[State.peek or State.focus or State.current]
-        local here = PlayerWP()
-        local dest = st and st.m and st.x and WP(st.m, st.x, st.y)
-        if not (here and dest) then say(T("routeNone")); return end
-        if here[3] ~= dest[3] then say(T("routeOther")); return end
-        local walk = Walk(here, dest)
-        local fl, c = BestFlight(here, dest, (DB.useFlights ~= false) and KnownFlights() or {})
-        say(T("routeWalk", math.floor(walk / Est.RUN / 60 + 0.5), math.floor(Route.Dist(here[1], here[2], dest[1], dest[2]) + 0.5)))
-        if fl then say(T("routeFly", fl.from.name, fl.to.name, math.floor(c / Est.RUN / 60 + 0.5)))
-        else say(T("routeNoFly")) end
+        local here = Route.PlayerWP()
+        local dest = st and st.m and st.x and Route.WP(st.m, st.x, st.y)
+        if not (here and dest) then Core.say(Core.T("routeNone")); return end
+        if here[3] ~= dest[3] then Core.say(Core.T("routeOther")); return end
+        local walk = Route.Walk(here, dest)
+        local fl, c = Route.BestFlight(here, dest, (State.DB.useFlights ~= false) and Route.KnownFlights() or {})
+        Core.say(Core.T("routeWalk", math.floor(walk / Est.RUN / 60 + 0.5), math.floor(Route.Dist(here[1], here[2], dest[1], dest[2]) + 0.5)))
+        if fl then Core.say(Core.T("routeFly", fl.from.name, fl.to.name, math.floor(c / Est.RUN / 60 + 0.5)))
+        else Core.say(Core.T("routeNoFly")) end
     elseif cmd == "goto" then
         local n = tonumber(arg)
         if State.steps and n and n >= 1 and n <= #State.steps then
-            State.peek = (n ~= State.current) and n or nil; Refresh(true)
+            State.peek = (n ~= State.current) and n or nil; Skin.Refresh(true)
         else
-            say(T("gotoHelp"))
+            Core.say(Core.T("gotoHelp"))
         end
     elseif cmd == "guide" then
         if arg == "" then ListGuides()
         elseif arg:lower() == "auto" then
-            DB.manual = nil
+            State.DB.manual = nil
             local k = Flow.AutoPick()
-            if k then SetGuide(k) end
+            if k then Flow.SetGuide(k) end
         elseif Core.IS_DUNGEON[arg:lower()] then Flow.StartDungeon(arg:lower())
-        elseif SetGuide(arg:lower()) then DB.manual = true
-        else say(T("unknownGuide", arg)); ListGuides() end
+        elseif Flow.SetGuide(arg:lower()) then State.DB.manual = true
+        else Core.say(Core.T("unknownGuide", arg)); ListGuides() end
     elseif cmd == "options" or cmd == "config" or cmd == "o" then
         ns.UI.ToggleOptions()
     elseif cmd == "perf" then
@@ -112,43 +110,43 @@ SlashCmdList["WARPATH"] = function(msg)
         ns.UI.OpenOptionsTab(6)   -- v1.46 : onglet Apparence (fenetre, fleche, cartes)
     elseif cmd == "lang" or cmd == "langue" or cmd == "language" then
         local l = arg:lower()
-        if l == "fr" or l == "en" then ns.UI.SetLang(l) else ns.UI.SetLang(Lang() == "fr" and "en" or "fr") end
+        if l == "fr" or l == "en" then ns.UI.SetLang(l) else ns.UI.SetLang(Core.Lang() == "fr" and "en" or "fr") end
     elseif cmd == "minimap" then
-        DB.mmHide = not DB.mmHide
-        if ns.UI.mm then ns.UI.mm:SetShown(not DB.mmHide) end
-        say(DB.mmHide and T("mmHidden") or T("mmShown"))
+        State.DB.mmHide = not State.DB.mmHide
+        if ns.UI.mm then ns.UI.mm:SetShown(not State.DB.mmHide) end
+        Core.say(State.DB.mmHide and Core.T("mmHidden") or Core.T("mmShown"))
     elseif cmd == "donjon" or cmd == "dungeon" or cmd == "d" then
         local a = arg:lower()
         if a == "" then Flow.ListDungeons()
         elseif a == "stop" then Flow.StopDungeon()
         elseif a == "fiche" or a == "sheet" or a == "quetes" or a == "quests" or a:match("^fiche ") or a:match("^sheet ") or a:match("^quests ") then
             local k = a:match("^%S+%s+(%S+)")
-            if not ((k and DungeonSheet.DungeonSheetOpen and DungeonSheet.DungeonSheetOpen(k)) or (not k and DungeonSheet.DungeonSheetDefault and DungeonSheet.DungeonSheetDefault())) then say(T("dsNone")) end
-        elseif a == "reset" then wipe(DB.dAnswer); wipe(DB.dLater); say(T("dReset")); CheckDungeons()
+            if not ((k and DungeonSheet.DungeonSheetOpen and DungeonSheet.DungeonSheetOpen(k)) or (not k and DungeonSheet.DungeonSheetDefault and DungeonSheet.DungeonSheetDefault())) then Core.say(Core.T("dsNone")) end
+        elseif a == "reset" then wipe(State.DB.dAnswer); wipe(State.DB.dLater); Core.say(Core.T("dReset")); Flow.CheckDungeons()
         elseif Core.IS_DUNGEON[a] then Flow.StartDungeon(a)
-        else say(T("unknownDungeon", arg)); Flow.ListDungeons() end
+        else Core.say(Core.T("unknownDungeon", arg)); Flow.ListDungeons() end
     elseif cmd == "wp" then
-        DB.wp = not DB.wp
-        if not DB.wp then ClearWaypoint() end
+        State.DB.wp = not State.DB.wp
+        if not State.DB.wp then Route.ClearWaypoint() end
         State.lastWP = nil
-        Refresh(true)
-        say(DB.wp and T("wpOn") or T("wpOff"))
+        Skin.Refresh(true)
+        Core.say(State.DB.wp and Core.T("wpOn") or Core.T("wpOff"))
     elseif cmd == "here" then
         local zone = GetRealZoneText and GetRealZoneText() or "?"
         local mapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
         local pos = mapID and ns.MapAPI.PlayerPos(mapID, "player")
         if pos then
             local x, y = pos:GetXY()
-            say(T("here", zone, x * 100, y * 100, mapID))
+            Core.say(Core.T("here", zone, x * 100, y * 100, mapID))
         else
-            say(T("noPos", zone))
+            Core.say(Core.T("noPos", zone))
         end
     elseif cmd == "bug" and arg == "" and BugWindow then
         BugWindow()
     elseif cmd == "bug" then
         -- signalement : enregistre ou tu en es (envoie ensuite le fichier WTF\Account\...\SavedVariables\OghoulesWarpath.lua)
-        local g = DB.guide
-        local i = g and DB.step[g]
+        local g = State.DB.guide
+        local i = g and State.DB.step[g]
         local s = g and Core.Guides[g] and i and Core.Guides[g].steps[i]
         local mapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
         local pos = mapID and ns.MapAPI.PlayerPos(mapID, "player")
@@ -160,35 +158,35 @@ SlashCmdList["WARPATH"] = function(msg)
         b[#b + 1] = { when = date and date("%Y-%m-%d %H:%M") or "", v = Core.VERSION, guide = g, step = i,
             id = s and s.id, text = s and Core.StepText(s), map = mapID, x = math.floor(x * 1000) / 10, y = math.floor(y * 1000) / 10,
             lvl = UnitLevel("player"), race = State.myRace, class = State.myClass, note = arg ~= "" and arg or nil }
-        say(T("bugSaved", #b))
+        Core.say(Core.T("bugSaved", #b))
     elseif cmd == "chemin" or cmd == "path" or cmd == "trail" then
         Trail.TrailCmd(arg)
     elseif cmd == "passage" or cmd == "pass" then
         Near.PassageCmd(arg)
     elseif cmd == "diag" and arg ~= "plus" and arg ~= "more" then
         -- version courte : ce qui sert a comprendre un souci en jeu (grotte, position, specialisation)
-        local function yn(v) return v and ("|cff9cc7a8" .. T("yes") .. "|r") or ("|cffc24a3e" .. T("no") .. "|r") end
+        local function yn(v) return v and ("|cff9cc7a8" .. Core.T("yes") .. "|r") or ("|cffc24a3e" .. Core.T("no") .. "|r") end
         local zone = State.G and Core.Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "") or "?"
-        say(T("dgxHead", Core.VERSION, zone, State.current or 0, State.steps and #State.steps or 0))
+        Core.say(Core.T("dgxHead", Core.VERSION, zone, State.current or 0, State.steps and #State.steps or 0))
         local c = Near.CaveDiag and Near.CaveDiag() or {}
-        say("|cffcdbb8e" .. T("dgxCave") .. "|r")
-        say("   " .. T("dgxWhere", c.indoors and ("|cff9cc7a8" .. T("diagIn") .. "|r") or T("diagOut")))
-        say("   " .. T("dgxCaveStep", yn(c.cave)))
+        Core.say("|cffcdbb8e" .. Core.T("dgxCave") .. "|r")
+        Core.say("   " .. Core.T("dgxWhere", c.indoors and ("|cff9cc7a8" .. Core.T("diagIn") .. "|r") or Core.T("diagOut")))
+        Core.say("   " .. Core.T("dgxCaveStep", yn(c.cave)))
         if c.cave then
             if c.entry then
-                say("   " .. T("dgxEntry", yn(true), c.dist and T("dist", c.dist) or "?", T(c.own and "dgxByYou" or "dgxByOthers")))
+                Core.say("   " .. Core.T("dgxEntry", yn(true), c.dist and Core.T("dist", c.dist) or "?", Core.T(c.own and "dgxByYou" or "dgxByOthers")))
             else
-                say("   " .. T("dgxEntry", yn(false), "-", T("dgxLearn")))
+                Core.say("   " .. Core.T("dgxEntry", yn(false), "-", Core.T("dgxLearn")))
             end
         end
-        if c.indoors then say("   " .. T("dgxExit", yn(c.exitKnown))) end
+        if c.indoors then Core.say("   " .. Core.T("dgxExit", yn(c.exitKnown))) end
         local AIM = { pass = "dgxAimPass", zone = "dgxAimZone", enter = "dgxAimEnter", exit = "dgxAimExit", obj = "dgxAimObj", corpse = "dgxAimCorpse", step = "dgxAimStep" }
-        say("   " .. T("dgxAim", T(AIM[c.aim] or "dgxAimStep")))
-        local pm, px, py = PlayerPos()
-        say(T("dgxPos", Est.MAPNAME[pm] or tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?"))
+        Core.say("   " .. Core.T("dgxAim", Core.T(AIM[c.aim] or "dgxAimStep")))
+        local pm, px, py = Route.PlayerPos()
+        Core.say(Core.T("dgxPos", Est.MAPNAME[pm] or tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?"))
         local spec = Est.MySpec and Est.MySpec()
-        say(T("dgxSpec", tostring(spec or "?"), math.floor((Est.KillTime()) + 0.5)))
-        say("|cff8c7f62" .. T("dgxMore") .. "|r")
+        Core.say(Core.T("dgxSpec", tostring(spec or "?"), math.floor((Est.KillTime()) + 0.5)))
+        Core.say("|cff8c7f62" .. Core.T("dgxMore") .. "|r")
     elseif cmd == "diag" then
         -- version complete (/warpath diag plus) : API du jeu, talents, donnees
         -- ce que le jeu fournit a l'addon (pour verifier ce qui marche sur Forever)
@@ -203,38 +201,38 @@ SlashCmdList["WARPATH"] = function(msg)
         local apis = {}
         for _, n in ipairs({ "GetNumTalentTabs", "GetTalentInfo", "GetSpecializationInfo", "IsPlayerSpell" }) do apis[#apis + 1] = n .. "=" .. (_G[n] and "oui" or "non") end
         for _, n in ipairs({ "C_ClassTalents", "C_Traits", "C_SpecializationInfo", "C_Talent" }) do apis[#apis + 1] = n .. "=" .. (_G[n] and "oui" or "non") end
-        say("API talents : " .. table.concat(apis, ", "))
+        Core.say("API talents : " .. table.concat(apis, ", "))
         local okC2, cs = pcall(function() return C_SpecializationInfo and C_SpecializationInfo.GetSpecialization and C_SpecializationInfo.GetSpecialization() end)
         local trees, why = Est.TraitTrees()
         local tl = {}
         for t, tr in ipairs(trees or {}) do tl[#tl + 1] = t .. ":" .. tostring(tr.id) .. " (" .. tr.n .. " noeuds, " .. tr.spent .. " pts)" end
-        say("C_SpecializationInfo=" .. tostring(okC2 and cs) .. " ; traits " .. tostring(why) .. " ; arbres " .. (#tl > 0 and table.concat(tl, ", ") or "aucun"))
+        Core.say("C_SpecializationInfo=" .. tostring(okC2 and cs) .. " ; traits " .. tostring(why) .. " ; arbres " .. (#tl > 0 and table.concat(tl, ", ") or "aucun"))
         local spec = Est.MySpec and Est.MySpec()
-        say(T("diagHead", Core.VERSION))
-        say(T("diagSpec", tostring(okS and sp), tostring(okT and tab), tostring(spec), math.floor((Est.KillTime()) + 0.5)))
+        Core.say(Core.T("diagHead", Core.VERSION))
+        Core.say(Core.T("diagSpec", tostring(okS and sp), tostring(okT and tab), tostring(spec), math.floor((Est.KillTime()) + 0.5)))
         local indoors = IsIndoors and IsIndoors()
-        local pm, px, py = PlayerPos()
-        say(T("diagPos", tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?", indoors and T("diagIn") or T("diagOut"),
-            yn(PlayerWP() ~= nil)))
+        local pm, px, py = Route.PlayerPos()
+        Core.say(Core.T("diagPos", tostring(pm), px and string.format("%.1f, %.1f", px, py) or "?", indoors and Core.T("diagIn") or Core.T("diagOut"),
+            yn(Route.PlayerWP() ~= nil)))
         local s = State.steps and State.steps[State.current]
         local q = s and Core.Ids(s)[1]
         local objs = q and C_QuestLog and C_QuestLog.GetQuestObjectives and select(2, pcall(C_QuestLog.GetQuestObjectives, q))
         local o1 = type(objs) == "table" and objs[1]
-        say(T("diagQuest", tostring(q), o1 and (tostring(o1.text) .. " " .. tostring(o1.numFulfilled) .. "/" .. tostring(o1.numRequired)) or "-",
+        Core.say(Core.T("diagQuest", tostring(q), o1 and (tostring(o1.text) .. " " .. tostring(o1.numFulfilled) .. "/" .. tostring(o1.numRequired)) or "-",
             yn(C_Item and C_Item.GetItemCount)))
         local own = WarpathDropDB and WarpathDropDB._caves or {}
         local nC = 0; for _, v in pairs(own) do if type(v) == "table" then nC = nC + 1 end end
         local nB = 0; for _ in pairs(ns.BakedCaves or {}) do nB = nB + 1 end
         local wm = 0; for _ in pairs((ns.ClassTrainers or {}).WEAPON or {}) do wm = wm + 1 end
-        say((Lang() == "en" and "Step item: " or "Objet de l'étape : ") ..tostring(ns.Comfort and ns.Comfort.ItemDiag and select(2, pcall(ns.Comfort.ItemDiag))))
-        say(T("diagData", nC, nB, wm, (GetLocale and GetLocale()) or "?", Lang()))
+        Core.say((Core.Lang() == "en" and "Step item: " or "Objet de l'étape : ") ..tostring(ns.Comfort and ns.Comfort.ItemDiag and select(2, pcall(ns.Comfort.ItemDiag))))
+        Core.say(Core.T("diagData", nC, nB, wm, (GetLocale and GetLocale()) or "?", Core.Lang()))
     elseif cmd == "classe" or cmd == "class" then
         local list = Flow.ClassQuestList()
         local n = tonumber(arg)
-        if n and list[n] and list[n].q and not list[n].done then AskChain(list[n].q, true); return end
-        if #list == 0 then say(T("classNone")); return end
+        if n and list[n] and list[n].q and not list[n].done then Flow.AskChain(list[n].q, true); return end
+        if #list == 0 then Core.say(Core.T("classNone")); return end
         for k, c in ipairs(list) do
-            say(string.format("  %d. %s%s (%s)|r%s", k, (c.done or c.alt) and "|cff8c7f62" or "|cffcdbb8e", c.label or c.name, c.lvl2 > c.lvl and (c.lvl .. "-" .. c.lvl2) or tostring(c.lvl), c.done and (" - " .. T("classDone")) or c.alt and (" - " .. T("classAlt")) or ""))
+            Core.say(string.format("  %d. %s%s (%s)|r%s", k, (c.done or c.alt) and "|cff8c7f62" or "|cffcdbb8e", c.label or c.name, c.lvl2 > c.lvl and (c.lvl .. "-" .. c.lvl2) or tostring(c.lvl), c.done and (" - " .. Core.T("classDone")) or c.alt and (" - " .. Core.T("classAlt")) or ""))
         end
     elseif cmd == "tisser" or cmd == "weave" then
         -- v1.47 : /warpath tisser <id> integre une chaine de classe au guide ; « off » les retire toutes
@@ -242,19 +240,19 @@ SlashCmdList["WARPATH"] = function(msg)
         local q = tonumber(arg)
         if q then Flow.Weave(q); return end
         local n = 0
-        for wq in pairs(DB.woven or {}) do n = n + 1; say("  " .. wq .. " " .. (Est.EST[wq] and Est.EST[wq].n or "?")) end
-        if n == 0 then say(T("wovenNone")) end
+        for wq in pairs(State.DB.woven or {}) do n = n + 1; Core.say("  " .. wq .. " " .. (Est.EST[wq] and Est.EST[wq].n or "?")) end
+        if n == 0 then Core.say(Core.T("wovenNone")) end
     elseif cmd == "tuto" or cmd == "tutorial" or cmd == "visite" or cmd == "tour" then
         Tutorial.ShowTutorial(true)
     elseif cmd == "news" or cmd == "nouveautes" or cmd == "quoi" then
-        if not ShowNews(true) then say(T("newsNone")) end
+        if not ShowNews(true) then Core.say(Core.T("newsNone")) end
     elseif cmd == "chronique" or cmd == "chronicle" or cmd == "chron" then
         Chronicle.ChronShow(arg == "now" and 0 or nil)
     elseif cmd == "apercu" or cmd == "aperçu" or cmd == "preview" then
         -- v1.42 : montre tout de suite la banniere de la Chronique et le « Quoi de neuf » (fondus, reflet),
         -- sans rien changer aux sauvegardes
-        if not (Chronicle.ChronPreview and Chronicle.ChronPreview()) then say(T("chPreviewNone")) end
-        Skin.Toast(T("popNews"), T("newsToast", Core.VERSION), function() ShowNews(true) end)
+        if not (Chronicle.ChronPreview and Chronicle.ChronPreview()) then Core.say(Core.T("chPreviewNone")) end
+        Skin.Toast(Core.T("popNews"), Core.T("newsToast", Core.VERSION), function() ShowNews(true) end)
     elseif cmd == "pvp" then
         PvP.PvPReport(arg)
     elseif cmd == "temps" or cmd == "time" or cmd == "xp" then
@@ -263,14 +261,14 @@ SlashCmdList["WARPATH"] = function(msg)
         if arg == "off" then WarpathDropDB._share = false elseif arg == "on" then WarpathDropDB._share = true end
         local np = 0
         for _ in pairs(WarpathDropDB._from or {}) do np = np + 1 end
-        say(T("shareState", ns.ShareOn() and T("shareOn") or T("shareOff"), np))
+        Core.say(Core.T("shareState", ns.ShareOn() and Core.T("shareOn") or Core.T("shareOff"), np))
     elseif cmd == "reset" then
-        wipe(DB.ignored); wipe(DB.seen); wipe(DB.done); DB.manual = nil; DB.lvlWait = nil
+        wipe(State.DB.ignored); wipe(State.DB.seen); wipe(State.DB.done); State.DB.manual = nil; State.DB.lvlWait = nil
         local k = Flow.AutoPick()
-        if k then SetGuide(k) end
-        say(T("resetDone"))
+        if k then Flow.SetGuide(k) end
+        Core.say(Core.T("resetDone"))
     else
-        say(T("cmds"))
+        Core.say(Core.T("cmds"))
     end
 end
 
@@ -284,7 +282,7 @@ do
         State.inCommand = true
         local ok, err = pcall(raw, msg)
         State.inCommand = false
-        if not ok then say(T("errInternal", tostring(err)), "error") end
+        if not ok then Core.say(Core.T("errInternal", tostring(err)), "error") end
     end
 end
 
@@ -320,6 +318,8 @@ local NEWS = {
       en = "Smarter arrow: it now goes around mountains, cliffs and caves on the guide's routes, using paths computed ahead of time from Shortest Path Forever's walking maps (Cillian Berragan). Nothing to install, no calculation in game." },
     { v = "1.50", fr = "Temps actif (/warpath temps) : le guide en cours s'affiche avec son titre, et non plus avec son code interne.",
       en = "Active time (/warpath time): the current guide now shows its title instead of its internal code." },
+    { v = "1.50", fr = "Le message « action bloquée par le jeu » suit maintenant la langue choisie (il restait toujours en français).",
+      en = "The \"action blocked by the game\" message now follows the chosen language (it always stayed in French)." },
     { v = "1.49", fr = "Guide plus malin : il ne t'interrompt plus en pleine chasse pour aller voir ton entraîneur (il attend ta prochaine quête au camp) et ne te ramène plus de loin vers lui ; il ne saute plus les quêtes d'un camp quand il te fait d'abord rendre une autre quête du même camp ; une quête devenue disponible à ton nouveau niveau ne te fait plus revenir en arrière (proposée quand tu repasses près du PNJ, sauf si elle ouvre une suite) ; la flèche va d'abord au chef quand une étape demande de le tuer (ex. Chief Sharptusk Thornmantle). Fenêtre de ciblage et bouton d'objet : plus d'action bloquée si un combat commence pendant que tu les déplaces.",
       en = "Smarter guide: it no longer interrupts your hunting to send you to your trainer (it waits for your next quest at camp) and no longer drags you back to them from far away; it no longer skips a camp's quests when it has you turn in another quest of the same camp first; a quest your new level just unlocked no longer drags you back (offered when you pass by the NPC again, unless it opens a follow-up); the arrow goes to the boss first when a step asks you to kill one (e.g. Chief Sharptusk Thornmantle). Targeting window and item button: no more blocked action if combat starts while you are moving them." },
     { v = "1.48", fr = "Bouton d'objet de quête déplaçable : Maj + glisser pour le placer où tu veux (hors combat), Maj + clic droit pour le recoller à côté du guide. Avec Maj, un clic n'utilise pas l'objet.",
@@ -543,60 +543,60 @@ function ShowNews(all)
         if all or vnum(e.v) > seen then
             if n < cap then
                 n = n + 1
-                lines[#lines + 1] = "|cffd6b866" .. e.v .. "|r  " .. ((Lang and Lang() == "en") and e.en or e.fr)
+                lines[#lines + 1] = "|cffd6b866" .. e.v .. "|r  " .. ((Core.Lang and Core.Lang() == "en") and e.en or e.fr)
             else more = more + 1 end
         end
     end
     if WarpathDropDB then WarpathDropDB._seenVer = Core.VERSION end
     if n == 0 then return false end
-    if more > 0 and not all then lines[#lines + 1] = "|cff8c7f62" .. T("newsMore", more) .. "|r" end
-    StaticPopupDialogs["WARPATH_NEWS"] = { text = "%s", button1 = T("newsOk"), timeout = 0, whileDead = true, hideOnEscape = true }
+    if more > 0 and not all then lines[#lines + 1] = "|cff8c7f62" .. Core.T("newsMore", more) .. "|r" end
+    StaticPopupDialogs["WARPATH_NEWS"] = { text = "%s", button1 = Core.T("newsOk"), timeout = 0, whileDead = true, hideOnEscape = true }
     -- v1.41 (audit) : apres une mise a jour, un bandeau discret (10 s) plutot qu'une fenetre ; clic = le detail.
     -- /warpath news ouvre toujours la fenetre complete.
     if not all and Skin.Toast then
-        local txt = T("newsHead", Core.VERSION) .. "\n\n" .. table.concat(lines, "\n\n")
-        Skin.Toast(T("popNews"), T("newsToast", Core.VERSION), function() Popup("WARPATH_NEWS", txt) end)
+        local txt = Core.T("newsHead", Core.VERSION) .. "\n\n" .. table.concat(lines, "\n\n")
+        Skin.Toast(Core.T("popNews"), Core.T("newsToast", Core.VERSION), function() Skin.Popup("WARPATH_NEWS", txt) end)
         return true
     end
-    Popup("WARPATH_NEWS", T("newsHead", Core.VERSION) .. "\n\n" .. table.concat(lines, "\n\n"))
+    Skin.Popup("WARPATH_NEWS", Core.T("newsHead", Core.VERSION) .. "\n\n" .. table.concat(lines, "\n\n"))
     return true
 end
 
 function ShowWelcome()
-    if DB and DB.welcomed then
+    if State.DB and State.DB.welcomed then
         if WarpathDropDB and WarpathDropDB._seenVer == nil then WarpathDropDB._seenVer = "0.68" end -- deja installe avant le Quoi de neuf
         if WarpathDropDB and vnum(WarpathDropDB._seenVer) < vnum(Core.VERSION) then ShowNews(false) end
         return
     end
-    if not DB or DB.welcomed or not StaticPopup_Show then return end
+    if not State.DB or State.DB.welcomed or not StaticPopup_Show then return end
     -- v1.43 : bienvenue en 2 temps. 1) visite ou non ; 2) options / c'est parti (texte complet sans visite,
     -- version courte apres la visite). Le choix du 1er temps suffit a ne plus redemander la bienvenue.
     local function welcomed()
-        DB.welcomed = true
+        State.DB.welcomed = true
         if WarpathDropDB then WarpathDropDB._seenVer = Core.VERSION end
     end
     local function last(key)
         return {
-            text = key, button1 = T("welcomeOpts"), button2 = T("welcomeGo"),
+            text = key, button1 = Core.T("welcomeOpts"), button2 = Core.T("welcomeGo"),
             OnAccept = function() SlashCmdList.WARPATH("options") end,
             timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
         }
     end
-    StaticPopupDialogs["WARPATH_WELCOME"] = last(T("welcome", Skin.WarpathName()))
-    StaticPopupDialogs["WARPATH_WELCOME_DONE"] = last(T("tutoDone"))
+    StaticPopupDialogs["WARPATH_WELCOME"] = last(Core.T("welcome", Skin.WarpathName()))
+    StaticPopupDialogs["WARPATH_WELCOME_DONE"] = last(Core.T("tutoDone"))
     StaticPopupDialogs["WARPATH_WELCOME_ASK"] = {
-        text = T("welcomeAsk", Skin.WarpathName()), button1 = T("welcomeTour"), button2 = T("welcomeNoTour"),
+        text = Core.T("welcomeAsk", Skin.WarpathName()), button1 = Core.T("welcomeTour"), button2 = Core.T("welcomeNoTour"),
         OnAccept = function()
             welcomed()
-            Tutorial.ShowTutorial(true, function() Popup("WARPATH_WELCOME_DONE") end)
+            Tutorial.ShowTutorial(true, function() Skin.Popup("WARPATH_WELCOME_DONE") end)
         end,
         OnCancel = function(_, _, reason)
-            welcomed(); DB.tutoSeen = true
-            if reason == "clicked" then Popup("WARPATH_WELCOME") end   -- Echap = on ferme tout
+            welcomed(); State.DB.tutoSeen = true
+            if reason == "clicked" then Skin.Popup("WARPATH_WELCOME") end   -- Echap = on ferme tout
         end,
         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     }
-    ns.Trace("popup WARPATH_WELCOME_ASK"); Popup("WARPATH_WELCOME_ASK")
+    ns.Trace("popup WARPATH_WELCOME_ASK"); Skin.Popup("WARPATH_WELCOME_ASK")
 end
 
 -- Fenetre de signalement : decris ce qui s'est passe, puis Envoyer (= /warpath bug <texte>)
@@ -643,9 +643,9 @@ do
             win.cancel:SetPoint("RIGHT", win.send, "LEFT", -8, 0)
             if UISpecialFrames then table.insert(UISpecialFrames, "WarpathBugWindow") end
         end
-        win.head:SetText(Skin.Caps(T("bugTitle")))
-        win.sub:SetText(T("bugExplain"))
-        win.send:SetLabel(Skin.Caps(T("bugSend"))); win.cancel:SetLabel(Skin.Caps(T("chClose")))
+        win.head:SetText(Skin.Caps(Core.T("bugTitle")))
+        win.sub:SetText(Core.T("bugExplain"))
+        win.send:SetLabel(Skin.Caps(Core.T("bugSend"))); win.cancel:SetLabel(Skin.Caps(Core.T("chClose")))
         win.box:SetText("")
         win:Show(); if win.Raise then win:Raise() end
         if win.box.SetFocus then win.box:SetFocus() end

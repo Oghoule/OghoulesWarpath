@@ -5,10 +5,10 @@
 -- au guide. Proposee une seule fois par personnage, a la premiere arrivee dans une capitale, jusqu'au niveau 15 ;
 -- ensuite : bouton « Intendance » dans l'en-tete de la fenetre (en capitale) ou /warpath intendance.
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
+local Window = ns.Mod.Window -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 -- v1.50 : module ns.Mod.Quartermaster (publie en fin de fichier pour les autres fichiers)
 local CheckQuartermaster, QMCity, QMCurrent, QMOpen, QMPanelState, QMPoint, QMQuit, QMShowPanel
@@ -27,7 +27,7 @@ do
 
     -- capitale ou tu te trouves (carte), ou nil
     function QMCity()
-        local m = PlayerPos and PlayerPos()
+        local m = Route.PlayerPos and Route.PlayerPos()
         local z = m and Route.ZoneOf(m)
         return (z and QM_CITIES[z]) and z or nil
     end
@@ -36,7 +36,7 @@ do
         return (ok and i and i.name) or QM_CITIES[m] or ""
     end
     local function dist(m, x, y)
-        local me, w = PlayerWP(), WP(m, x, y)
+        local me, w = Route.PlayerWP(), Route.WP(m, x, y)
         if me and w and me[3] == w[3] then return Route.Dist(me[1], me[2], w[1], w[2]) end
     end
     -- PNJ le plus proche de toi parmi { {x, y, nom}, ... } sur la carte m
@@ -58,7 +58,7 @@ do
     end
 
     -- Tous les arrets possibles dans la ville m, par section (classe, metiers, autres metiers, services)
-    function QMCandidates(m)
+    function Quartermaster.QMCandidates(m)
         local out = { class = {}, mine = {}, others = {}, services = {} }
         local function add(sec, it) it.m = m; out[sec][#out[sec] + 1] = it end
         local CT = ns.ClassTrainers or {}
@@ -66,16 +66,16 @@ do
         local cl = {}
         for _, e in ipairs(CT[State.myClass] or {}) do if e[1] == m then cl[#cl + 1] = { e[2], e[3], e[4] } end end
         local e = nearestIn(m, cl)
-        if e then add("class", { key = "class", kind = "class", label = T("qmClass"), x = e[1], y = e[2], n = e[3],
-                                 tag = DB.trainDue and T("qmNewSpells") or nil, hot = DB.trainDue and true, on = DB.trainDue and true or false }) end
+        if e then add("class", { key = "class", kind = "class", label = Core.T("qmClass"), x = e[1], y = e[2], n = e[3],
+                                 tag = State.DB.trainDue and Core.T("qmNewSpells") or nil, hot = State.DB.trainDue and true, on = State.DB.trainDue and true or false }) end
         -- maitre d'armes
         local wl = {}
         for _, w in ipairs(CT.WEAPON or {}) do if w[1] == m then wl[#wl + 1] = { w[2], w[3], w[4] } end end
         e = nearestIn(m, wl)
-        if e then add("class", { key = "weapon", kind = "weapon", label = T("weaponMaster"), x = e[1], y = e[2], n = e[3],
-                                 tag = (not DB.wmSeen) and T("qmNeverSeen") or nil, hot = not DB.wmSeen, on = not DB.wmSeen }) end
+        if e then add("class", { key = "weapon", kind = "weapon", label = Core.T("weaponMaster"), x = e[1], y = e[2], n = e[3],
+                                 tag = (not State.DB.wmSeen) and Core.T("qmNeverSeen") or nil, hot = not State.DB.wmSeen, on = not State.DB.wmSeen }) end
         -- metiers : le meilleur entraineur de la ville pour chaque metier
-        local known = ProfDetect and ProfDetect() or {}
+        local known = Profs.ProfDetect and Profs.ProfDetect() or {}
         local best = {}
         for _, t in ipairs(ns.Trainers or {}) do
             if t.m == m and (not best[t.s] or (t.r or 0) > (best[t.s].r or 0)) then best[t.s] = t end
@@ -95,10 +95,10 @@ do
                 -- rang max : l'entraineur n'enseigne pas plus haut que ce que tu as deja
                 local maxed = rank and (t.r or 0) > 0 and rank >= (t.r or 0) * 75
                 local it = { key = "prof" .. id, kind = "prof", label = Profs.ProfName(id) .. " · " .. (t.n or ""), x = t.x, y = t.y, n = t.n,
-                             grey = maxed, tag = maxed and T("qmRankMax") or nil, on = false }
+                             grey = maxed, tag = maxed and Core.T("qmRankMax") or nil, on = false }
                 if rank or SECONDARY[id] then add("mine", it)
                 else
-                    if nPrim >= 2 then it.tag = T("qmTwoPrim"); it.grey = true end
+                    if nPrim >= 2 then it.tag = Core.T("qmTwoPrim"); it.grey = true end
                     add("others", it)
                 end
             end
@@ -108,13 +108,13 @@ do
         for _, k in ipairs({ "bank", "inn", "ah" }) do
             e = nearestIn(m, S[k])
             if e then
-                local it = { key = k, kind = k, label = T("qm_" .. k), x = e[1], y = e[2], n = e[3], on = false }
-                if k == "inn" and not boundHere(m) then it.tag, it.hot, it.on = T("qmBind"), true, true end
+                local it = { key = k, kind = k, label = Core.T("qm_" .. k), x = e[1], y = e[2], n = e[3], on = false }
+                if k == "inn" and not boundHere(m) then it.tag, it.hot, it.on = Core.T("qmBind"), true, true end
                 add("services", it)
             end
         end
         for _, fl in ipairs(Route.FLIGHTS or {}) do
-            if fl.m == m then add("services", { key = "fly", kind = "fly", label = T("qm_fly"), x = fl.x, y = fl.y, n = nil, on = false }); break end
+            if fl.m == m then add("services", { key = "fly", kind = "fly", label = Core.T("qm_fly"), x = fl.x, y = fl.y, n = nil, on = false }); break end
         end
         return out
     end
@@ -123,43 +123,43 @@ do
     function QMStart(m, items)
         local rest, fly = {}, nil
         for _, it in ipairs(items) do if it.kind == "fly" then fly = it else rest[#rest + 1] = it end end
-        local stops, here = {}, PlayerWP()
+        local stops, here = {}, Route.PlayerWP()
         while #rest > 0 do
             local bi, bd
             for k, it in ipairs(rest) do
-                local w = WP(m, it.x, it.y)
+                local w = Route.WP(m, it.x, it.y)
                 local d = (here and w and here[3] == w[3]) and Route.Dist(here[1], here[2], w[1], w[2]) or 0
                 if not bd or d < bd then bi, bd = k, d end
             end
             local it = table.remove(rest, bi)
             stops[#stops + 1] = it
-            here = WP(m, it.x, it.y) or here
+            here = Route.WP(m, it.x, it.y) or here
         end
         if fly then stops[#stops + 1] = fly end
         if #stops == 0 then return end
         local list = {}
         for _, it in ipairs(stops) do list[#list + 1] = { kind = it.kind, label = it.label, x = it.x, y = it.y, n = it.n } end
-        DB.qm = { city = m, stops = list }
-        if DB.wmSeen == nil then DB.wmSeen = true end
+        State.DB.qm = { city = m, stops = list }
+        if State.DB.wmSeen == nil then State.DB.wmSeen = true end
         State.lastWP = nil
-        Refresh(true)
+        Skin.Refresh(true)
     end
     function QMCurrent()
-        local q = DB and DB.qm
+        local q = State.DB and State.DB.qm
         if not q then return nil end
         for k, s in ipairs(q.stops) do if not s.done then return s, k, #q.stops end end
     end
     function QMQuit()
-        if not (DB and DB.qm) then return end
-        DB.qm = nil; State.lastWP = nil
-        Refresh(true)
+        if not (State.DB and State.DB.qm) then return end
+        State.DB.qm = nil; State.lastWP = nil
+        Skin.Refresh(true)
     end
     local function advanced()
-        if not QMCurrent() then DB.qm = nil; say(T("qmDone"), true) end
+        if not QMCurrent() then State.DB.qm = nil; Core.say(Core.T("qmDone"), true) end
         State.lastWP = nil
-        Refresh(true)
+        Skin.Refresh(true)
     end
-    function QMSkip()
+    function Quartermaster.QMSkip()
         local s = QMCurrent(); if not s then return end
         s.done = true; advanced()
     end
@@ -167,11 +167,11 @@ do
     function QMPoint()
         local s, k, n = QMCurrent()
         if not s then return nil end
-        return { m = DB.qm.city, x = s.x, y = s.y, name = s.n or s.label, kind = "qm", label = s.label, idx = k, n = n }
+        return { m = State.DB.qm.city, x = s.x, y = s.y, name = s.n or s.label, kind = "qm", label = s.label, idx = k, n = n }
     end
     -- un PNJ ouvert : on coche l'arret correspondant (par son nom, sinon par son type a moins de 20 m)
     local function hit(kinds)
-        local q = DB and DB.qm
+        local q = State.DB and State.DB.qm
         if not q then return end
         local who = UnitName and UnitName("npc")
         if type(who) ~= "string" or (issecretvalue and issecretvalue(who)) then who = nil end
@@ -189,7 +189,7 @@ do
 
     ------------------------------------------------------------------ fenetre (choix puis tournee)
     local panel, pool, used, othersOpen, pick, pickCity = nil, {}, 0, false, {}, nil
-    local PW = W
+    local PW = Skin.W
     local MEDIA = "Interface\\AddOns\\" .. (ADDON or "OghoulesWarpath") .. "\\Media\\"
     local function row(i)
         local r = pool[i]
@@ -210,22 +210,22 @@ do
         if panel then return end
         panel = CreateFrame("Frame", "WarpathQuartermaster", UIParent)
         panel:SetSize(PW, 200); panel:SetFrameStrata("MEDIUM")
-        panel:SetPoint("TOPLEFT", f, "TOPLEFT")
+        panel:SetPoint("TOPLEFT", Core.f, "TOPLEFT")
         local bg = Skin.Tex(panel, Skin.COL.bg, 0.92, "BACKGROUND"); bg:SetAllPoints()
         Skin.Border(panel, Skin.COL.line, 0.8, "BORDER")
-        local hbg = Skin.Tex(panel, Skin.COL.panel or Skin.COL.bg, 1, "BORDER"); hbg:SetHeight(HEAD_H or 34); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
-        local hln = Skin.Tex(panel, Skin.COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -(HEAD_H or 34)); hln:SetPoint("TOPRIGHT", 0, -(HEAD_H or 34))
-        panel.gem = Skin.Diamond(panel, 8, Skin.COL.red); panel.gem:SetPoint("LEFT", panel, "TOPLEFT", Skin.PAD - 4, -(HEAD_H or 34) / 2)
+        local hbg = Skin.Tex(panel, Skin.COL.panel or Skin.COL.bg, 1, "BORDER"); hbg:SetHeight(Window.HEAD_H or 34); hbg:SetPoint("TOPLEFT", 1, -1); hbg:SetPoint("TOPRIGHT", -1, -1)
+        local hln = Skin.Tex(panel, Skin.COL.line, 1, "ARTWORK"); hln:SetHeight(1); hln:SetPoint("TOPLEFT", 0, -(Window.HEAD_H or 34)); hln:SetPoint("TOPRIGHT", 0, -(Window.HEAD_H or 34))
+        panel.gem = Skin.Diamond(panel, 8, Skin.COL.red); panel.gem:SetPoint("LEFT", panel, "TOPLEFT", Skin.PAD - 4, -(Window.HEAD_H or 34) / 2)
         -- v1.41 (uniformisation) : « ? » dans l'en-tete, comme le guide ; le compteur se place a sa gauche
-        panel.help = Skin.HeadButton(panel, "?"); panel.help:SetPoint("RIGHT", panel, "TOPRIGHT", -6, -(HEAD_H or 34) / 2)
+        panel.help = Skin.HeadButton(panel, "?"); panel.help:SetPoint("RIGHT", panel, "TOPRIGHT", -6, -(Window.HEAD_H or 34) / 2)
         panel.help:SetScript("OnEnter", function(self)
-            Tip():SetOwner(self, "ANCHOR_LEFT"); Tip():AddLine(T("helpHead"))
-            for k = 1, 3 do Tip():AddLine("|cffccba8f" .. T("qmHelpK" .. k) .. "|r  " .. T("qmHelpV" .. k), 1, 1, 1, true) end
-            Tip():Show()
+            Skin.Tip():SetOwner(self, "ANCHOR_LEFT"); Skin.Tip():AddLine(Core.T("helpHead"))
+            for k = 1, 3 do Skin.Tip():AddLine("|cffccba8f" .. Core.T("qmHelpK" .. k) .. "|r  " .. Core.T("qmHelpV" .. k), 1, 1, 1, true) end
+            Skin.Tip():Show()
         end)
         panel.right = Skin.FS(panel, 10, Skin.COL.soft, Skin.FONT, "RIGHT"); panel.right:SetPoint("RIGHT", panel.help, "LEFT", -8, 0)
         -- titre court (« INTENDANCE ») borne par le compteur a droite : plus de chevauchement
-        panel.title = Skin.FS(panel, 12, Skin.COL.white, Skin.FONT, "LEFT"); panel.title:SetPoint("LEFT", panel, "TOPLEFT", Skin.PAD + 12, -(HEAD_H or 34) / 2)
+        panel.title = Skin.FS(panel, 12, Skin.COL.white, Skin.FONT, "LEFT"); panel.title:SetPoint("LEFT", panel, "TOPLEFT", Skin.PAD + 12, -(Window.HEAD_H or 34) / 2)
         panel.title:SetPoint("RIGHT", panel.right, "LEFT", -8, 0)
         if panel.title.SetWordWrap then panel.title:SetWordWrap(false) end
         panel.note = Skin.FS(panel, 11, Skin.COL.soft, Skin.FONT, "LEFT"); panel.note:SetWidth(PW - 2 * Skin.PAD)
@@ -243,20 +243,20 @@ do
         panel.dsub = Skin.FS(panel.dest, 10, Skin.COL.soft, Skin.FONT, "LEFT"); panel.dsub:SetPoint("TOPLEFT", panel.dname, "BOTTOMLEFT", 0, -4)
         if panel.dname.SetWordWrap then panel.dname:SetWordWrap(false) end
         local half = (PW - 2 * Skin.PAD - 8) / 2
-        panel.b1 = Skin.FlatButton(panel, half, 30, function() if panel.mode == "pick" then QMGo() else QMSkip() end end)
-        panel.b2 = Skin.FlatButton(panel, half, 30, function() if panel.mode == "pick" then QMClosePick() else QMQuit() end end)
+        panel.b1 = Skin.FlatButton(panel, half, 30, function() if panel.mode == "pick" then Quartermaster.QMGo() else Quartermaster.QMSkip() end end)
+        panel.b2 = Skin.FlatButton(panel, half, 30, function() if panel.mode == "pick" then Quartermaster.QMClosePick() else QMQuit() end end)
         for _, b in ipairs({ panel.b1, panel.b2 }) do
             if b.fs and b.fs.SetFont then b.fs:SetFont(Skin.FONT, 10, ""); b.fs:SetTextColor(Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3]) end
         end
         panel:SetClampedToScreen(true); panel:EnableMouse(true)
         -- poignee : meme taille que le guide (DB.scale) ; le guide suit, pour que les fenetres restent alignees
-        Skin.ScaleGrip(panel, function() return DB.scale or 1 end, function(v)
+        Skin.ScaleGrip(panel, function() return State.DB.scale or 1 end, function(v)
             local l, t = panel:GetLeft(), panel:GetTop()
-            DB.scale = v
-            f:SetScale(v)
-            if l and t then f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, t); local p, _, rp, x, y = f:GetPoint(); DB.wpos = { p, rp, x, y } end
-            local mf = rawget(f, "mini"); if mf and mf.SetScale then mf:SetScale(v) end
-            panel:ClearAllPoints(); panel:SetPoint("TOPLEFT", f, "TOPLEFT")
+            State.DB.scale = v
+            Core.f:SetScale(v)
+            if l and t then Core.f:ClearAllPoints(); Core.f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, t); local p, _, rp, x, y = Core.f:GetPoint(); State.DB.wpos = { p, rp, x, y } end
+            local mf = rawget(Core.f, "mini"); if mf and mf.SetScale then mf:SetScale(v) end
+            panel:ClearAllPoints(); panel:SetPoint("TOPLEFT", Core.f, "TOPLEFT")
         end)
         panel:Hide()
         -- distance a jour chaque seconde pendant la tournee
@@ -265,13 +265,13 @@ do
                 if panel:IsShown() and panel.mode == "tour" then
                     local p = QMPoint()
                     local d = p and dist(p.m, p.x, p.y)
-                    panel.dist:SetText(d and T("dist", math.floor(d + 0.5)) or "")
+                    panel.dist:SetText(d and Core.T("dist", math.floor(d + 0.5)) or "")
                 end
             end)
         end
     end
     local function layoutRows(list)
-        local y = -(HEAD_H or 34) - 12
+        local y = -(Window.HEAD_H or 34) - 12
         used = 0
         local function put(fr, h, gap) fr:ClearAllPoints(); fr:SetPoint("TOPLEFT", panel, "TOPLEFT", Skin.PAD, y); y = y - h - (gap or 0) end
         for _, it in ipairs(list) do
@@ -310,16 +310,16 @@ do
     function QMRenderPick()
         build()
         local m = pickCity
-        local c = QMCandidates(m)
+        local c = Quartermaster.QMCandidates(m)
         panel.mode = "pick"
-        panel.title:SetText(Skin.Caps(T("qmTitle")))
+        panel.title:SetText(Skin.Caps(Core.T("qmTitle")))
         panel.right:SetText(cityName(m))
         panel.dest:Hide(); panel.note:Hide()
         local list = {}
         local function sec(key, items, collapsible)
             if #items == 0 then return end
             local open = not collapsible or othersOpen
-            list[#list + 1] = { head = true, text = Skin.Caps(T(key)) .. (collapsible and ("  " .. (open and "-" or "+")) or ""),
+            list[#list + 1] = { head = true, text = Skin.Caps(Core.T(key)) .. (collapsible and ("  " .. (open and "-" or "+")) or ""),
                                 click = collapsible and function() othersOpen = not othersOpen; QMRenderPick() end or nil }
             if not open then return end
             for _, it in ipairs(items) do
@@ -329,43 +329,43 @@ do
             end
         end
         sec("qmSecClass", c.class); sec("qmSecMine", c.mine); sec("qmSecOthers", c.others, true); sec("qmSecServices", c.services)
-        panel.b1:SetLabel(T("qmGo")); panel.b2:SetLabel(T("qmLater"))
+        panel.b1:SetLabel(Core.T("qmGo")); panel.b2:SetLabel(Core.T("qmLater"))
         layoutRows(list)
         panel.cands = c
-        UpdateMini()
+        Window.UpdateMini()
     end
     function QMOpen(auto)
         local m = QMCity()
-        if not m then say(T("qmNotCity")); return end
-        if auto then DB.qmAsked = true end
+        if not m then Core.say(Core.T("qmNotCity")); return end
+        if auto then State.DB.qmAsked = true end
         pick, pickCity, othersOpen = {}, m, false
-        DB.qmPick = true
+        State.DB.qmPick = true
         QMRenderPick()
     end
-    function QMClosePick()
-        DB.qmPick = nil
-        UpdateMini()
+    function Quartermaster.QMClosePick()
+        State.DB.qmPick = nil
+        Window.UpdateMini()
     end
-    function QMGo()
+    function Quartermaster.QMGo()
         local c = panel and panel.cands
         if not c then return end
         local chosen = {}
         for _, sec in ipairs({ "class", "mine", "others", "services" }) do
             for _, it in ipairs(c[sec]) do if pick[it.key] then chosen[#chosen + 1] = it end end
         end
-        DB.qmPick = nil
-        if #chosen == 0 then UpdateMini(); return end
+        State.DB.qmPick = nil
+        if #chosen == 0 then Window.UpdateMini(); return end
         QMStart(pickCity, chosen)
     end
 
     -- Ecran 2 : tournee en cours
     function QMRenderTour()
         build()
-        local q = DB.qm
+        local q = State.DB.qm
         local s, k, n = QMCurrent()
         if not s then return end
         panel.mode = "tour"
-        panel.title:SetText(Skin.Caps(T("qmTitle")))
+        panel.title:SetText(Skin.Caps(Core.T("qmTitle")))
         panel.right:SetText(k .. " / " .. n)
         -- nom du PNJ seulement s'il n'est pas deja dans le libelle (metiers : « Mining · Brek Stonehoof »)
         local lbl = s.label or ""
@@ -373,38 +373,38 @@ do
         panel.dname:SetText(lbl)
         panel.dsub:SetText(cityName(q.city) .. "  ·  " .. string.format("%.1f, %.1f", s.x, s.y))
         local p = QMPoint(); local d = p and dist(p.m, p.x, p.y)
-        panel.dist:SetText(d and T("dist", math.floor(d + 0.5)) or "")
+        panel.dist:SetText(d and Core.T("dist", math.floor(d + 0.5)) or "")
         local list = { { dest = true } }
         for i, st in ipairs(q.stops) do
             list[#list + 1] = { icon = st.done and "BoxDone" or "Box", text = st.label, grey = st.done,
-                                hot = (i == k), tag = (i == k) and T("qmNow") or nil }
+                                hot = (i == k), tag = (i == k) and Core.T("qmNow") or nil }
         end
-        panel.b1:SetLabel(T("qmSkip")); panel.b2:SetLabel(T("qmQuit"))
+        panel.b1:SetLabel(Core.T("qmSkip")); panel.b2:SetLabel(Core.T("qmQuit"))
         panel.note:Hide()
         layoutRows(list)
     end
 
     -- Quelle fenetre montrer (appele par UpdateMini) : choix, tournee, ou rien
     function QMPanelState()
-        if DB.qmPick and pickCity then return "pick" end
-        if DB.qm and QMCurrent() then return "tour" end
-        DB.qmPick = nil
+        if State.DB.qmPick and pickCity then return "pick" end
+        if State.DB.qm and QMCurrent() then return "tour" end
+        State.DB.qmPick = nil
         return nil
     end
     function QMShowPanel(state)
         if not state then if panel then panel:Hide() end; return end
         build()
-        if panel.SetScale then panel:SetScale(DB.scale or 1) end
+        if panel.SetScale then panel:SetScale(State.DB.scale or 1) end
         if state == "tour" then QMRenderTour() end
         panel:Show()
     end
 
     -- Proposee une fois par personnage : premiere arrivee dans une capitale, jusqu'au niveau 15
     function CheckQuartermaster()
-        if not DB or DB.qmAsked or DB.qm or DB.qmPick then return false end
+        if not State.DB or State.DB.qmAsked or State.DB.qm or State.DB.qmPick then return false end
         if (UnitLevel("player") or 1) > QM_MAXLVL then return false end
         if UnitAffectingCombat and UnitAffectingCombat("player") then return false end
-        if Core.IS_DUNGEON and Core.IS_DUNGEON[DB.guide] then return false end
+        if Core.IS_DUNGEON and Core.IS_DUNGEON[State.DB.guide] then return false end
         if not QMCity() then return false end
         QMOpen(true)
         return true
@@ -417,12 +417,12 @@ do
     for e in pairs(MAP) do pcall(ev.RegisterEvent, ev, e) end
     pcall(ev.RegisterEvent, ev, "ZONE_CHANGED_NEW_AREA")
     ev:SetScript("OnEvent", function(_, e)
-        if not DB then return end
+        if not State.DB then return end
         if e == "ZONE_CHANGED_NEW_AREA" then
             -- sortie de la ville : la tournee s'arrete (le guide reprend)
-            if (DB.qm or DB.qmPick) and C_Timer and C_Timer.After then
+            if (State.DB.qm or State.DB.qmPick) and C_Timer and C_Timer.After then
                 C_Timer.After(1, function()
-                    if not QMCity() then DB.qm = nil; DB.qmPick = nil; State.lastWP = nil; Refresh(true) end
+                    if not QMCity() then State.DB.qm = nil; State.DB.qmPick = nil; State.lastWP = nil; Skin.Refresh(true) end
                 end)
             end
             return

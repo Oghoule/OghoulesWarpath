@@ -1,14 +1,16 @@
 -- Oghoule's Warpath : moteur (Flow.lua) - voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Comfort = ns.Mod.Comfort -- v1.50 : module
+local Events = ns.Mod.Events -- v1.50 : module
+local Flow = ns.Mod.Flow -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 local DungeonSheet = ns.Mod.DungeonSheet -- v1.50 : module
 local Chronicle = ns.Mod.Chronicle -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
 -- v1.50 : module ns.Mod.Flow (publie en fin de fichier pour les autres fichiers)
+local DgEntrance, DungeonLogActive, DungeonLogList
 local Advance, AllDone, AutoPick, BackToNow, ClassQuestList, DungeonDone, DungeonIdeal, DungeonLeft
 local DungeonName, DungeonOpen, DungeonReqText, GuideStatus, Ignore, InDgInstance, ListDungeons
 local OnInstanceChange, OpenStepQuest, Peek, Restorable, Restore, ScheduleAdvance, StartDungeon, StopDungeon
@@ -23,55 +25,55 @@ local chainAskQ, chainAskSelf
 ------------------------------------------------------------------
 -- Guides
 ------------------------------------------------------------------
-SetGuide = nil
-AskChain, StartChain = nil, nil
+Flow.SetGuide = nil
+Flow.AskChain, StartChain = nil, nil
 
-function MyChain()
+function Flow.MyChain()
     local c = Core.CHAIN[State.myRace]
     if not c and UnitFactionGroup and UnitFactionGroup("player") == "Horde" then c = Core.CHAIN.Skyborne end
     return c
 end
 
 function Advance()
-    if not DB or not State.steps then return end
-    Compute()
+    if not State.DB or not State.steps then return end
+    Core.Compute()
     pcall(WovenCleanup)
     pcall(ns.Drops.Refresh, Core.logById, Est.EST)
-    Refresh()
-    pcall(SuggestDungeonForLevel)
+    Skin.Refresh()
+    pcall(Comfort.SuggestDungeonForLevel)
     if State.current > #State.steps then
-        if DB.guide == "chain" then
-            local back = DB.chainBack
-            DB.chainBack, DB.chainQ, DB.chainSelf = nil, nil, nil
+        if State.DB.guide == "chain" then
+            local back = State.DB.chainBack
+            State.DB.chainBack, State.DB.chainQ, State.DB.chainSelf = nil, nil, nil
             Core.Guides.chain = nil
-            say(T("chainBackMsg"))
-            if back and Core.Guides[back] then SetGuide(back, true) end
+            Core.say(Core.T("chainBackMsg"))
+            if back and Core.Guides[back] then Flow.SetGuide(back, true) end
             return
         end
-        if Core.IS_DUNGEON[DB.guide] then
-            local back = DB.main
-            DB.main = nil
+        if Core.IS_DUNGEON[State.DB.guide] then
+            local back = State.DB.main
+            State.DB.main = nil
             if back and Core.Guides[back] then
-                say(T("dDone", Core.Title(State.G)))
-                SetGuide(back, true)
+                Core.say(Core.T("dDone", Core.Title(State.G)))
+                Flow.SetGuide(back, true)
             end
             return
         end
         -- zone choisie pour la suite dans les options
-        local nxt = DB.nextGuide
-        if nxt and Core.Guides[nxt] and nxt ~= DB.guide then
-            DB.nextGuide = nil
-            DB.manual = true
-            say(T("nextChosen", Core.Title(State.G), Core.Title(Core.Guides[nxt])))
-            SetGuide(nxt, true)
+        local nxt = State.DB.nextGuide
+        if nxt and Core.Guides[nxt] and nxt ~= State.DB.guide then
+            State.DB.nextGuide = nil
+            State.DB.manual = true
+            Core.say(Core.T("nextChosen", Core.Title(State.G), Core.Title(Core.Guides[nxt])))
+            Flow.SetGuide(nxt, true)
             return
         end
-        local c = MyChain()
-        if c and not DB.manual then
+        local c = Flow.MyChain()
+        if c and not State.DB.manual then
             for k = 1, #c - 1 do
-                if c[k] == DB.guide and Core.Guides[c[k + 1]] then
-                    say(T("chainNext", Core.Title(State.G), Core.Title(Core.Guides[c[k + 1]])))
-                    SetGuide(c[k + 1], true)
+                if c[k] == State.DB.guide and Core.Guides[c[k + 1]] then
+                    Core.say(Core.T("chainNext", Core.Title(State.G), Core.Title(Core.Guides[c[k + 1]])))
+                    Flow.SetGuide(c[k + 1], true)
                     return
                 end
             end
@@ -86,7 +88,7 @@ function ScheduleAdvance()
         C_Timer.After(0.25, function()
             State.pending = false
             local ok, err = pcall(Advance)
-            if not ok and not errShown then errShown = true; say(T("errInternal", tostring(err)), "error") end
+            if not ok and not Events.errShown then Events.errShown = true; Core.say(Core.T("errInternal", tostring(err)), "error") end
         end)
     else
         State.pending = false
@@ -94,22 +96,22 @@ function ScheduleAdvance()
     end
 end
 
-SetGuide = function(key, quiet)
+Flow.SetGuide = function(key, quiet)
     if not Core.Guides[key] then return false end
-    DB.guide = key
+    State.DB.guide = key
     State.G = Core.Guides[key]
     State.steps = State.G.steps
     -- v1.47 : chaines de classe integrees au guide (copie du guide, Data/Guides.lua n'est jamais modifie)
-    local ok, woven, outside = pcall(WeaveSteps, State.G, key)
+    local ok, woven, outside = pcall(Flow.WeaveSteps, State.G, key)
     if ok then
         if woven then State.steps = woven end
         if outside then pcall(WovenReport, outside) end
     end
     State.peek, State.lastWP, State.focus = nil, nil, nil
     Core.AnalyzeChains()
-    if not quiet then say(T("guideSet", Core.Title(State.G))) end
+    if not quiet then Core.say(Core.T("guideSet", Core.Title(State.G))) end
     Advance()
-    Refresh(true)
+    Skin.Refresh(true)
     return true
 end
 
@@ -120,7 +122,7 @@ function HasEvidence(key)
     for _, s in ipairs(Core.Guides[key].steps) do
         if s.t == "turnin" and Core.ListHas(s.class, State.myClass) and Core.ListHas(s.race, State.myRace) then
             for _, id in ipairs(Core.Ids(s)) do
-                if Rendue(id) then count = count + 1; break end
+                if Core.Rendue(id) then count = count + 1; break end
             end
         end
     end
@@ -129,16 +131,16 @@ end
 
 function AllDone(key)
     -- evalue un autre guide sans toucher a l'etat du guide en cours
-    local saveG, saveS, saveK, saveCur = State.G, State.steps, DB.guide, State.current
-    local saveDone, savePend, saveStep = State.doneCache, State.pendingAccept, DB.step[key]
+    local saveG, saveS, saveK, saveCur = State.G, State.steps, State.DB.guide, State.current
+    local saveDone, savePend, saveStep = State.doneCache, State.pendingAccept, State.DB.step[key]
     State.doneCache, State.pendingAccept = {}, {}
-    State.G, State.steps, DB.guide = Core.Guides[key], Core.Guides[key].steps, key
+    State.G, State.steps, State.DB.guide = Core.Guides[key], Core.Guides[key].steps, key
     State.computingOther = true
-    local ok = pcall(Compute)
+    local ok = pcall(Core.Compute)
     State.computingOther = false
     local fini = ok and State.current > #State.steps
-    State.G, State.steps, DB.guide, State.current = saveG, saveS, saveK, saveCur
-    State.doneCache, State.pendingAccept, DB.step[key] = saveDone, savePend, saveStep
+    State.G, State.steps, State.DB.guide, State.current = saveG, saveS, saveK, saveCur
+    State.doneCache, State.pendingAccept, State.DB.step[key] = saveDone, savePend, saveStep
     return fini
 end
 
@@ -152,7 +154,7 @@ function GuideStatus(key)
             for _, id in ipairs(Core.Ids(s)) do
                 if not seen[id] and Est.QAvailable(id) then
                     seen[id] = true; total = total + 1
-                    if Rendue(id) then done = done + 1 end
+                    if Core.Rendue(id) then done = done + 1 end
                 end
             end
         end
@@ -164,7 +166,7 @@ function GuideStatus(key)
 end
 
 function AutoPick()
-    local c = MyChain()
+    local c = Flow.MyChain()
     if not c then return nil end
     local lvl = UnitLevel("player")
     local best = 1
@@ -186,7 +188,7 @@ end
 local INSTANCE_IDS = { rfc = 389, wc = 43, sfk = 33, bfd = 48, rfk = 47, gnomer = 90, sm_gy = 189, sm_lib = 189, sm_arm = 189,
     sm_cath = 189, rfd = 129, uld = 70, zf = 209, mara_out = 349, mara_in = 349, st = 109, brd = 230, dm_e = 429, dm_w = 429,
     lbrs = 229, ubrs = 229, scholo = 289, strat_live = 329, strat_ud = 329 }
-function DungeonInstanceMatches(key)
+function Flow.DungeonInstanceMatches(key)
     if not (GetInstanceInfo and key) then return true end
     local name, _, _, _, _, _, _, id = GetInstanceInfo()
     local want = INSTANCE_IDS[key]
@@ -204,9 +206,9 @@ end
 
 -- dans l'instance du donjon suivi ?
 function InDgInstance()
-    if not (DB and Core.IS_DUNGEON[DB.guide] and IsInInstance) then return false end
+    if not (State.DB and Core.IS_DUNGEON[State.DB.guide] and IsInInstance) then return false end
     local inI, kind = IsInInstance()
-    return (inI and kind == "party" and DungeonInstanceMatches(DB.guide)) and true or false
+    return (inI and kind == "party" and Flow.DungeonInstanceMatches(State.DB.guide)) and true or false
 end
 -- donjon connu correspondant a l'instance (le premier avec des quetes a faire, sinon le premier)
 function DungeonKeyForInstance()
@@ -224,17 +226,17 @@ end
 -- entree / sortie d'instance (appele par Events.lua)
 local wasIn, askedInst = false, nil
 function OnInstanceChange()
-    if not DB or not IsInInstance then return end
+    if not State.DB or not IsInInstance then return end
     local inI, kind = IsInInstance()
     local party = inI and kind == "party"
-    if party and Core.IS_DUNGEON[DB.guide] and DungeonInstanceMatches(DB.guide) then
-        DB.dgIn = DB.dgIn or {}
-        if not wasIn and DB.dgOut and DB.dgOut[DB.guide] and DB.dgIn[DB.guide] then
+    if party and Core.IS_DUNGEON[State.DB.guide] and Flow.DungeonInstanceMatches(State.DB.guide) then
+        State.DB.dgIn = State.DB.dgIn or {}
+        if not wasIn and State.DB.dgOut and State.DB.dgOut[State.DB.guide] and State.DB.dgIn[State.DB.guide] then
             -- de retour dans le donjon apres l'avoir quitte : le journal revient
-            DB.dgOut[DB.guide] = nil
+            State.DB.dgOut[State.DB.guide] = nil
         end
-        DB.dgIn[DB.guide] = true
-        if Chronicle.ChronDungeon then pcall(Chronicle.ChronDungeon, DB.guide) end
+        State.DB.dgIn[State.DB.guide] = true
+        if Chronicle.ChronDungeon then pcall(Chronicle.ChronDungeon, State.DB.guide) end
         State.focus = nil; wasIn = true
         return
     end
@@ -243,37 +245,37 @@ function OnInstanceChange()
         local id = 0
         if GetInstanceInfo then id = select(8, GetInstanceInfo()) or 0 end
         local key = DungeonKeyForInstance()
-        if key and key ~= DB.guide and askedInst ~= id and (DungeonLeft(key)) > 0 then
+        if key and key ~= State.DB.guide and askedInst ~= id and (DungeonLeft(key)) > 0 then
             askedInst = id
             StaticPopupDialogs["WARPATH_DGSWITCH"] = {
-                text = "%s", button1 = T("dgSwitchYes"), button2 = T("dgSwitchNo"), timeout = 0, whileDead = true, hideOnEscape = true,
+                text = "%s", button1 = Core.T("dgSwitchYes"), button2 = Core.T("dgSwitchNo"), timeout = 0, whileDead = true, hideOnEscape = true,
                 OnAccept = function()
                     StartDungeon(key)
-                    DB.dgIn = DB.dgIn or {}; DB.dgIn[key] = true
+                    State.DB.dgIn = State.DB.dgIn or {}; State.DB.dgIn[key] = true
                     if Chronicle.ChronDungeon then pcall(Chronicle.ChronDungeon, key) end
-                    wasIn = true; Advance(); Refresh(true)
+                    wasIn = true; Advance(); Skin.Refresh(true)
                 end,
             }
-            Popup("WARPATH_DGSWITCH", T("dgSwitch", Core.Title(Core.Guides[key])))
+            Skin.Popup("WARPATH_DGSWITCH", Core.T("dgSwitch", Core.Title(Core.Guides[key])))
         end
         return
     end
     askedInst = nil
     -- sortie de l'instance suivie : le journal se ferme si tu es vivant et que tes quetes sont faites
     -- (ou que le groupe est dissous). Une mort (course en fantome) ne compte pas.
-    if wasIn and Core.IS_DUNGEON[DB.guide] and DB.dgIn and DB.dgIn[DB.guide] then
+    if wasIn and Core.IS_DUNGEON[State.DB.guide] and State.DB.dgIn and State.DB.dgIn[State.DB.guide] then
         wasIn = false
         if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then wasIn = true; return end
         local allDone = true
-        for _, r in ipairs(Skin.DungeonLogList and Skin.DungeonLogList() or {}) do if not r.later and not r.done then allDone = false end end
+        for _, r in ipairs(DungeonLogList() or {}) do if not r.later and not r.done then allDone = false end end
         local solo = (GetNumGroupMembers and GetNumGroupMembers() or 0) <= 1
         if allDone or solo then
-            DB.dgOut = DB.dgOut or {}; DB.dgOut[DB.guide] = true
-            say(T("dgAutoOut"), true)
+            State.DB.dgOut = State.DB.dgOut or {}; State.DB.dgOut[State.DB.guide] = true
+            Core.say(Core.T("dgAutoOut"), true)
         end
     end
     wasIn = false
-    pcall(CheckDungeonLeft)
+    pcall(Flow.CheckDungeonLeft)
 end
 
 -- v1.41 : sortie du donjon jamais notee (sortie en groupe avec une quete pas finie, ou deconnexion dans
@@ -285,9 +287,9 @@ DG_LEFT_DIST = 300
 -- Apres une mort, on attend 30 min ou ton retour dans le donjon avant de fermer le journal tout seul.
 local DG_DEATH_GRACE = 1800
 local dgDeathAt = nil
-function CheckDungeonLeft()
-    if not (DB and State.steps and Core.IS_DUNGEON[DB.guide]) then return end
-    if not (DB.dgIn and DB.dgIn[DB.guide]) or (DB.dgOut and DB.dgOut[DB.guide]) then return end
+function Flow.CheckDungeonLeft()
+    if not (State.DB and State.steps and Core.IS_DUNGEON[State.DB.guide]) then return end
+    if not (State.DB.dgIn and State.DB.dgIn[State.DB.guide]) or (State.DB.dgOut and State.DB.dgOut[State.DB.guide]) then return end
     if IsInInstance and IsInInstance() then dgDeathAt = nil; return end
     local now = GetTime and GetTime() or 0
     if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then dgDeathAt = now; return end
@@ -296,30 +298,30 @@ function CheckDungeonLeft()
     local s
     for j = 1, #State.steps do if State.steps[j].t == "go" then s = State.steps[j]; break end end   -- etape d'entree du donjon
     if not (s and s.m and s.x) then return end
-    local me, w = PlayerWP(), WP(s.m, s.x, s.y)
+    local me, w = Route.PlayerWP(), Route.WP(s.m, s.x, s.y)
     if not me then return end
     if w and me[3] == w[3] and Route.Dist(me[1], me[2], w[1], w[2]) <= DG_LEFT_DIST then return end
-    DB.dgOut = DB.dgOut or {}; DB.dgOut[DB.guide] = true
-    say(T("dgAutoOut"), true)
+    State.DB.dgOut = State.DB.dgOut or {}; State.DB.dgOut[State.DB.guide] = true
+    Core.say(Core.T("dgAutoOut"), true)
     State.lastWP = nil
-    pcall(Advance); Refresh(true)
+    pcall(Advance); Skin.Refresh(true)
 end
 
 function StartDungeon(key)
     if not Core.Guides[key] then return end
-    if not Core.IS_DUNGEON[DB.guide] then DB.main = DB.guide end
-    DB.dAnswer[key] = "yes"
-    DB.dgOut = DB.dgOut or {}; DB.dgOut[key] = nil
-    DB.dgIn = DB.dgIn or {}; DB.dgIn[key] = nil
-    SetGuide(key)
-    say(T("dStart"))
+    if not Core.IS_DUNGEON[State.DB.guide] then State.DB.main = State.DB.guide end
+    State.DB.dAnswer[key] = "yes"
+    State.DB.dgOut = State.DB.dgOut or {}; State.DB.dgOut[key] = nil
+    State.DB.dgIn = State.DB.dgIn or {}; State.DB.dgIn[key] = nil
+    Flow.SetGuide(key)
+    Core.say(Core.T("dStart"))
 end
 
 function StopDungeon()
-    if not Core.IS_DUNGEON[DB.guide] then say(T("dNone")); return end
-    local back = DB.main
-    DB.main = nil
-    if back and Core.Guides[back] then SetGuide(back) end
+    if not Core.IS_DUNGEON[State.DB.guide] then Core.say(Core.T("dNone")); return end
+    local back = State.DB.main
+    State.DB.main = nil
+    if back and Core.Guides[back] then Flow.SetGuide(back) end
 end
 
 State.asking = nil
@@ -334,22 +336,22 @@ if StaticPopupDialogs then
             local b1 = self.button1 or _G[self:GetName() .. "Button1"]
             local b2 = self.button2 or _G[self:GetName() .. "Button2"]
             local b3 = self.button3 or _G[self:GetName() .. "Button3"]
-            if b1 then b1:SetText(T("yes")) end
-            if b2 then b2:SetText(T("no")) end
-            if b3 then b3:SetText(T("later")) end
+            if b1 then b1:SetText(Core.T("yes")) end
+            if b2 then b2:SetText(Core.T("no")) end
+            if b3 then b3:SetText(Core.T("later")) end
             local b4 = self.button4
-            if b4 then b4:SetText(T("dsBtn")) end
+            if b4 then b4:SetText(Core.T("dsBtn")) end
         end,
         button4 = "Voir les quêtes",
         OnButton4 = function() if State.asking and DungeonSheet.DungeonSheetOpen then DungeonSheet.DungeonSheetOpen(State.asking.key) end end,
         OnAccept = function() if State.asking then StartDungeon(State.asking.key) end end,
         OnCancel = function(_, _, reason)
             if not State.asking then return end
-            if reason == "clicked" then DB.dAnswer[State.asking.key] = "no"
-            else DB.dAnswer[State.asking.key] = "later"; DB.dLater[State.asking.key] = math.max(UnitLevel("player") or 1, (select(3, DungeonReq(State.asking.key)) or 0) - 1) end
+            if reason == "clicked" then State.DB.dAnswer[State.asking.key] = "no"
+            else State.DB.dAnswer[State.asking.key] = "later"; State.DB.dLater[State.asking.key] = math.max(UnitLevel("player") or 1, (select(3, Flow.DungeonReq(State.asking.key)) or 0) - 1) end
         end,
         OnAlt = function()
-            if State.asking then DB.dAnswer[State.asking.key] = "later"; DB.dLater[State.asking.key] = math.max(UnitLevel("player") or 1, (select(3, DungeonReq(State.asking.key)) or 0) - 1) end
+            if State.asking then State.DB.dAnswer[State.asking.key] = "later"; State.DB.dLater[State.asking.key] = math.max(UnitLevel("player") or 1, (select(3, Flow.DungeonReq(State.asking.key)) or 0) - 1) end
         end,
         OnHide = function()
             -- v1.46 : la question se ferme (Oui, Non, Plus tard, Echap) : sa fiche de donjon aussi
@@ -365,13 +367,13 @@ end
 
 -- Proposer la chaine qui debloque une quete
 chainAskQ = nil
-AskChain = function(q, withSelf, kind)
+Flow.AskChain = function(q, withSelf, kind)
     local order, bad = Est.ChainFor(q, withSelf)
     local e = Est.EST[q]
-    if not order or not e or #order == 0 then say(T("chainNone", (e and e.n) or tostring(q))); return end
+    if not order or not e or #order == 0 then Core.say(Core.T("chainNone", (e and e.n) or tostring(q))); return end
     local names = {}
     for _, id in ipairs(order) do names[#names + 1] = Est.EST[id].n end
-    local est = Estimate(order, true)
+    local est = Est.Estimate(order, true)
     -- v1.43 : fenetre lisible (titre, sous-titre, chiffres arrondis avec libelles, objets, etapes en gris)
     -- Quete de classe : meme nom que dans Options > Classe (la 1re quete de la chaine), la finale en sous-titre
     local label = e.n
@@ -382,28 +384,28 @@ AskChain = function(q, withSelf, kind)
     local G, S, F = "|cffcdbb8e", "|cffb5aa98", "|cff8c7f62"   -- or, doux, discret (HEX de Skin.lua)
     local lines = {}
     local function add(s) lines[#lines + 1] = s end
-    add(G .. Skin.Upper(withSelf and label or T("chainUnlock", e.n)) .. "|r")
-    if not withSelf then add(S .. T("chainSubBefore", #order) .. "|r")
-    elseif label ~= e.n then add(S .. T("chainSubEnds", #order, e.n) .. "|r")
-    else add(S .. T("chainSubN", #order) .. "|r") end
+    add(G .. Core.Upper(withSelf and label or Core.T("chainUnlock", e.n)) .. "|r")
+    if not withSelf then add(S .. Core.T("chainSubBefore", #order) .. "|r")
+    elseif label ~= e.n then add(S .. Core.T("chainSubEnds", #order, e.n) .. "|r")
+    else add(S .. Core.T("chainSubN", #order) .. "|r") end
     add("")
-    add(G .. T("chainTime") .. "|r  ~" .. math.max(1, math.floor(est.secs / 60 + 0.5)) .. " min")
-    add(G .. T("chainXP") .. "|r  ~" .. round(est.xp) .. "  " .. S .. T("chainPerHour", round(est.perHour)) .. "|r")
+    add(G .. Core.T("chainTime") .. "|r  ~" .. math.max(1, math.floor(est.secs / 60 + 0.5)) .. " min")
+    add(G .. Core.T("chainXP") .. "|r  ~" .. round(est.xp) .. "  " .. S .. Core.T("chainPerHour", round(est.perHour)) .. "|r")
     if est.kills > 0 then
-        add(G .. T("chainMobs") .. "|r  " .. (est.dropKills > 0 and T("chainKillsDrop", est.kills, est.dropKills) or T("chainKills", est.kills)))
+        add(G .. Core.T("chainMobs") .. "|r  " .. (est.dropKills > 0 and Core.T("chainKillsDrop", est.kills, est.dropKills) or Core.T("chainKills", est.kills)))
     end
     if #est.drops > 0 then
-        add(""); add(G .. T("chainItems") .. "|r")
+        add(""); add(G .. Core.T("chainItems") .. "|r")
         for _, dr in ipairs(est.drops) do
             local r = dr.rate or 0
             local how
-            if dr.how == "unique" then how = T("dropSure")
-            elseif r >= 0.6 or r <= 0 then how = T("dropOften")
-            else how = T("dropOneIn", math.floor(1 / r + 0.5)) end
+            if dr.how == "unique" then how = Core.T("dropSure")
+            elseif r >= 0.6 or r <= 0 then how = Core.T("dropOften")
+            else how = Core.T("dropOneIn", math.floor(1 / r + 0.5)) end
             add(" • " .. dr.name .. " " .. S .. "— " .. how .. "|r")
         end
     end
-    add(""); add(F .. T("chainSteps") .. " " .. table.concat(names, " › ") .. "|r")
+    add(""); add(F .. Core.T("chainSteps") .. " " .. table.concat(names, " › ") .. "|r")
     local txt = table.concat(lines, "\n")
     chainAskQ, chainAskSelf = q, withSelf
     StaticPopupDialogs["WARPATH_CHAIN"] = StaticPopupDialogs["WARPATH_CHAIN"] or {
@@ -411,30 +413,30 @@ AskChain = function(q, withSelf, kind)
         OnAccept = function() StartChain(chainAskQ, chainAskSelf) end,
     }
     local d = StaticPopupDialogs["WARPATH_CHAIN"]
-    d.button1, d.button2 = T("chainGo"), T("chainNo")
+    d.button1, d.button2 = Core.T("chainGo"), Core.T("chainNo")
     -- v1.47 : 3e bouton pour une quete de classe : l'integrer au guide de zone (ou l'en retirer)
     if withSelf and kind ~= "prof" then
-        d.button3 = T((DB.woven and DB.woven[q]) and "wovenBtnOff" or "wovenBtn")
+        d.button3 = Core.T((State.DB.woven and State.DB.woven[q]) and "wovenBtnOff" or "wovenBtn")
     else
         d.button3 = nil
     end
     d.OnAlt = function()
         if not chainAskQ then return end
-        if DB.woven and DB.woven[chainAskQ] then Unweave(chainAskQ) else Weave(chainAskQ) end
+        if State.DB.woven and State.DB.woven[chainAskQ] then Unweave(chainAskQ) else Weave(chainAskQ) end
     end
     -- titre de la fenetre selon le type : quetes de classe, metiers ou chaine ordinaire
     d.headKey = (kind == "prof" and "popProfQuest") or (withSelf and "popClass") or "popChain"
-    ns.Trace("popup WARPATH_CHAIN"); Popup("WARPATH_CHAIN", txt)
+    ns.Trace("popup WARPATH_CHAIN"); Skin.Popup("WARPATH_CHAIN", txt)
 end
 
 StartChain = function(q, withSelf)
     local g = Est.BuildChainGuide(q, withSelf)
-    if not g then say(T("chainNone", (Est.EST[q] and Est.EST[q].n) or tostring(q))); return end
-    if DB.guide ~= "chain" then DB.chainBack = DB.guide end
-    DB.chainQ, DB.chainSelf = q, withSelf or nil
+    if not g then Core.say(Core.T("chainNone", (Est.EST[q] and Est.EST[q].n) or tostring(q))); return end
+    if State.DB.guide ~= "chain" then State.DB.chainBack = State.DB.guide end
+    State.DB.chainQ, State.DB.chainSelf = q, withSelf or nil
     Core.Guides.chain = g
-    say(T(withSelf and "classStartMsg" or "chainStartMsg", Est.EST[q].n, #g.steps))
-    SetGuide("chain", true)
+    Core.say(Core.T(withSelf and "classStartMsg" or "chainStartMsg", Est.EST[q].n, #g.steps))
+    Flow.SetGuide("chain", true)
 end
 
 -- v1.47 : INTEGRER une chaine de classe au guide de zone (au lieu du detour « chain »).
@@ -448,9 +450,9 @@ local function wovenDist(a, b)
     return math.sqrt(dx * dx + dy * dy)
 end
 
-function WeaveSteps(g, key)
+function Flow.WeaveSteps(g, key)
     local base = g and g.steps
-    if not (DB and DB.woven and next(DB.woven) and base) or key == "chain" or Core.IS_DUNGEON[key] then return nil end
+    if not (State.DB and State.DB.woven and next(State.DB.woven) and base) or key == "chain" or Core.IS_DUNGEON[key] then return nil end
     -- ancre du guide sans les ajouts (borne basse : on n'insere rien dans ce que tu as deja fait)
     local saved = State.steps
     State.steps = base
@@ -467,7 +469,7 @@ function WeaveSteps(g, key)
         end
     end
     local after, outside, any = {}, {}, false
-    for q in pairs(DB.woven) do
+    for q in pairs(State.DB.woven) do
         local list = Est.ChainSteps(q, true)
         local pos = floor
         for _, cs in ipairs(list or {}) do
@@ -498,7 +500,7 @@ function WeaveSteps(g, key)
                     table.insert(after[at], row)
                     pos = at
                     any = true
-                elseif not Rendue(cs.id) then
+                elseif not Core.Rendue(cs.id) then
                     outside[q] = outside[q] or { n = 0, maps = {} }
                     local o = outside[q]
                     o.n = o.n + 1
@@ -530,44 +532,44 @@ function WovenReport(outside)
                 end
                 if nm then names[#names + 1] = nm end
             end
-            say(T("wovenOutside", Est.EST[q].n, o.n, #names > 0 and table.concat(names, ", ") or "?"))
+            Core.say(Core.T("wovenOutside", Est.EST[q].n, o.n, #names > 0 and table.concat(names, ", ") or "?"))
         end
     end
 end
 
 function Weave(q)
     if not (q and Est.EST[q]) then return end
-    if not Est.ChainSteps(q, true) then say(T("chainNone", Est.EST[q].n)); return end
-    DB.woven = DB.woven or {}
-    DB.woven[q] = true
-    say(T("wovenStart", Est.EST[q].n))
+    if not Est.ChainSteps(q, true) then Core.say(Core.T("chainNone", Est.EST[q].n)); return end
+    State.DB.woven = State.DB.woven or {}
+    State.DB.woven[q] = true
+    Core.say(Core.T("wovenStart", Est.EST[q].n))
     local inLog = 0
     for _ in pairs(Core.logById or {}) do inLog = inLog + 1 end
-    if inLog >= 35 then say(T("wovenLogFull", inLog)) end
+    if inLog >= 35 then Core.say(Core.T("wovenLogFull", inLog)) end
     -- depuis le detour « chain » : on revient au guide de zone, avec la chaine dedans
-    local key = DB.guide
+    local key = State.DB.guide
     if key == "chain" then
-        key = DB.chainBack
-        DB.chainBack, DB.chainQ, DB.chainSelf = nil, nil, nil
+        key = State.DB.chainBack
+        State.DB.chainBack, State.DB.chainQ, State.DB.chainSelf = nil, nil, nil
         Core.Guides.chain = nil
     end
-    if key and Core.Guides[key] then SetGuide(key, true) end
+    if key and Core.Guides[key] then Flow.SetGuide(key, true) end
 end
 
 function Unweave(q)
-    if not (DB and DB.woven) then return end
-    if q then DB.woven[q] = nil else wipe(DB.woven) end
-    if q then say(T("wovenStop", Est.EST[q] and Est.EST[q].n or tostring(q))) else say(T("wovenStopAll")) end
-    if DB.guide and Core.Guides[DB.guide] then SetGuide(DB.guide, true) end
+    if not (State.DB and State.DB.woven) then return end
+    if q then State.DB.woven[q] = nil else wipe(State.DB.woven) end
+    if q then Core.say(Core.T("wovenStop", Est.EST[q] and Est.EST[q].n or tostring(q))) else Core.say(Core.T("wovenStopAll")) end
+    if State.DB.guide and Core.Guides[State.DB.guide] then Flow.SetGuide(State.DB.guide, true) end
 end
 
 -- Chaine integree terminee (quete visee rendue) : on la retire, le guide se nettoie au prochain chargement
 function WovenCleanup()
-    if not (DB and DB.woven) then return end
-    for q in pairs(DB.woven) do
-        if Rendue(q) then
-            DB.woven[q] = nil
-            say(T("wovenDone", Est.EST[q] and Est.EST[q].n or tostring(q)))
+    if not (State.DB and State.DB.woven) then return end
+    for q in pairs(State.DB.woven) do
+        if Core.Rendue(q) then
+            State.DB.woven[q] = nil
+            Core.say(Core.T("wovenDone", Est.EST[q] and Est.EST[q].n or tostring(q)))
         end
     end
 end
@@ -576,7 +578,7 @@ end
 function DungeonName(d)
     if type(d) == "string" then d = Core.IS_DUNGEON[d] end
     if not d then return "?" end
-    if Lang and Lang() == "en" then return d.en or (d.name:gsub(" : ", ": ")) end
+    if Core.Lang and Core.Lang() == "en" then return d.en or (d.name:gsub(" : ", ": ")) end
     return d.name
 end
 
@@ -589,7 +591,7 @@ function DungeonLeft(key)
             for _, id in ipairs(Core.Ids(s)) do
                 if id and not seen[id] and Est.QAvailable(id) then
                     seen[id] = true; total = total + 1
-                    if not Rendue(id) then left = left + 1 end
+                    if not Core.Rendue(id) then left = left + 1 end
                 end
             end
         end
@@ -604,14 +606,14 @@ function DungeonDone(key)
 end
 
 -- Quetes du donjon que tu peux prendre maintenant, et le niveau ou tu pourras toutes les prendre
-function DungeonReq(key)
+function Flow.DungeonReq(key)
     local g = Core.Guides[key]; if not g then return 0, 0, 0 end
     local lvl = UnitLevel("player") or 1
     local seen, n, now, need, total = {}, 0, 0, 0, 0
     local function open(s)
-        for _, p in ipairs(s.preg or {}) do if not Rendue(p) and Core.logById[p] == nil then return false end end
+        for _, p in ipairs(s.preg or {}) do if not Core.Rendue(p) and Core.logById[p] == nil then return false end end
         if s.pre then
-            for _, p in ipairs(s.pre) do if Rendue(p) or Core.logById[p] ~= nil then return true end end
+            for _, p in ipairs(s.pre) do if Core.Rendue(p) or Core.logById[p] ~= nil then return true end end
             return false
         end
         return true
@@ -621,7 +623,7 @@ function DungeonReq(key)
             total = total + 1
             for _, id in ipairs(Core.Ids(s)) do
                 -- seulement les quetes que tu peux vraiment prendre (prerequis faits ou en cours)
-                if id and not seen[id] and Est.QAvailable(id) and not Rendue(id) and (Core.logById[id] ~= nil or open(s)) then
+                if id and not seen[id] and Est.QAvailable(id) and not Core.Rendue(id) and (Core.logById[id] ~= nil or open(s)) then
                     seen[id] = true; n = n + 1
                     if (s.req or 0) <= lvl then now = now + 1 elseif s.req > need then need = s.req end
                 end
@@ -633,15 +635,15 @@ end
 
 -- un donjon dont aucune quete n'est accessible (chaines pas commencees) n'est pas propose ; une aile sans quete l'est
 function DungeonOpen(key)
-    local n, _, _, total = DungeonReq(key)
+    local n, _, _, total = Flow.DungeonReq(key)
     return n > 0 or total == 0
 end
 
 function DungeonReqText(key)
-    local n, now, need = DungeonReq(key)
+    local n, now, need = Flow.DungeonReq(key)
     if n == 0 then return "" end
-    if need > 0 then return T(n == 1 and "dReqWait1" or "dReqWait", now, n, need) end
-    return T(n == 1 and "dReqAll1" or "dReqAll", n)
+    if need > 0 then return Core.T(n == 1 and "dReqWait1" or "dReqWait", now, n, need) end
+    return Core.T(n == 1 and "dReqAll1" or "dReqAll", n)
 end
 
 -- v1.42 : niveau ideal d'un donjon, tire du guide (quetes non optionnelles) : le plus haut entre le niveau
@@ -671,8 +673,8 @@ function DungeonIdeal(key)
     return res or nil
 end
 
-function CheckDungeons()
-    if not DB or DB.noDungeonAsk or Core.IS_DUNGEON[DB.guide] or not StaticPopup_Show or State.asking then return end
+function Flow.CheckDungeons()
+    if not State.DB or State.DB.noDungeonAsk or Core.IS_DUNGEON[State.DB.guide] or not StaticPopup_Show or State.asking then return end
     local lvl = UnitLevel("player")
     -- les donjons "de chez toi" d'abord (ex. Shadowfang Keep pour un Undead)
     local HOME = { Scourge = "sfk", Undead = "sfk", Orc = "rfc", Troll = "rfc", Tauren = "wc" }
@@ -681,17 +683,17 @@ function CheckDungeons()
         if d.key == HOME[State.myRace] then table.insert(order, 1, d) else order[#order + 1] = d end
     end
     for _, d in ipairs(order) do
-        local ans = DB.dAnswer[d.key]
-        local later = ans == "later" and (DB.dLater[d.key] or 0) < lvl
+        local ans = State.DB.dAnswer[d.key]
+        local later = ans == "later" and (State.DB.dLater[d.key] or 0) < lvl
         if Core.Guides[d.key] and lvl >= d.min and lvl <= d.max and (ans == nil or later) and not DungeonDone(d.key) and DungeonOpen(d.key) then
             State.asking = d
-            ns.Trace("popup WARPATH_DUNGEON"); Popup("WARPATH_DUNGEON", T("dAsk", lvl, DungeonName(d), d.min, d.max) .. ((DungeonSheet.DungeonAskLine and DungeonSheet.DungeonAskLine(d.key)) or DungeonReqText(d.key)))
+            ns.Trace("popup WARPATH_DUNGEON"); Skin.Popup("WARPATH_DUNGEON", Core.T("dAsk", lvl, DungeonName(d), d.min, d.max) .. ((DungeonSheet.DungeonAskLine and DungeonSheet.DungeonAskLine(d.key)) or DungeonReqText(d.key)))
             return
         end
     end
 end
 
-CheckDungeonsFn = CheckDungeons
+CheckDungeonsFn = Flow.CheckDungeons
 
 -- Quetes de classe importantes (ClassQuests.lua) : la variante de ta race, si elle n'est pas deja faite
 function ClassQuestList()
@@ -706,7 +708,7 @@ function ClassQuestList()
         local pick, done, doneId, here = nil, false, nil, nil
         for _, id in ipairs(r[3]) do
             if Est.EST[id] and Est.QAvailable(id) then
-                if Rendue(id) then done = true; doneId = doneId or id
+                if Core.Rendue(id) then done = true; doneId = doneId or id
                 else
                     pick = pick or id
                     if myCont and not here then
@@ -744,17 +746,17 @@ function ClassQuestList()
 end
 
 -- Propose une quete de classe quand tu atteins son niveau (une seule fois par quete)
-function CheckClassQuests()
-    if not DB or DB.noClassAsk or DB.guide == "chain" or Core.IS_DUNGEON[DB.guide] or State.asking or not StaticPopup_Show then return end
+function Flow.CheckClassQuests()
+    if not State.DB or State.DB.noClassAsk or State.DB.guide == "chain" or Core.IS_DUNGEON[State.DB.guide] or State.asking or not StaticPopup_Show then return end
     if Skin.PopupVisible() or (StaticPopup_Visible and (StaticPopup_Visible("WARPATH_CHAIN") or StaticPopup_Visible("WARPATH_DUNGEON"))) then return end
-    DB.cqAsked = DB.cqAsked or {}
+    State.DB.cqAsked = State.DB.cqAsked or {}
     local lvl = UnitLevel("player") or 1
     for _, c in ipairs(ClassQuestList()) do
-        if c.q and not c.done and not c.alt and lvl >= c.lvl and lvl <= c.lvl + 8 and not DB.cqAsked[c.name] and Core.logById[c.q] == nil then
+        if c.q and not c.done and not c.alt and lvl >= c.lvl and lvl <= c.lvl + 8 and not State.DB.cqAsked[c.name] and Core.logById[c.q] == nil then
             local order = Est.ChainFor(c.q, true)
             if order and #order > 0 then
-                DB.cqAsked[c.name] = true
-                AskChain(c.q, true)
+                State.DB.cqAsked[c.name] = true
+                Flow.AskChain(c.q, true)
                 return
             end
         end
@@ -763,15 +765,15 @@ end
 
 function ListDungeons()
     local lvl = UnitLevel("player")
-    local LBL = { yes = T("ansYes"), no = T("ansNo"), later = T("ansLater") }
+    local LBL = { yes = Core.T("ansYes"), no = Core.T("ansNo"), later = Core.T("ansLater") }
     for _, d in ipairs(Core.DUNGEONS) do
         local ok = lvl >= d.min and lvl <= d.max
-        say(string.format("  %s%s - %s (%d-%d)%s%s|r", ok and "|cff9cc7a8" or "|cff8c7f62", d.key, DungeonName(d), d.min, d.max,
-            ok and T("yourLevel") or "", DB.dAnswer[d.key] and (" [" .. LBL[DB.dAnswer[d.key]] .. "]") or "")
-            .. (function() local l, t = DungeonLeft(d.key); return t > 0 and T("dQuests", t - l, t) or "" end)()
-            .. (function() local n, now, need = DungeonReq(d.key); return (ok and need > 0) and T("dReqList", need) or "" end)())
+        Core.say(string.format("  %s%s - %s (%d-%d)%s%s|r", ok and "|cff9cc7a8" or "|cff8c7f62", d.key, DungeonName(d), d.min, d.max,
+            ok and Core.T("yourLevel") or "", State.DB.dAnswer[d.key] and (" [" .. LBL[State.DB.dAnswer[d.key]] .. "]") or "")
+            .. (function() local l, t = DungeonLeft(d.key); return t > 0 and Core.T("dQuests", t - l, t) or "" end)()
+            .. (function() local n, now, need = Flow.DungeonReq(d.key); return (ok and need > 0) and Core.T("dReqList", need) or "" end)())
     end
-    say(T("dHelp"))
+    Core.say(Core.T("dHelp"))
 end
 
 ------------------------------------------------------------------
@@ -781,51 +783,51 @@ end
 function Restorable(i)
     local s = State.steps and State.steps[i]
     if not s then return false end
-    if s.t == "go" and Core.IS_DUNGEON[DB.guide] then return false end
-    if DB.seen[Core.SeenKey(i)] and s.t ~= "level" then return true end
-    for _, id in ipairs(Core.Ids(s)) do if DB.ignored[id] then return true end end
+    if s.t == "go" and Core.IS_DUNGEON[State.DB.guide] then return false end
+    if State.DB.seen[Core.SeenKey(i)] and s.t ~= "level" then return true end
+    for _, id in ipairs(Core.Ids(s)) do if State.DB.ignored[id] then return true end end
     return false
 end
 function Restore(i)
     local s = State.steps[i]
-    DB.seen[Core.SeenKey(i)] = nil
-    for _, id in ipairs(Core.Ids(s)) do DB.ignored[id] = nil end
-    say(T("restored", Core.QName(s) or Core.StepText(s):sub(1, 40)))
+    State.DB.seen[Core.SeenKey(i)] = nil
+    for _, id in ipairs(Core.Ids(s)) do State.DB.ignored[id] = nil end
+    Core.say(Core.T("restored", Core.QName(s) or Core.StepText(s):sub(1, 40)))
     if Route.optCache then Route.optCache.key = nil end
     State.peek = nil; State.focus = nil
     Advance()
     -- l'etape retablie s'affiche tout de suite (meme si un autre PNJ est un peu plus proche)
     if not State.doneCache[i] and i ~= State.current then State.focus = i end
-    Refresh(true)
+    Skin.Refresh(true)
 end
 
 function Ignore()
     if not State.steps then return end
     -- mode donjon : le bouton sert a sortir du donjon (on passe aux remises de quetes)
-    if not State.peek and not State.focus and Skin.DungeonLogActive and Skin.DungeonLogActive() then
-        DB.dgOut = DB.dgOut or {}; DB.dgOut[DB.guide] = true
-        Advance(); Refresh(true)
+    if not State.peek and not State.focus and DungeonLogActive() then
+        State.DB.dgOut = State.DB.dgOut or {}; State.DB.dgOut[State.DB.guide] = true
+        Advance(); Skin.Refresh(true)
         return
     end
     -- etape "apprends tes sorts" : OK = on la passe pour ce niveau
     if not State.peek and not State.focus and Near.TrainDetour and Near.TrainDetour(State.steps[State.current]) then
-        DB.trainSkip = DB.trainDue
-        State.lastWP = nil; Refresh(true)
+        State.DB.trainSkip = State.DB.trainDue
+        State.lastWP = nil; Skin.Refresh(true)
         return
     end
     -- journal quitte par erreur, toujours dans l'instance : on le fait revenir
-    if not State.peek and not State.focus and DB.dgOut and DB.dgOut[DB.guide] and InDgInstance() then
-        DB.dgOut[DB.guide] = nil
-        Advance(); Refresh(true)
+    if not State.peek and not State.focus and State.DB.dgOut and State.DB.dgOut[State.DB.guide] and InDgInstance() then
+        State.DB.dgOut[State.DB.guide] = nil
+        Advance(); Skin.Refresh(true)
         return
     end
     local i = State.peek or State.focus or State.current
     local s = State.steps[i]
     if not s then return end
     if Restorable(i) then Restore(i); return end
-    if s.t == "go" and Core.IS_DUNGEON[DB.guide] then
-        DB.dgIn = DB.dgIn or {}; DB.dgIn[DB.guide] = true
-        State.peek = nil; State.focus = nil; Advance(); Refresh(true)
+    if s.t == "go" and Core.IS_DUNGEON[State.DB.guide] then
+        State.DB.dgIn = State.DB.dgIn or {}; State.DB.dgIn[State.DB.guide] = true
+        State.peek = nil; State.focus = nil; Advance(); Skin.Refresh(true)
         return
     end
     State.focus = nil
@@ -837,21 +839,21 @@ function Ignore()
         if s.t == "accept" and #ids > 1 then
             local missing = {}
             for _, id in ipairs(ids) do
-                if Core.logById[id] == nil and not Rendue(id) and not DB.ignored[id] then missing[#missing + 1] = id end
+                if Core.logById[id] == nil and not Core.Rendue(id) and not State.DB.ignored[id] then missing[#missing + 1] = id end
             end
             if #missing > 0 and #missing < #ids then ids = missing end
         end
         for _, id in ipairs(ids) do
-            DB.ignored[id] = true
+            State.DB.ignored[id] = true
             names[#names + 1] = tostring(id)
         end
-        say(T("ignored", Core.QName(s) or "?", table.concat(names, ", ")))
+        Core.say(Core.T("ignored", Core.QName(s) or "?", table.concat(names, ", ")))
     else
-        DB.seen[Core.SeenKey(i)] = true
+        State.DB.seen[Core.SeenKey(i)] = true
     end
     State.peek = nil
     Advance()
-    Refresh(true)
+    Skin.Refresh(true)
 end
 
 function Peek(dir)
@@ -863,8 +865,8 @@ function Peek(dir)
     if i < 1 then i = (State.peek or State.current) end
     if i > n then i = math.min(State.peek or State.current, n) end
     State.peek = (i ~= State.current) and i or nil
-    Refresh(true)
-    if not State.peek then State.lastWP = nil; Refresh(true) end
+    Skin.Refresh(true)
+    if not State.peek then State.lastWP = nil; Skin.Refresh(true) end
 end
 
 ------------------------------------------------------------------
@@ -872,20 +874,20 @@ end
 -- en listant les quetes encore dans le journal : celles qui continuent dans la prochaine zone
 -- (le guide les reprendra) et celles a finir ici avant de partir.
 ------------------------------------------------------------------
-function CheckZoneLevel()
-    if not DB or not State.steps or not State.G then return end
-    local key = DB.guide
+function Flow.CheckZoneLevel()
+    if not State.DB or not State.steps or not State.G then return end
+    local key = State.DB.guide
     if not key or key == "chain" or Core.IS_DUNGEON[key] or State.current > #State.steps then return end
     local lvl = UnitLevel("player") or 1
     if lvl < (Core.MAXLVL[key] or 99) then return end
-    DB.zoneAsked = DB.zoneAsked or {}
-    local asked = DB.zoneAsked[key]
+    State.DB.zoneAsked = State.DB.zoneAsked or {}
+    local asked = State.DB.zoneAsked[key]
     if asked and (asked == true or lvl < asked + 3) then return end   -- reposee une fois, 3 niveaux plus tard
-    local c, nxt = MyChain(), nil
-    if DB.nextGuide and Core.Guides[DB.nextGuide] and DB.nextGuide ~= key then nxt = DB.nextGuide end
+    local c, nxt = Flow.MyChain(), nil
+    if State.DB.nextGuide and Core.Guides[State.DB.nextGuide] and State.DB.nextGuide ~= key then nxt = State.DB.nextGuide end
     if not nxt and c then for k = 1, #c - 1 do if c[k] == key then nxt = c[k + 1] end end end
     if not (nxt and Core.Guides[nxt]) then return end
-    DB.zoneAsked[key] = asked and true or lvl
+    State.DB.zoneAsked[key] = asked and true or lvl
     -- quetes du guide encore dans le journal
     local inNext = {}
     for _, s in ipairs(Core.Guides[nxt].steps or {}) do
@@ -895,7 +897,7 @@ function CheckZoneLevel()
     for _, s in ipairs(State.steps) do
         if (s.t == "accept" or s.t == "do" or s.t == "turnin") and Core.Applies(s) then
             for _, id in ipairs(Core.Ids(s)) do
-                if not seen[id] and Core.logById[id] ~= nil and not Rendue(id) then
+                if not seen[id] and Core.logById[id] ~= nil and not Core.Rendue(id) then
                     seen[id] = true
                     local name = Core.QuestTitle(id) or s.quest or tostring(id)
                     if inNext[id] then carry[#carry + 1] = name
@@ -905,28 +907,28 @@ function CheckZoneLevel()
         end
     end
     local function list(t) local o = {}; for i = 1, math.min(#t, 6) do o[i] = "- " .. t[i] end; if #t > 6 then o[#o + 1] = "- ..." end; return table.concat(o, "\n") end
-    local txt = T("zoneUp", lvl, Core.Title(State.G), Core.Title(Core.Guides[nxt]))
-    if #finish > 0 then txt = txt .. "\n\n" .. T("zoneUpFinish") .. "\n" .. list(finish) end
-    if #carry > 0 then txt = txt .. "\n\n" .. T("zoneUpCarry", Core.Title(Core.Guides[nxt])) .. "\n" .. list(carry) end
+    local txt = Core.T("zoneUp", lvl, Core.Title(State.G), Core.Title(Core.Guides[nxt]))
+    if #finish > 0 then txt = txt .. "\n\n" .. Core.T("zoneUpFinish") .. "\n" .. list(finish) end
+    if #carry > 0 then txt = txt .. "\n\n" .. Core.T("zoneUpCarry", Core.Title(Core.Guides[nxt])) .. "\n" .. list(carry) end
     StaticPopupDialogs["WARPATH_ZONEUP"] = {
-        text = "%s", button1 = T("zoneUpGo"), button2 = T("zoneUpStay"), timeout = 0, whileDead = true, hideOnEscape = true,
+        text = "%s", button1 = Core.T("zoneUpGo"), button2 = Core.T("zoneUpStay"), timeout = 0, whileDead = true, hideOnEscape = true,
         OnAccept = function()
-            if DB.guide ~= key then return end
-            if DB.nextGuide == nxt then DB.nextGuide = nil end
-            DB.manual = nil
-            say(T("zoneUpGoMsg", Core.Title(Core.Guides[nxt])))
-            SetGuide(nxt, true)
+            if State.DB.guide ~= key then return end
+            if State.DB.nextGuide == nxt then State.DB.nextGuide = nil end
+            State.DB.manual = nil
+            Core.say(Core.T("zoneUpGoMsg", Core.Title(Core.Guides[nxt])))
+            Flow.SetGuide(nxt, true)
         end,
-        OnCancel = function() if DB.guide == key then DB.nextGuide = nxt end; say(T("zoneUpStayMsg", Core.Title(Core.Guides[nxt]))) end,
+        OnCancel = function() if State.DB.guide == key then State.DB.nextGuide = nxt end; Core.say(Core.T("zoneUpStayMsg", Core.Title(Core.Guides[nxt]))) end,
     }
-    Popup("WARPATH_ZONEUP", txt)
+    Skin.Popup("WARPATH_ZONEUP", txt)
 end
 
 -- retour a l'etape actuelle (apres avoir regarde d'autres etapes)
 function BackToNow()
     State.peek = nil; State.focus = nil; State.lastWP = nil
     if Route.optCache then Route.optCache.key = nil end
-    Advance(); Refresh(true)
+    Advance(); Skin.Refresh(true)
 end
 
 -- clic sur le titre de la quete : l'ouvre dans le journal des quetes du jeu
@@ -943,9 +945,60 @@ function OpenStepQuest()
     end
 end
 
+-- v1.50 : mode donjon, quetes du journal du donjon (venu de UI/Skin.lua : c'est de la logique de guide ;
+-- l'affichage reste dans Skin, DungeonLogRender). Entree du donjon = l'etape "go" du guide.
+function DgEntrance()
+    if not State.steps then return nil end
+    for j = 1, #State.steps do if State.steps[j].t == "go" then return j end end
+end
+function DungeonLogActive()
+    if not (State.DB and State.steps and Core.IS_DUNGEON[State.DB.guide]) then return false end
+    if State.DB.dgOut and State.DB.dgOut[State.DB.guide] then return false end
+    local ent = DgEntrance()
+    if not ent or not State.doneCache[ent] or State.current <= ent then return false end
+    local s = State.steps[State.current]
+    return s ~= nil and s.t ~= "turnin"
+end
+local function QProg(q)
+    if Core.logById[q] == true then return Core.CHECK end
+    local have, need = 0, 0
+    if C_QuestLog and C_QuestLog.GetQuestObjectives then
+        local ok, objs = pcall(C_QuestLog.GetQuestObjectives, q)
+        if ok and type(objs) == "table" then
+            for _, o in ipairs(objs) do have = have + (o.numFulfilled or 0); need = need + (o.numRequired or 0) end
+        end
+    end
+    if need > 0 then return "|cffd6b866" .. have .. "/" .. need .. "|r" end
+    return "|cffd6b866…|r"
+end
+function DungeonLogList()
+    local out, seen = {}, {}
+    local ent = DgEntrance(); if not ent then return out end
+    for j = ent + 1, #State.steps do
+        local s = State.steps[j]
+        if Core.Applies(s) and (s.t == "do" or s.t == "accept" or s.t == "turnin") then
+            for _, q in ipairs(Core.Ids(s)) do
+                if not seen[q] and not Core.Rendue(q) and not (State.DB.ignored and State.DB.ignored[q]) then
+                    if Core.logById[q] ~= nil then
+                        seen[q] = true
+                        out[#out + 1] = { q = q, name = Core.QuestTitle(q) or (Est.EST[q] and Est.EST[q].n) or s.quest or ("#" .. q), prog = QProg(q), done = Core.logById[q] == true }
+                    elseif s.t == "accept" then
+                        seen[q] = true
+                        out[#out + 1] = { q = q, name = Core.QuestTitle(q) or (Est.EST[q] and Est.EST[q].n) or s.quest or ("#" .. q), prog = "", later = true, acc = s }
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
 -- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Flow)
 do
     local M = ns.Mod.Flow
+    M.DgEntrance = DgEntrance
+    M.DungeonLogActive = DungeonLogActive
+    M.DungeonLogList = DungeonLogList
     M.Advance = Advance
     M.AllDone = AllDone
     M.AutoPick = AutoPick

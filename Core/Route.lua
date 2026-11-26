@@ -1,9 +1,8 @@
 -- Oghoule's Warpath : moteur (Route.lua) - voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Route = ns.Mod.Route -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 local Flow = ns.Mod.Flow -- v1.50 : module
 local Est = ns.Mod.Est -- v1.50 : module
@@ -17,7 +16,7 @@ local WIND, gateKey, gateNodes, lastSample, walkCache
 ------------------------------------------------------------------
 -- Waypoints (natif si possible, TomTom si installe)
 ------------------------------------------------------------------
-desiredWP = nil -- waypoint voulu par le guide (on le remet si le jeu l'efface a l'arrivee)
+Route.desiredWP = nil -- waypoint voulu par le guide (on le remet si le jeu l'efface a l'arrivee)
 
 -- Repere du jeu jamais touche en combat : poser/effacer le repere fait redessiner les epingles de la
 -- carte par le code du jeu « au nom » de Warpath, et SetPassThroughButtons est alors bloque (rapport du
@@ -30,13 +29,13 @@ do
     fr:SetScript("OnEvent", function()
         if not nativePending then return end
         nativePending = false
-        if desiredWP then PlaceNative(desiredWP)
+        if Route.desiredWP then Route.PlaceNative(Route.desiredWP)
         elseif C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
     end)
 end
 
-function ClearWaypoint()
-    desiredWP = nil
+function Route.ClearWaypoint()
+    Route.desiredWP = nil
     if InFight() then nativePending = true
     elseif C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
     if State.tomtomWP and TomTom and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, State.tomtomWP) end
@@ -64,11 +63,11 @@ function BlizzArrowShown(show)
     else pcall(HideForeignArrow) end
 end
 
-function PlaceNative(w)
+function Route.PlaceNative(w)
     if not (C_Map and C_Map.SetUserWaypoint and UiMapPoint and UiMapPoint.CreateFromCoordinates) then return end
     if InFight() then nativePending = true; return end -- pose a la fin du combat (voir plus haut)
     -- repere du jeu decoche (avec la fleche Warpath) : pas de point jaune ni d'icone du jeu sur la minicarte
-    if DB.ownArrow ~= false and DB.gameWP == false then
+    if State.DB.ownArrow ~= false and State.DB.gameWP == false then
         pcall(function()
             if C_Map.HasUserWaypoint and C_Map.HasUserWaypoint() then C_Map.ClearUserWaypoint() end
         end)
@@ -81,28 +80,28 @@ function PlaceNative(w)
         -- Warpath les icones de quete (suivi des objectifs, carte) ; elles restent « marquees » et, plus tard en
         -- combat, le jeu bloque SetPassThroughButtons quand il les met a jour (rapports des 23 et 24 novembre :
         -- escortes, Durnholde, 14 boutons d'un coup alors que le repere n'est plus touche en combat).
-        if DB.ownArrow == false and C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+        if State.DB.ownArrow == false and C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
             C_SuperTrack.SetSuperTrackedUserWaypoint(true)
         end
-        BlizzArrowShown(DB.ownArrow == false)
+        BlizzArrowShown(State.DB.ownArrow == false)
     end)
 end
 
-function SetWaypoint(s)
-    ClearWaypoint()
-    if not DB.wp or not s or not s.x or not s.y then return end
+function Route.SetWaypoint(s)
+    Route.ClearWaypoint()
+    if not State.DB.wp or not s or not s.x or not s.y then return end
     local mapID = s.m
     if not mapID and C_Map and C_Map.GetBestMapForUnit then mapID = C_Map.GetBestMapForUnit("player") end
     if not mapID then return end
-    desiredWP = { m = mapID, x = s.x, y = s.y, title = s.quest or s.text }
+    Route.desiredWP = { m = mapID, x = s.x, y = s.y, title = s.quest or s.text }
     if TomTom and TomTom.AddWaypoint then
         pcall(function()
             -- cleardistance = 0 : TomTom ne supprime pas la fleche quand on arrive
             State.tomtomWP = TomTom:AddWaypoint(mapID, s.x / 100, s.y / 100,
-                { title = desiredWP.title, persistent = false, minimap = true, world = true, cleardistance = 0, crazy = (DB.ownArrow == false) })
+                { title = Route.desiredWP.title, persistent = false, minimap = true, world = true, cleardistance = 0, crazy = (State.DB.ownArrow == false) })
         end)
     end
-    PlaceNative(desiredWP)
+    Route.PlaceNative(Route.desiredWP)
 end
 
 ------------------------------------------------------------------
@@ -111,17 +110,17 @@ end
 PCOL = { accept = "d6b866", ["do"] = "d69a66", turnin = "9cc7a8", go = "cdbb8e", note = "b5aa98", level = "d6b866" }
 PREFIX = setmetatable({}, { __index = function(_, k)
     if not PCOL[k] then return nil end
-    return "|cff" .. PCOL[k] .. T(k) .. "|r"
+    return "|cff" .. PCOL[k] .. Core.T(k) .. "|r"
 end })
 
-function Short(s)
+function Route.Short(s)
     return (PREFIX[s.t] or "") .. " " .. (Core.QName(s) or Core.StepText(s):sub(1, 45))
 end
 
 ------------------------------------------------------------------
 -- Changement de continent : zeppelins / bateau les plus rapides
 ------------------------------------------------------------------
-KALIMDOR, EK, CONT_FALLBACK, TRANSPORTS = D.KALIMDOR, D.EK, D.CONT_FALLBACK, D.TRANSPORTS
+KALIMDOR, EK, CONT_FALLBACK, TRANSPORTS = Core.D.KALIMDOR, Core.D.EK, Core.D.CONT_FALLBACK, Core.D.TRANSPORTS
 
 -- v1.47 : le continent d'une carte ne change pas : on le retient (avant, chaque appel creait une fiche de carte
 -- par niveau, des dizaines de fois par seconde via PlayerWP ; mesure /warpath perf du 2026-11-25)
@@ -156,7 +155,7 @@ end
 -- l'icone de la minicarte, la petite fleche et la distance la demandaient chacune (mesure /warpath perf du 2026-11-25)
 -- (pas en simulation : l'horloge des tests reste fixe pendant qu'ils deplacent le joueur)
 local ppT, ppM, ppX, ppY
-function PlayerPos()
+function Route.PlayerPos()
     local now = not WARPATH_TEST and GetTime and GetTime()
     if now and now == ppT then return ppM, ppX, ppY end
     ppT, ppM, ppX, ppY = now, nil, nil, nil
@@ -179,9 +178,9 @@ function Dist(ax, ay, bx, by)
 end
 
 -- Renvoie le transport a prendre pour atteindre l'etape s, ou nil si tu es deja sur le bon continent.
-function TransportFor(s)
+function Route.TransportFor(s)
     if not (s and s.m and s.x) then return nil end
-    local pm, px, py = PlayerPos()
+    local pm, px, py = Route.PlayerPos()
     local here, there = Continent(pm), Continent(s.m)
     if not here or not there or here == there then return nil end
     local pwx, pwy
@@ -204,28 +203,28 @@ end
 
 -- Cout d'un trajet (en "metres"), en tenant compte des zeppelins / bateau si on change de continent.
 RIDE = 1500                     -- equivalent distance d'un trajet en zeppelin/bateau (attente comprise)
-wpCache = {}
-function WP(m, x, y)
+Route.wpCache = {}
+function Route.WP(m, x, y)
     local k = m .. ":" .. x .. ":" .. y
-    local v = wpCache[k]
+    local v = Route.wpCache[k]
     if v == nil then
         local wx, wy = WorldPos(m, x, y)
         v = wx and { wx, wy, Continent(m), m } or false
-        wpCache[k] = v
+        Route.wpCache[k] = v
     end
     return v or nil
 end
 
-FLIGHTS = D.FLIGHTS
+FLIGHTS = Core.D.FLIGHTS
 FLY_FACTOR, FLY_OVERHEAD = 0.3, 150   -- un vol ~3x plus rapide qu'a pied, + temps de decollage/atterrissage
 
 -- (meme cache par image ; une nouvelle table a chaque image, jamais modifiee ensuite : certains la gardent, ex. FlightRecheck)
 local pwT, pwV
-function PlayerWP()
+function Route.PlayerWP()
     local now = not WARPATH_TEST and GetTime and GetTime()
     if now and now == pwT then return pwV end
     pwT, pwV = now, nil
-    local pm, px, py = PlayerPos()
+    local pm, px, py = Route.PlayerPos()
     if not (pm and px) then return nil end
     local wx, wy = WorldPos(pm, px, py)
     pwV = wx and { wx, wy, Continent(pm), pm } or nil
@@ -236,7 +235,7 @@ end
 -- Trajet a pied realiste : les zones ne communiquent que par leurs passages (graphe + Dijkstra).
 -- Les passages connus sont dans Data.lua ; ceux que tu traverses sont appris (DB.gates).
 ------------------------------------------------------------------
-GATES = D.GATES or {}
+GATES = Core.D.GATES or {}
 WIND, UNKNOWN = 1.15, 1.35          -- detours d'un chemin reel / zone sans passage connu
 -- v1.47 : la zone d'une carte ne change pas : on la retient (Walk l'appelait deux fois par calcul, des milliers
 -- de fois par seconde chez un joueur a 18 points de vol ; mesure /warpath perf du 2026-11-25)
@@ -263,12 +262,12 @@ end
 gateNodes, gateKey = nil, nil
 walkCache = {}
 function GateNodes()
-    local learned = DB and DB.gates
+    local learned = State.DB and State.DB.gates
     local key = learned and #learned or 0
     if gateNodes and gateKey == key then return gateNodes end
     local list = {}
     for _, g in ipairs(GATES) do
-        local w = WP(g.m, g.x, g.y)
+        local w = Route.WP(g.m, g.x, g.y)
         if w then list[#list + 1] = { w[1], w[2], w[3], z1 = g.z[1], z2 = g.z[2], c = g.cost or 0 } end
     end
     for _, g in ipairs(learned or {}) do
@@ -279,7 +278,7 @@ function GateNodes()
     return list
 end
 
-function Walk(a, b)
+function Route.Walk(a, b)
     if not (a and b) or a[3] ~= b[3] then return nil end
     local d = Dist(a[1], a[2], b[1], b[2])
     local za, zb = ZoneOf(a[4]), ZoneOf(b[4])
@@ -319,19 +318,19 @@ end
 
 -- Apprend un passage quand tu changes de zone a pied (pas en vol, pas de teleportation).
 lastSample = nil
-function LearnGates()
-    local here = PlayerWP()
+function Route.LearnGates()
+    local here = Route.PlayerWP()
     if not here then lastSample = nil; return end
     local z = ZoneOf(here[4])
     if lastSample and lastSample.z ~= z and lastSample.w[3] == here[3] and not (UnitOnTaxi and UnitOnTaxi("player"))
         and Dist(lastSample.w[1], lastSample.w[2], here[1], here[2]) < 60 then
-        DB.gates = DB.gates or {}
+        State.DB.gates = State.DB.gates or {}
         local mx, my = (lastSample.w[1] + here[1]) / 2, (lastSample.w[2] + here[2]) / 2
         local dup = false
-        for _, g in ipairs(DB.gates) do
+        for _, g in ipairs(State.DB.gates) do
             if ((g[4] == lastSample.z and g[5] == z) or (g[4] == z and g[5] == lastSample.z)) and Dist(g[1], g[2], mx, my) < 80 then dup = true end
         end
-        if not dup and #DB.gates < 200 then DB.gates[#DB.gates + 1] = { mx, my, here[3], lastSample.z, z } end
+        if not dup and #State.DB.gates < 200 then State.DB.gates[#State.DB.gates + 1] = { mx, my, here[3], lastSample.z, z } end
     end
     lastSample = { w = here, z = z }
 end
@@ -341,19 +340,19 @@ end
 -- v1.43 : la liste de A ne bloque B que si B etait deja connu quand on l'a enregistree (fpLinksKnown).
 -- Un point appris plus tard, ou une liste ancienne sans cet instantane, ne bloque plus rien.
 function CanFly(aKey, bKey)
-    local links = DB and DB.fpLinks and DB.fpLinks[aKey]
+    local links = State.DB and State.DB.fpLinks and State.DB.fpLinks[aKey]
     if not links or links[bKey] then return true end
-    local knownThen = DB.fpLinksKnown and DB.fpLinksKnown[aKey]
+    local knownThen = State.DB.fpLinksKnown and State.DB.fpLinksKnown[aKey]
     if not knownThen then return true end
     return not knownThen[bKey]
 end
 
-function KnownFlights()
+function Route.KnownFlights()
     local list = {}
-    if not DB or not DB.fp then return list end
+    if not State.DB or not State.DB.fp then return list end
     for _, n in ipairs(FLIGHTS) do
-        if DB.fp[n.key] then
-            local w = WP(n.m, n.x, n.y)
+        if State.DB.fp[n.key] then
+            local w = Route.WP(n.m, n.x, n.y)
             if w then list[#list + 1] = { node = n, w = w } end
         end
     end
@@ -363,27 +362,27 @@ end
 -- Nouveau point de vol decouvert (message du jeu) : on note le maitre de vol le plus proche,
 -- sans attendre que tu ouvres la carte des vols (v1.39).
 function LearnFlightHere()
-    local here = PlayerWP()
-    if not (here and DB) then return end
+    local here = Route.PlayerWP()
+    if not (here and State.DB) then return end
     local best, bd
     for _, n in ipairs(FLIGHTS) do
-        local w = WP(n.m, n.x, n.y)
+        local w = Route.WP(n.m, n.x, n.y)
         if w and w[3] == here[3] then
             local d = Dist(here[1], here[2], w[1], w[2])
             if not bd or d < bd then best, bd = n, d end
         end
     end
     if best and bd < 100 then
-        DB.fp = DB.fp or {}
-        if not DB.fp[best.key] then
-            DB.fp[best.key] = true
+        State.DB.fp = State.DB.fp or {}
+        if not State.DB.fp[best.key] then
+            State.DB.fp[best.key] = true
             -- v1.43 : tes points connus d'un meme continent sont relies ; on ajoute le nouveau point
             -- aux liaisons deja notees sur ce continent, sans attendre de rouvrir chaque carte des vols.
-            local bw = WP(best.m, best.x, best.y)
+            local bw = Route.WP(best.m, best.x, best.y)
             for _, n in ipairs(FLIGHTS) do
-                local links = DB.fpLinks and DB.fpLinks[n.key]
+                local links = State.DB.fpLinks and State.DB.fpLinks[n.key]
                 if links and n.key ~= best.key then
-                    local w = WP(n.m, n.x, n.y)
+                    local w = Route.WP(n.m, n.x, n.y)
                     if w and bw and w[3] == bw[3] then links[best.key] = true end
                 end
             end
@@ -396,17 +395,17 @@ end
 -- Meilleur vol entre deux points du meme continent (ou nil s'il ne fait pas gagner assez de temps).
 -- v1.45 : prev = vol deja conseille ; on le garde tant qu'il fait encore gagner du temps, meme sous les seuils,
 -- pour que le conseil ne change pas d'avis en chemin (il est maintenant recalcule pendant la marche).
-function BestFlight(a, b, known, prev)
+function Route.BestFlight(a, b, known, prev)
     if not (a and b) or a[3] ~= b[3] then return nil end
-    local walk = Walk(a, b)
+    local walk = Route.Walk(a, b)
     local best, bestCost, prevPlan, prevCost
     -- v1.47 : marche de chaque point de vol vers l'objectif calculee une seule fois (avant : pour chaque paire,
     -- 18 x 18 = 324 fois chez un joueur a 18 points ; 178 646 Walk en une minute, saccades de 170 ms)
     local fromB = {}
-    for k, B in ipairs(known) do if B.w[3] == a[3] then fromB[k] = Walk(B.w, b) end end
+    for k, B in ipairs(known) do if B.w[3] == a[3] then fromB[k] = Route.Walk(B.w, b) end end
     for _, A in ipairs(known) do
         if A.w[3] == a[3] then
-            local toA = Walk(a, A.w)
+            local toA = Route.Walk(a, A.w)
             for k, B in ipairs(known) do
                 if B ~= A and fromB[k] and CanFly(A.node.key, B.node.key) then
                     local c = toA + Dist(A.w[1], A.w[2], B.w[1], B.w[2]) * FLY_FACTOR + FLY_OVERHEAD
@@ -428,19 +427,19 @@ function BestFlight(a, b, known, prev)
     return nil, walk
 end
 
-function TravelCost(a, b, known)
+function Route.TravelCost(a, b, known)
     if not (a and b) then return nil end
     if a[3] == b[3] then
-        local _, c = BestFlight(a, b, known or {})
-        local walk = Walk(a, b)
+        local _, c = Route.BestFlight(a, b, known or {})
+        local walk = Route.Walk(a, b)
         return math.min(c or walk, walk)
     end
     local best
     for _, tr in ipairs(TRANSPORTS) do
-        local f1 = WP(tr.from[1], tr.from[2], tr.from[3])
-        local t1 = WP(tr.to[1], tr.to[2], tr.to[3])
+        local f1 = Route.WP(tr.from[1], tr.from[2], tr.from[3])
+        local t1 = Route.WP(tr.to[1], tr.to[2], tr.to[3])
         if f1 and t1 and f1[3] == a[3] and t1[3] == b[3] then
-            local c = Walk(a, f1) + RIDE + Walk(t1, b)
+            local c = Route.Walk(a, f1) + RIDE + Route.Walk(t1, b)
             if not best or c < best then best = c end
         end
     end
@@ -452,7 +451,7 @@ end
 optCache = { key = nil, seq = nil }
 band = bit and bit.band
 
-OptimizeFn = function()
+Core.OptimizeFn = function()
     local n = #State.steps
     local entrance
     for i = 1, n do if State.steps[i].t == "go" then entrance = i; break end end
@@ -465,7 +464,7 @@ OptimizeFn = function()
         local s = State.steps[i]
         local det = PrereqDetour and PrereqDetour(s)
         if det then
-            local w = det.m and WP(det.m, det.x, det.y)
+            local w = det.m and Route.WP(det.m, det.x, det.y)
             if w then via[i] = w; detKey[#detKey + 1] = i .. (det.done and "d" or "o") else later[i] = true end
         end
         for _, d in ipairs(Core.depsOf[i] or {}) do if later[d] then later[i] = true end end
@@ -476,7 +475,7 @@ OptimizeFn = function()
     for i = 1, entrance - 1 do
         local st = State.steps[i]
         if Core.Applies(st) and not State.doneCache[i] and st.t ~= "note" and not later[i] then
-            if st.m and st.x and WP(st.m, st.x, st.y) then P[#P + 1] = i else tail[#tail + 1] = i end
+            if st.m and st.x and Route.WP(st.m, st.x, st.y) then P[#P + 1] = i else tail[#tail + 1] = i end
         end
     end
     for i = 1, entrance - 1 do
@@ -484,21 +483,21 @@ OptimizeFn = function()
     end
     if #P == 0 then return tail[1] and tail or nil end
     local greedy = #P > 12      -- trop d'etapes pour le calcul exact : plus proche voisin (respecte les chaines)
-    local start = PlayerWP()
+    local start = Route.PlayerWP()
     if not start then return nil end
     -- cache : on ne recalcule que quand une etape est faite (ou sur "Recalculer"), PAS a chaque deplacement :
     -- sinon l'ordre change en marchant et la prochaine etape saute d'un PNJ a l'autre.
-    local key = DB.guide .. "|" .. table.concat(P, ",") .. "|" .. (next(later) and "L" or "") .. table.concat(detKey, ",") .. "|" .. (DB.useFlights ~= false and "f" or "") .. tostring(DB.fp and next(DB.fp))
+    local key = State.DB.guide .. "|" .. table.concat(P, ",") .. "|" .. (next(later) and "L" or "") .. table.concat(detKey, ",") .. "|" .. (State.DB.useFlights ~= false and "f" or "") .. tostring(State.DB.fp and next(State.DB.fp))
     if optCache.key == key then return optCache.seq end
     local pos, slot = {}, {}
     for k, i in ipairs(P) do
         local st = State.steps[i]
         if not (st.m and st.x) then return nil end
-        pos[k] = WP(st.m, st.x, st.y)
+        pos[k] = Route.WP(st.m, st.x, st.y)
         if not pos[k] then return nil end
         slot[i] = k
     end
-    local endPos = State.steps[entrance].m and WP(State.steps[entrance].m, State.steps[entrance].x, State.steps[entrance].y)
+    local endPos = State.steps[entrance].m and Route.WP(State.steps[entrance].m, State.steps[entrance].x, State.steps[entrance].y)
     -- masques de dependances (limites aux etapes en attente)
     local need = {}
     for k, i in ipairs(P) do
@@ -521,7 +520,7 @@ OptimizeFn = function()
     end
     local K = #P
     local full = 2 ^ K - 1
-    local known = (DB.useFlights ~= false) and KnownFlights() or {}
+    local known = (State.DB.useFlights ~= false) and Route.KnownFlights() or {}
     local CM = {}                                   -- couts precalcules (avec vols connus)
     local function C(i, j)
         CM[i] = CM[i] or {}
@@ -531,10 +530,10 @@ OptimizeFn = function()
             local b = (j == -1) and endPos or pos[j]
             local w = (j ~= -1) and via[P[j]]
             if w then
-                local c1, c2 = TravelCost(a, w, known), TravelCost(w, b, known)
+                local c1, c2 = Route.TravelCost(a, w, known), Route.TravelCost(w, b, known)
                 v = (c1 and c2) and (c1 + c2) or false
             else
-                v = TravelCost(a, b, known) or false
+                v = Route.TravelCost(a, b, known) or false
             end
             CM[i][j] = v
         end
@@ -611,10 +610,10 @@ end
 function PrereqDetour(s)
     if not s or s.t ~= "accept" then return nil end
     local blockers = {}
-    for _, p in ipairs(s.preg or {}) do if not Rendue(p) then blockers[#blockers + 1] = p end end
+    for _, p in ipairs(s.preg or {}) do if not Core.Rendue(p) then blockers[#blockers + 1] = p end end
     if s.pre then
         local ok = false
-        for _, p in ipairs(s.pre) do if Rendue(p) then ok = true end end
+        for _, p in ipairs(s.pre) do if Core.Rendue(p) then ok = true end end
         if not ok then for _, p in ipairs(s.pre) do blockers[#blockers + 1] = p end end
     end
     for _, p in ipairs(blockers) do

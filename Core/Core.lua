@@ -15,36 +15,29 @@
 --   5. Notes, etapes optionnelles et "Niveau" : passees avec OK, ou des que la suite est faite.
 -- L'etape affichee = la premiere etape qui n'est pas faite selon ces regles.
 local ADDON, ns = ...
--- v1.50 : etat partage du guide (etape courante, etapes, apercu, cible de la fleche...).
--- Les fichiers le lisent par State.x ; ns.CoreEnv redirige encore les anciens noms (tests).
+-- v1.50 : etat partage du guide (etape courante, etapes, apercu, cible de la fleche, sauvegarde DB...).
+-- Les fichiers le lisent par State.x. Le reste du partage passe par les modules ns.Mod (Core/Modules.lua).
 ns.State = ns.State or {}
 local State = ns.State
--- Environnement prive partage par tous les fichiers du moteur (Core, Route, Estimate, Skin, Flow, Window,
--- Comfort, Commands, Events) : leurs variables communes y vivent, les vraies globales du jeu restent dans _G.
-local DECL = {}
-for n in ("heldNear WeaveSteps PerfOn RetargetLight TrailTick TrailPoint PassageFor HearthButton HEAD_H OnTheWay IsCaveStep CaveTrack StepPoint DungeonQuests nearKind NearPick NearTick ThenLine DungeonInstanceMatches DL CheckZoneLevel CheckProfIntro ProfDetect CheckProfQuests DungeonReq Tip Popup HearthPos Advice currentAdvice RefreshInner SuggestDungeonForLevel styleCache CheckClassQuests AskChain BestFlight CLASSBIT CheckDungeons ClearWaypoint Compute D DB Estimate KnownFlights Lang LearnGates LockCandidates MyChain OnEvent UpdateMini QMCandidates QMSkip QMClosePick QMGo CheckDungeonLeft HearthPlace CityCavePoint POPUP_HEAD OptimizeFn PlaceNative PlayerPos PlayerWP Refresh Rendue ScanLog SetGuide SetWaypoint Short StepDone T TransportFor TravelCost UpdateDistance W WP Walk desiredWP distTarget dynOrder errShown f lastKill say wpCache"):gmatch("%S+") do DECL[n] = true end
--- v1.50 : anciens noms de l'etat, rediriges vers State (outils de test, oubli eventuel) ; jamais stockes dans env
+-- v1.50 : plus d'environnement prive ni de liste DECL. ns.CoreEnv ne sert plus qu'aux outils de test (et a /run) :
+-- il retrouve un ancien nom dans l'etat (ns.State) ou dans le module qui le publie (ns.ModIndex), sinon dans _G.
+-- Ecrire par lui (E.Popup = f) remplace la fonction dans son module : tout l'addon l'appelle par le module.
 local STATE = {}
-for n in ("tomtomWP lastWP baseCurrent current focus flightPlan pending G steps peek doneCache pendingAccept computingOther asking inCommand myClass myRace"):gmatch("%S+") do STATE[n] = true end
-local assigned = {}
--- v1.50 : noms publies par les modules (ns.Mod, Core/Modules.lua) : retrouves pour les anciens acces par CoreEnv
+for n in ("DB tomtomWP lastWP baseCurrent current focus flightPlan pending G steps peek doneCache pendingAccept computingOther asking inCommand myClass myRace"):gmatch("%S+") do STATE[n] = true end
 local MODIDX = ns.ModIndex or {}
-local env = setmetatable({}, {
+ns.CoreEnv = setmetatable({}, {
     __index = function(_, k)
         if STATE[k] then return State[k] end
-        if DECL[k] then if assigned[k] then return nil end return _G[k] end
         local m = MODIDX[k]
         if m then return m[k] end
         return _G[k]
     end,
-    __newindex = function(t, k, v)
+    __newindex = function(_, k, v)
         if STATE[k] then State[k] = v
-        elseif DECL[k] then assigned[k] = true; rawset(t, k, v)
         elseif MODIDX[k] then MODIDX[k][k] = v
         else _G[k] = v end
     end,
 })
-ns.CoreEnv = env
 -- Trace temporaire : affiche (une fois) chaque appel sensible juste avant de le faire
 local traced = {}
 ns.Trace = function(name)
@@ -59,6 +52,8 @@ do
     fr:RegisterEvent("ADDON_ACTION_BLOCKED"); fr:RegisterEvent("ADDON_ACTION_FORBIDDEN"); fr:RegisterEvent("PLAYER_ENTERING_WORLD")
     local function flush()
         if #blocked == 0 or not DEFAULT_CHAT_FRAME then return end
+        -- v1.50 : Lang vit dans le module Core (avant : cherche ici hors de l'environnement prive, toujours vide -> francais)
+        local Lang = ns.Mod.Core.Lang
         for _, m in ipairs(blocked) do DEFAULT_CHAT_FRAME:AddMessage("|TInterface\\AddOns\\OghoulesWarpath\\Media\\Gem:12:12:0:0|t |cffcdbb8eWarpath|r : |cffc24a3e" .. ((Lang and Lang() == "en") and "action blocked by the game" or "action bloquée par le jeu") .. "|r : " .. m) end
         wipe(blocked)
     end
@@ -93,14 +88,9 @@ do
         end
     end)
 end
--- Certaines fonctions du jeu (ex. C_Map.GetPlayerMapPosition) creent leurs objets a partir d'un "mixin"
--- qu'elles cherchent directement dans l'environnement de l'appelant, sans passer par _G :
--- on y recopie donc les mixins de Blizzard.
-for k, v in pairs(_G) do
-    if type(k) == "string" and k:sub(-5) == "Mixin" then rawset(env, k, v) end
-end
--- Appels de carte faits depuis l'environnement global (crees avant le changement d'environnement) :
--- ces fonctions du jeu renvoient des objets Vector2D et ne fonctionnent pas depuis un environnement prive.
+-- Appels de carte du jeu (objets Vector2D). v1.50 : les fichiers tournent maintenant dans l'environnement
+-- normal du jeu (plus d'environnement prive, plus besoin d'y recopier les "mixins" de Blizzard) ; ns.MapAPI reste
+-- le point d'appel commun (vecteur reutilise).
 ns.MapAPI = {
     PlayerPos = function(m, unit)
         if not (C_Map and C_Map.GetPlayerMapPosition) then return nil end
@@ -116,39 +106,41 @@ ns.MapAPI = {
         return C_Map.GetWorldPosFromMapPos(mapID, v)
     end,
 }
-local _ENV = env
-if setfenv then setfenv(1, env) end
+-- v1.50 : fin de l'environnement prive : ce qui suit partage par ns.State et les modules ns.Mod
+local Core = ns.Mod.Core -- v1.50 : module
+local Near = ns.Mod.Near -- v1.50 : module
+local Style = ns.Mod.Style -- v1.50 : module
 -- v1.50 : module ns.Mod.Core (publie en fin de fichier pour les autres fichiers)
+local Upper, ACCENTS
 local AnalyzeChains, Applies, CHAIN, CHECK, DUNGEONS, FindAnchor, GreenRange, Guides, ICON, IS_DUNGEON, Ids
 local IsGrey, ListHas, MAIN_ORDER, MAXLVL, MINLVL, NearNpc, NextApplicable, QName, QuestTitle, SeenKey
 local StepText, Title, VERSION, blockedBy, chainOf, depsOf, logById
-local Comfort = ns.Mod.Comfort -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local DOT, HOLD_R, IS_DUNGEON_SET, LANG, QuestState, heldPrev
 Guides = ns.Guides or {}
 
-DB = nil -- WarpathCharDB (par personnage)
-f = nil -- fenetre principale
+State.DB = nil -- WarpathCharDB (par personnage)
+Core.f = nil -- fenetre principale
 State.G, State.steps = nil, nil -- guide actif et ses etapes
 State.myClass, State.myRace = nil, nil
 State.current = 1             -- etape calculee
 State.peek = nil -- etape regardee avec < > (apercu), nil sinon
 State.focus = nil -- etape choisie en cliquant (liste "A suivre" ou debut de chaine)
-dynOrder = nil -- ordre optimise des etapes de ramassage (donjons), ou nil
+Core.dynOrder = nil -- ordre optimise des etapes de ramassage (donjons), ou nil
 chainOf = {}            -- index d'etape -> { name, pos, len, first = index de la 1re etape }
-OptimizeFn = nil -- defini plus bas (besoin des fonctions de carte)
+Core.OptimizeFn = nil -- defini plus bas (besoin des fonctions de carte)
 State.flightPlan = nil -- vol conseille en ce moment ({ from, to }) pour surligner la destination
 State.lastWP, State.tomtomWP = nil, nil
 State.pending = false
 
-D = ns.Data
-CHAIN, MAXLVL, DUNGEONS, IS_DUNGEON = D.CHAIN, D.MAXLVL, D.DUNGEONS, D.IS_DUNGEON
+Core.D = ns.Data
+CHAIN, MAXLVL, DUNGEONS, IS_DUNGEON = Core.D.CHAIN, Core.D.MAXLVL, Core.D.DUNGEONS, Core.D.IS_DUNGEON
 IS_DUNGEON_SET = IS_DUNGEON
 
 ICON = "Interface\\AddOns\\OghoulesWarpath\\Media\\Warpath64"
 VERSION = "1.50"
-MINLVL, MAIN_ORDER = D.MINLVL, D.MAIN_ORDER
+MINLVL, MAIN_ORDER = Core.D.MINLVL, Core.D.MAIN_ORDER
 -- v1.41 (audit) : coche de l'addon (case cochee doree, comme les objectifs) au lieu de la coche verte du jeu
 CHECK = "|TInterface\\AddOns\\OghoulesWarpath\\Media\\BoxDone:12:12|t"
 DOT = "|cff888888-|r"
@@ -159,18 +151,18 @@ DOT = "|cff888888-|r"
 ------------------------------------------------------------------
 LANG = ns.LANG
 
-function Lang()
-    if DB and DB.lang then return DB.lang end
+function Core.Lang()
+    if State.DB and State.DB.lang then return State.DB.lang end
     -- anglais par defaut (nouvelles installations) ; une installation existante garde le francais
     return (WarpathDropDB and WarpathDropDB._lang) or "en"
 end
 
-function T(key, ...)
-    local str = LANG[Lang()][key] or LANG.fr[key] or key
+function Core.T(key, ...)
+    local str = LANG[Core.Lang()][key] or LANG.fr[key] or key
     if select("#", ...) > 0 then return string.format(str, ...) end
     return str
 end
-ns.T = function(...) return T(...) end
+ns.T = function(...) return Core.T(...) end
 
 function QuestTitle(id)
     if C_QuestLog and C_QuestLog.GetTitleForQuestID then
@@ -199,15 +191,15 @@ function QName(s)
     return s.quest
 end
 
-function StepText(s) return (Lang() == "en" and s.en and s.en ~= "") and s.en or (s.text or "") end
-function Title(g) return (Lang() == "en" and g.title_en) or g.title end
+function StepText(s) return (Core.Lang() == "en" and s.en and s.en ~= "") and s.en or (s.text or "") end
+function Title(g) return (Core.Lang() == "en" and g.title_en) or g.title end
 
 -- v1.41 (audit) : DB.chatLevel = "all" (defaut) / "important" / "none".
 --   important = "error" : toujours affiche (erreurs, utiles aux signalements) ; true : message important ;
 --   rien : simple information. Les reponses aux commandes /warpath s'affichent toujours (inCommand).
 State.inCommand = false
-function say(msg, important)
-    local lvl = DB and DB.chatLevel or "all"
+function Core.say(msg, important)
+    local lvl = State.DB and State.DB.chatLevel or "all"
     if important ~= "error" and not State.inCommand and lvl ~= "all" then
         if lvl == "none" or not important then return end
     end
@@ -219,7 +211,7 @@ end
 ------------------------------------------------------------------
 logById = {}            -- questID -> true (complete) / false (en cours)
 
-function ScanLog()
+function Core.ScanLog()
     wipe(logById)
     pcall(function()
         if C_QuestLog and C_QuestLog.GetInfo and C_QuestLog.GetNumQuestLogEntries then
@@ -242,8 +234,8 @@ function ScanLog()
     end)
 end
 
-function Rendue(id)
-    if DB.done[id] then return true end
+function Core.Rendue(id)
+    if State.DB.done[id] then return true end
     if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
         return C_QuestLog.IsQuestFlaggedCompleted(id) and true or false
     end
@@ -301,7 +293,7 @@ do
     end
     function SeenKey(i)
         local list = State.steps
-        if not (DB and DB.guide and list and list[i]) then return (DB and DB.guide or "?") .. ":" .. tostring(i) end
+        if not (State.DB and State.DB.guide and list and list[i]) then return (State.DB and State.DB.guide or "?") .. ":" .. tostring(i) end
         local c = sigCache[list]
         if not c then
             c = {}
@@ -313,16 +305,16 @@ do
             end
             sigCache[list] = c
             -- ancien format (guide:numero) : converti une fois, avec la meme correspondance qu'avant
-            DB.seenV2 = DB.seenV2 or {}
-            if DB.seen and not DB.seenV2[DB.guide] then
+            State.DB.seenV2 = State.DB.seenV2 or {}
+            if State.DB.seen and not State.DB.seenV2[State.DB.guide] then
                 for j = 1, #list do
-                    local old = DB.guide .. ":" .. j
-                    if DB.seen[old] then DB.seen[DB.guide .. ":" .. c[j]] = true; DB.seen[old] = nil end
+                    local old = State.DB.guide .. ":" .. j
+                    if State.DB.seen[old] then State.DB.seen[State.DB.guide .. ":" .. c[j]] = true; State.DB.seen[old] = nil end
                 end
-                DB.seenV2[DB.guide] = true
+                State.DB.seenV2[State.DB.guide] = true
             end
         end
-        return DB.guide .. ":" .. c[i]
+        return State.DB.guide .. ":" .. c[i]
     end
 end
 
@@ -333,7 +325,7 @@ end
 function QuestState(s)
     local anyTodo, anyAbsent = false, false
     for _, id in ipairs(Ids(s)) do
-        if DB.ignored[id] or Rendue(id) then
+        if State.DB.ignored[id] or Core.Rendue(id) then
             -- fait
         elseif logById[id] ~= nil then
             if s.t == "accept" then
@@ -359,24 +351,24 @@ State.computingOther = false  -- vrai pendant qu'on evalue un AUTRE guide (optio
 blockedBy = {}          -- index d'etape -> quetes prerequises manquantes (etape sautee pour ca)
 -- v1.49 : prises laissees derriere toi (voir StepDone) : index -> true si tu es pres de leur PNJ.
 -- NearTick refait le calcul quand tu t'en approches ou t'en eloignes.
-heldNear, heldPrev = {}, {}
+Core.heldNear, heldPrev = {}, {}
 HOLD_R = 80             -- metres : meme camp (comme HUB_R dans Near.lua)
 function NearNpc(s, wasNear)
-    if State.computingOther or not (s and s.m and s.x and PlayerWP and WP) then return false end
-    local me = PlayerWP(); if not me then return false end
-    local g = WP(s.m, s.x, s.y)
+    if State.computingOther or not (s and s.m and s.x and Route.PlayerWP and Route.WP) then return false end
+    local me = Route.PlayerWP(); if not me then return false end
+    local g = Route.WP(s.m, s.x, s.y)
     if not (g and g[3] == me[3]) then return false end
     -- un peu plus large pour sortir que pour entrer : pas de va-et-vient a la limite
     return Route.Dist(me[1], me[2], g[1], g[2]) < (wasNear and HOLD_R + 20 or HOLD_R)
 end
 -- deux etapes au meme camp (PNJ a moins de HOLD_R l'un de l'autre, meme continent)
 local function SameCamp(a, b)
-    if not (a and b and a.m and a.x and b.m and b.x and WP) then return false end
-    local p, q = WP(a.m, a.x, a.y), WP(b.m, b.x, b.y)
+    if not (a and b and a.m and a.x and b.m and b.x and Route.WP) then return false end
+    local p, q = Route.WP(a.m, a.x, a.y), Route.WP(b.m, b.x, b.y)
     return p and q and p[3] == q[3] and Route.Dist(p[1], p[2], q[1], q[2]) < HOLD_R or false
 end
 
-function StepDone(i, anchor)
+function Core.StepDone(i, anchor)
     local s = State.steps[i]
     if s.t == "accept" or s.t == "do" or s.t == "turnin" then
         local st = QuestState(s)
@@ -385,7 +377,7 @@ function StepDone(i, anchor)
         -- st == "absent" : au moins une quete ni prise ni rendue
         if s.t ~= "accept" then
             for _, id in ipairs(Ids(s)) do
-                if State.pendingAccept[id] and not Rendue(id) and not DB.ignored[id] and logById[id] == nil then
+                if State.pendingAccept[id] and not Core.Rendue(id) and not State.DB.ignored[id] and logById[id] == nil then
                     return false                         -- sa prise est encore devant toi
                 end
             end
@@ -393,36 +385,36 @@ function StepDone(i, anchor)
         end
         -- v1.47 : etape d'une chaine integree (woven) : choisie par toi, traitee comme dans le guide « chain »
         -- (ni ancre, ni quete grise, ni style de jeu)
-        local chainLike = DB.guide == "chain" or s.woven
+        local chainLike = State.DB.guide == "chain" or s.woven
         local lvlOk = (s.req or 0) <= (UnitLevel("player") or 60) or chainLike
         -- v1.49 : prise laissee derriere toi -- avant l'ancre (le guide t'a fait rendre une quete plus loin
         -- d'abord), ou niveau requis atteint seulement apres l'avoir depassee (DB.lvlWait, voir Compute).
         -- Elle reste proposee tant que tu es pres de son PNJ (meme camp), mais le guide ne te fait plus
         -- revenir en arriere pour elle. Donjons et chaines : comportement d'avant.
-        local waitLvl = lvlOk and not s.woven and DB.lvlWait and DB.lvlWait[SeenKey(i)] and true or false
+        local waitLvl = lvlOk and not s.woven and State.DB.lvlWait and State.DB.lvlWait[SeenKey(i)] and true or false
         local passed = (i < anchor and not s.woven) or waitLvl
         local near = false
-        if passed and not s.optional and not IS_DUNGEON[DB.guide] and DB.guide ~= "chain"   -- optionnelle : comme avant
+        if passed and not s.optional and not IS_DUNGEON[State.DB.guide] and State.DB.guide ~= "chain"   -- optionnelle : comme avant
             and (waitLvl or SameCamp(s, State.steps[anchor])) then   -- avant l'ancre : seulement le camp de l'ancre
             near = NearNpc(s, heldPrev[i])
-            if not State.computingOther then heldNear[i] = near end
+            if not State.computingOther then Core.heldNear[i] = near end
         end
-        local skip = (passed and not near) or (IsGrey(s) and not chainLike) or (s.optional and DB.seen[SeenKey(i)])
+        local skip = (passed and not near) or (IsGrey(s) and not chainLike) or (s.optional and State.DB.seen[SeenKey(i)])
             or not lvlOk -- niveau requis pas atteint : impossible a prendre
-            or (Comfort.StyleSkip and not s.woven and Comfort.StyleSkip(i, s))
+            or (Style.StyleSkip and not s.woven and Style.StyleSkip(i, s))
             -- v1.45 : quete d'appel (bc = quete visee) : le jeu ne la propose plus si la quete visee est
             -- dans ton journal ou deja rendue (Tsunaman sans Trouble in the Deeps, 2026-11-23)
-            or (s.bc and (logById[s.bc] ~= nil or Rendue(s.bc)))
+            or (s.bc and (logById[s.bc] ~= nil or Core.Rendue(s.bc)))
         if not skip then
             -- prerequis : si une quete requise n'est ni rendue, ni dans le journal, ni a prendre plus haut
             -- dans le guide, cette quete ne pourra jamais etre prise -> sautee
             local blockers = {}
             for _, p in ipairs(s.preg or {}) do
-                if not Rendue(p) then blockers[#blockers + 1] = p end
+                if not Core.Rendue(p) then blockers[#blockers + 1] = p end
             end
             if s.pre then
                 local ok = false
-                for _, p in ipairs(s.pre) do if Rendue(p) then ok = true end end
+                for _, p in ipairs(s.pre) do if Core.Rendue(p) then ok = true end end
                 if not ok then for _, p in ipairs(s.pre) do blockers[#blockers + 1] = p end end
             end
             if #blockers > 0 then
@@ -436,21 +428,21 @@ function StepDone(i, anchor)
                 end
             end
             -- dans un donjon, une quete dont le niveau requis est trop haut est sautee
-            if IS_DUNGEON[DB.guide] and (s.req or 0) > UnitLevel("player") then skip = true end
+            if IS_DUNGEON[State.DB.guide] and (s.req or 0) > UnitLevel("player") then skip = true end
         end
         for _, id in ipairs(Ids(s)) do
-            if logById[id] == nil and not Rendue(id) and not DB.ignored[id] then
+            if logById[id] == nil and not Core.Rendue(id) and not State.DB.ignored[id] then
                 State.pendingAccept[id] = not skip
             end
         end
         return skip and "skip" or false
     end
     -- entree d'un donjon : faite seulement quand tu entres vraiment dans l'instance (ou OK a la main)
-    if s.t == "go" and IS_DUNGEON[DB.guide] then
-        if DB.dgIn and DB.dgIn[DB.guide] then return "done" end
+    if s.t == "go" and IS_DUNGEON[State.DB.guide] then
+        if State.DB.dgIn and State.DB.dgIn[State.DB.guide] then return "done" end
         return (i < anchor) and "skip" or false
     end
-    if DB.seen[SeenKey(i)] then return "done" end
+    if State.DB.seen[SeenKey(i)] then return "done" end
     if s.t == "level" and UnitLevel("player") >= (s.level or 0) then return "done" end
     if i < anchor then return "skip" end
     return false
@@ -467,7 +459,7 @@ function FindAnchor()
             total = total + 1
             local isDone = false
             for _, id in ipairs(Ids(s)) do
-                if Rendue(id) and not DB.ignored[id] then isDone = true; break end
+                if Core.Rendue(id) and not State.DB.ignored[id] then isDone = true; break end
             end
             if isDone then
                 done = done + 1
@@ -583,19 +575,19 @@ function AnalyzeChains()
     end
 end
 
-function Compute()
-    ScanLog()
+function Core.Compute()
+    Core.ScanLog()
     wipe(State.doneCache)
     wipe(State.pendingAccept)
     if not State.computingOther then wipe(blockedBy) end
     local n = #State.steps
     local anchor = FindAnchor()
-    if not State.computingOther then heldPrev, heldNear = heldNear, {} end
+    if not State.computingOther then heldPrev, Core.heldNear = Core.heldNear, {} end
     for i = 1, n do
-        if Applies(State.steps[i]) then State.doneCache[i] = StepDone(i, anchor) else State.doneCache[i] = "skip" end
+        if Applies(State.steps[i]) then State.doneCache[i] = Core.StepDone(i, anchor) else State.doneCache[i] = "skip" end
     end
     -- sortie du donjon choisie : les objectifs restants du donjon sont laisses de cote (pas ignores), on va rendre
-    if IS_DUNGEON[DB.guide] and DB.dgOut and DB.dgOut[DB.guide] then
+    if IS_DUNGEON[State.DB.guide] and State.DB.dgOut and State.DB.dgOut[State.DB.guide] then
         local after = false
         for i = 1, n do
             if State.steps[i].t == "go" then after = true
@@ -615,7 +607,7 @@ function Compute()
     for i = n, 1, -1 do
         local s = State.steps[i]
         if not State.doneCache[i] and (s.t == "note" or s.t == "go" or s.t == "level" or s.optional)
-            and not (s.t == "go" and IS_DUNGEON[DB.guide]) then
+            and not (s.t == "go" and IS_DUNGEON[State.DB.guide]) then
             local j = NextApplicable(i)
             -- prise/remise facultative : les prises voisines peuvent etre faites dans un autre ordre (PNJ le plus
             -- proche d'abord), donc on regarde la prochaine etape qui n'est ni une prise ni une remise
@@ -634,14 +626,14 @@ function Compute()
     -- Pas si tu n'as encore rien fait dans le guide (zone ouverte trop tot), ni avant une etape "Monte au
     -- niveau X" (la, le guide veut justement que tu reviennes les prendre), ni pour une quete qui en
     -- debloque une autre (QuestUnlocks : sinon toute la suite serait perdue).
-    if not State.computingOther and not IS_DUNGEON[DB.guide] and DB.guide ~= "chain" and State.current <= n
+    if not State.computingOther and not IS_DUNGEON[State.DB.guide] and State.DB.guide ~= "chain" and State.current <= n
         and State.steps[State.current].t ~= "level" then
         local first
         for i = 1, State.current - 1 do
             local s = State.steps[i]
             if (s.t == "accept" or s.t == "do" or s.t == "turnin") and State.doneCache[i] == "done" and s.id and Applies(s) and not s.woven then
                 local real = false
-                for _, id in ipairs(Ids(s)) do if not DB.ignored[id] then real = true end end
+                for _, id in ipairs(Ids(s)) do if not State.DB.ignored[id] then real = true end end
                 if real then first = i; break end
             end
         end
@@ -651,36 +643,45 @@ function Compute()
             if s.t == "level" then break end
             if s.t == "accept" and not s.woven and (s.req or 0) > lvl and State.doneCache[i] == "skip" and Applies(s) then
                 local key = SeenKey(i)
-                if not (DB.lvlWait and DB.lvlWait[key]) then
+                if not (State.DB.lvlWait and State.DB.lvlWait[key]) then
                     local unlocks = false
-                    for _, id in ipairs(Ids(s)) do if Comfort.QuestUnlocks and Comfort.QuestUnlocks(id) then unlocks = true end end
-                    if not unlocks then DB.lvlWait = DB.lvlWait or {}; DB.lvlWait[key] = true end
+                    for _, id in ipairs(Ids(s)) do if Style.QuestUnlocks and Style.QuestUnlocks(id) then unlocks = true end end
+                    if not unlocks then State.DB.lvlWait = State.DB.lvlWait or {}; State.DB.lvlWait[key] = true end
                 end
             end
         end
     end
-    dynOrder = nil
-    if not State.computingOther and IS_DUNGEON_SET and IS_DUNGEON_SET[DB.guide] and OptimizeFn then
-        local ok, order = pcall(OptimizeFn)
+    Core.dynOrder = nil
+    if not State.computingOther and IS_DUNGEON_SET and IS_DUNGEON_SET[State.DB.guide] and Core.OptimizeFn then
+        local ok, order = pcall(Core.OptimizeFn)
         if ok and order and order[1] then
-            dynOrder = order
+            Core.dynOrder = order
             -- la note d'introduction du donjon reste affichee tant que tu ne l'as pas lue
             if not (State.steps[State.current] and State.steps[State.current].t == "note") then State.current = order[1] end
         end
     end
     State.baseCurrent = State.current
-    if not dynOrder and not State.computingOther and NearPick then
-        local ok, j = pcall(NearPick, State.current)
+    if not Core.dynOrder and not State.computingOther and Near.NearPick then
+        local ok, j = pcall(Near.NearPick, State.current)
         if ok and j then State.current = j end
     end
     if State.computingOther then return end
     if State.focus and (State.doneCache[State.focus] or not State.steps[State.focus]) then State.focus = nil end
-    DB.step[DB.guide] = State.current
+    State.DB.step[State.DB.guide] = State.current
+end
+
+-- capitales avec accents (le jeu ne met pas les lettres accentuees en majuscules) ; v1.50 : venu de UI/Skin.lua
+ACCENTS = { ["à"] = "À", ["â"] = "Â", ["ç"] = "Ç", ["é"] = "É", ["è"] = "È", ["ê"] = "Ê", ["ë"] = "Ë",
+                  ["î"] = "Î", ["ï"] = "Ï", ["ô"] = "Ô", ["ù"] = "Ù", ["û"] = "Û", ["ü"] = "Ü", ["ö"] = "Ö" }
+function Upper(str)
+    str = tostring(str or ""):upper()
+    return (str:gsub("\195[\128-\191]", function(c) return ACCENTS[c] or c end))
 end
 
 -- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Core)
 do
     local M = ns.Mod.Core
+    M.Upper = Upper
     M.AnalyzeChains = AnalyzeChains
     M.Applies = Applies
     M.CHAIN = CHAIN

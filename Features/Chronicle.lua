@@ -4,8 +4,7 @@
 -- la fenetre complete s'ouvre d'un clic, par le bouton des options ou /warpath chronique.
 -- Rien n'est garde si la seance a dure moins de 15 min de jeu actif. Tout reste local (jamais partage).
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
+local State = ns.State
 local Core = ns.Mod.Core -- v1.50 : module
 -- v1.50 : module ns.Mod.Chronicle (publie en fin de fichier pour les autres fichiers)
 local ChronAdd, ChronDungeon, ChronPreview, ChronShow, ChronTick
@@ -29,9 +28,9 @@ do
                  m0 = money(), m1 = money(), z = GetZoneText and GetZoneText() or nil }
     end
     local function S()
-        if not DB then return nil end
-        DB.chs = DB.chs or New()
-        return DB.chs
+        if not State.DB then return nil end
+        State.DB.chs = State.DB.chs or New()
+        return State.DB.chs
     end
 
     -- note : XP/h ramenee a l'XP d'un monstre de ton niveau (= "monstres par heure"), pour comparer les seances
@@ -71,17 +70,17 @@ do
 
     -- termine la seance en cours (si elle compte) et en ouvre une nouvelle
     local function Close()
-        local c = DB.chs
+        local c = State.DB.chs
         if c and (c.a or 0) >= MIN_ACTIVE then
-            DB.chron = DB.chron or {}
+            State.DB.chron = State.DB.chron or {}
             c.sc = Score(c)
-            c.gr = Grade(c.sc, DB.chron)
-            c.mt = Mentions(c, DB.chron)
-            table.insert(DB.chron, 1, c)
-            while #DB.chron > KEEP do table.remove(DB.chron) end
-            DB.chronNew = true
+            c.gr = Grade(c.sc, State.DB.chron)
+            c.mt = Mentions(c, State.DB.chron)
+            table.insert(State.DB.chron, 1, c)
+            while #State.DB.chron > KEEP do table.remove(State.DB.chron) end
+            State.DB.chronNew = true
         end
-        DB.chs = New()
+        State.DB.chs = New()
     end
 
     function ChronAdd(field, n)
@@ -115,13 +114,13 @@ do
     local function hm(s) s = math.floor(s or 0); return string.format("%dh%02d", math.floor(s / 3600), math.floor(s % 3600 / 60)) end
     local function lvTxt(c)
         local d = (c.lv1 or 0) - (c.lv0 or 0)
-        return string.format("%+.1f", d):gsub("%.", Lang() == "fr" and "," or ".")
+        return string.format("%+.1f", d):gsub("%.", Core.Lang() == "fr" and "," or ".")
     end
     local function gold(cp)
         cp = math.floor(cp or 0)
         local sign = cp < 0 and "-" or "+"
         cp = math.abs(cp)
-        return string.format("%s%d po %d pa", sign, math.floor(cp / 10000), math.floor(cp % 10000 / 100)):gsub("po", T("chGoldG")):gsub("pa", T("chGoldS"))
+        return string.format("%s%d po %d pa", sign, math.floor(cp / 10000), math.floor(cp % 10000 / 100)):gsub("po", Core.T("chGoldG")):gsub("pa", Core.T("chGoldS"))
     end
     local GCOL = { S = "d6b866", A = "9cc7a8", B = "cdbb8e", C = "b5aa98", D = "c24a3e" }
 
@@ -140,33 +139,33 @@ do
 
     local win, idx
     local function Fill()
-        local list = DB.chron or {}
+        local list = State.DB.chron or {}
         local c, live = list[idx], false
         if idx == 0 or not c then c, live, idx = S(), true, 0; Touch() end
-        win.head:SetText(Skin.Caps(T("chTitle")))
+        win.head:SetText(Skin.Caps(Core.T("chTitle")))
         local when = (date and c.t0) and date("%Y-%m-%d %H:%M", c.t0) or ""
-        win.sub:SetText(live and T("chLive") or (T("chWhen", when, c.z or "")):gsub(" · $", ""))
+        win.sub:SetText(live and Core.T("chLive") or (Core.T("chWhen", when, c.z or "")):gsub(" · $", ""))
         local sc = live and Score(c) or c.sc
         local gr = live and ((c.a or 0) >= 300 and Grade(sc, list) or "-") or c.gr or "-"
         win.grade:SetText("|cff" .. (GCOL[gr] or "cdbb8e") .. gr .. "|r")
         local xph = (c.a or 0) > 60 and math.floor(c.xp * 3600 / c.a) or 0
         local rows = {
             { "chActive", hm(c.a) },
-            { "chXP", T("chXPv", Est.FormatNum(c.xp or 0), Est.FormatNum(xph)) },
+            { "chXP", Core.T("chXPv", Est.FormatNum(c.xp or 0), Est.FormatNum(xph)) },
             { "chLevels", lvTxt(c) },
             { "chQuests", tostring(c.q or 0) },
             { "chKills", tostring(c.k or 0) },
             { "chDungeons", #(c.dg or {}) > 0 and table.concat(c.dg, ", ") or "-" },
-            { "chPvP", T("chPvPv", c.pk or 0, c.pd or 0) },
+            { "chPvP", Core.T("chPvPv", c.pk or 0, c.pd or 0) },
             { "chDeaths", tostring(c.d or 0) },
             { "chMoney", gold((c.m1 or 0) - (c.m0 or 0)) },
         }
         local out = {}
-        for _, r in ipairs(rows) do out[#out + 1] = "|cff" .. Skin.HEX.faint .. T(r[1]) .. "|r   " .. r[2] end
+        for _, r in ipairs(rows) do out[#out + 1] = "|cff" .. Skin.HEX.faint .. Core.T(r[1]) .. "|r   " .. r[2] end
         win.body:SetText(table.concat(out, "\n"))
         local mt = live and Mentions(c, list) or c.mt or {}
         local ms = {}
-        for _, k in ipairs(mt) do ms[#ms + 1] = "|cff" .. Skin.HEX.accent .. Skin.Upper(T(k)) .. "|r\n|cff" .. Skin.HEX.soft .. T(k .. "D") .. "|r" end
+        for _, k in ipairs(mt) do ms[#ms + 1] = "|cff" .. Skin.HEX.accent .. Core.Upper(Core.T(k)) .. "|r\n|cff" .. Skin.HEX.soft .. Core.T(k .. "D") .. "|r" end
         win.ment:SetText(table.concat(ms, "\n\n"))
         win.prev:SetEnabled(list[idx + 1] ~= nil)
         win.next:SetEnabled(idx > 0)
@@ -194,17 +193,17 @@ do
     end
     -- k : 1 = derniere seance terminee (defaut), 0 = seance en cours
     function ChronShow(k)
-        if not DB then return end
+        if not State.DB then return end
         Create()
-        idx = k or ((DB.chron and DB.chron[1]) and 1 or 0)
-        win.glabel:SetText(Skin.Caps(T("chGrade"))); win.close:SetLabel(Skin.Caps(T("chClose")))
+        idx = k or ((State.DB.chron and State.DB.chron[1]) and 1 or 0)
+        win.glabel:SetText(Skin.Caps(Core.T("chGrade"))); win.close:SetLabel(Skin.Caps(Core.T("chClose")))
         Fill(); win:Show(); if win.Raise then win:Raise() end
-        DB.chronNew = nil
+        State.DB.chronNew = nil
     end
 
     local banner
     local function Banner()
-        local c = DB.chron and DB.chron[1]
+        local c = State.DB.chron and State.DB.chron[1]
         if not c then return end
         if not banner then
             banner = Panel("WarpathChronBanner", 380, 52)
@@ -216,17 +215,17 @@ do
             banner:SetScript("OnMouseUp", function() banner:Hide(); ChronShow(1) end)
             banner:SetScript("OnLeave", function() if banner.expired and not (banner.IsMouseOver and banner:IsMouseOver()) then Skin.FadeOut(banner, 0.6) end end)
         end
-        banner.l1:SetText(Skin.Caps(T("chBanner")))
-        local m = c.mt and c.mt[1] and T(c.mt[1]) or ""
-        banner.l2:SetText(T("chBannerLine", hm(c.a), lvTxt(c), "|cff" .. (GCOL[c.gr] or "cdbb8e") .. (c.gr or "-") .. "|r", m))
-        banner.btn:SetLabel(Skin.Caps(T("chView")))
+        banner.l1:SetText(Skin.Caps(Core.T("chBanner")))
+        local m = c.mt and c.mt[1] and Core.T(c.mt[1]) or ""
+        banner.l2:SetText(Core.T("chBannerLine", hm(c.a), lvTxt(c), "|cff" .. (GCOL[c.gr] or "cdbb8e") .. (c.gr or "-") .. "|r", m))
+        banner.btn:SetLabel(Skin.Caps(Core.T("chView")))
         -- v1.42 : arrivee en fondu (petite descente) + reflet dore, depart en fondu
         banner.expired = false
         Skin.FadeIn(banner, 0.4, 8); Skin.Shine(banner)
         -- le « Quoi de neuf » deja affiche passe juste en dessous (meme place en haut de l'ecran)
         local toast = _G.WarpathToast
         if toast and toast:IsShown() then toast:ClearAllPoints(); toast:SetPoint("TOP", banner, "BOTTOM", 0, -8) end
-        DB.chronNew = nil
+        State.DB.chronNew = nil
         if C_Timer and C_Timer.After then
             C_Timer.After(10, function()
                 banner.expired = true
@@ -237,10 +236,10 @@ do
 
     -- /warpath apercu (v1.42) : la banniere de la derniere Chronique, sans toucher a DB.chronNew
     function ChronPreview()
-        if not (DB and DB.chron and DB.chron[1]) then return false end
-        local keep = DB.chronNew
+        if not (State.DB and State.DB.chron and State.DB.chron[1]) then return false end
+        local keep = State.DB.chronNew
         local ok = pcall(Banner)
-        DB.chronNew = keep
+        State.DB.chronNew = keep
         return ok
     end
 
@@ -265,14 +264,14 @@ do
     for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_LOGOUT", "QUEST_TURNED_IN", "PLAYER_DEAD", "CHAT_MSG_COMBAT_XP_GAIN",
                          "PLAYER_LEVEL_UP", "PLAYER_MONEY" }) do pcall(fr.RegisterEvent, fr, e) end
     fr:SetScript("OnEvent", function(_, e, a1, a2)
-        if not DB then return end
+        if not State.DB then return end
         if e == "PLAYER_ENTERING_WORLD" then
             local login, reload = a1, a2
             local c = S()
             if login and not reload and now() - (c.t1 or 0) > GAP then Close() end
             if (c.lv1 or 0) < (c.lv0 or 0) then c.lv1 = c.lv0 end
             Touch()
-            if login and not reload and DB.chronNew and DB.chronBanner ~= false and DB.chron and DB.chron[1] then
+            if login and not reload and State.DB.chronNew and State.DB.chronBanner ~= false and State.DB.chron and State.DB.chron[1] then
                 if C_Timer and C_Timer.After then C_Timer.After(6, function() pcall(Banner) end) else pcall(Banner) end
             end
         elseif e == "PLAYER_LOGOUT" then Touch(true)
@@ -284,7 +283,7 @@ do
         elseif e == "CHAT_MSG_COMBAT_XP_GAIN" then if isKill(a1) then ChronAdd("k") end
         else Touch() end
     end)
-    if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(30, function() if DB then Touch() end end) end
+    if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(30, function() if State.DB then Touch() end end) end
 end
 
 -- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Chronicle)

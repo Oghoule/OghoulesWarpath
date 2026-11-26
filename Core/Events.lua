@@ -1,9 +1,9 @@
 -- Oghoule's Warpath : moteur (Events.lua) - voir Core.lua
 local ADDON, ns = ...
-local _ENV = ns.CoreEnv
-if setfenv then setfenv(1, _ENV) end
 -- v1.50 : etat partage du guide (Core.lua, ns.State)
 local State = ns.State
+local Events = ns.Mod.Events -- v1.50 : module
+local Skin = ns.Mod.Skin -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 -- v1.50 : module ns.Mod.Events (publie en fin de fichier pour les autres fichiers)
 local ev
@@ -20,8 +20,8 @@ local Route = ns.Mod.Route -- v1.50 : module
 ------------------------------------------------------------------
 ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
-errShown = false
-function OnEvent(self, event, ...)
+Events.errShown = false
+function Events.OnEvent(self, event, ...)
     if event == "ADDON_LOADED" then
         if (...) ~= ADDON then return end
         -- Reprise des reglages de l'ancien HordeGuide (si son dossier est encore la, il charge HordeGuideCharDB)
@@ -29,74 +29,74 @@ function OnEvent(self, event, ...)
             if type(HordeGuideCharDB) == "table" then WarpathCharDB = HordeGuideCharDB
             else WarpathCharDB = { _new = true } end
         end
-        DB = WarpathCharDB
+        State.DB = WarpathCharDB
         -- v0.44 : le marquage passe par un raccourci (bouton securise) ; on annule la desactivation automatique
-        if not DB.tgtV2 then DB.tgtPos = nil; DB.tgtV2 = true end -- v0.46 : fenetre de ciblage collee sous le guide
-        DB.step = DB.step or {}
-        DB.done = DB.done or {}
-        DB.ignored = DB.ignored or {}
-        DB.seen = DB.seen or {}
-        DB.dAnswer = DB.dAnswer or {}
-        DB.fp = DB.fp or {}
-        DB.fpLinks = DB.fpLinks or {}
+        if not State.DB.tgtV2 then State.DB.tgtPos = nil; State.DB.tgtV2 = true end -- v0.46 : fenetre de ciblage collee sous le guide
+        State.DB.step = State.DB.step or {}
+        State.DB.done = State.DB.done or {}
+        State.DB.ignored = State.DB.ignored or {}
+        State.DB.seen = State.DB.seen or {}
+        State.DB.dAnswer = State.DB.dAnswer or {}
+        State.DB.fp = State.DB.fp or {}
+        State.DB.fpLinks = State.DB.fpLinks or {}
         -- v1.39 : DB.fp contenait a tort les points de vol "DISTANT" (jamais decouverts). On le reconstruit
         -- a partir des liaisons vues sur la carte des vols (fpLinks), qui ne contiennent que des points connus.
-        if not DB.fpV2 then
+        if not State.DB.fpV2 then
             local fp = {}
-            for here, reach in pairs(DB.fpLinks) do
+            for here, reach in pairs(State.DB.fpLinks) do
                 fp[here] = true
                 for k in pairs(reach) do fp[k] = true end
             end
-            DB.fp, DB.fpV2 = fp, true
+            State.DB.fp, State.DB.fpV2 = fp, true
         end
-        DB.lockHide = DB.lockHide or {}
+        State.DB.lockHide = State.DB.lockHide or {}
         local fresh = WarpathDropDB == nil
         WarpathDropDB = WarpathDropDB or {}
         -- v1.02 : anglais par defaut ; une installation qui existait deja reste en francais
         if WarpathDropDB._lang == nil then
-            WarpathDropDB._lang = (fresh and DB._new) and "en" or (DB.lang or "fr")
+            WarpathDropDB._lang = (fresh and State.DB._new) and "en" or (State.DB.lang or "fr")
         end
-        if DB.useFlights == nil then DB.useFlights = true end
-        DB.dLater = DB.dLater or {}
-        if DB.wp == nil then DB.wp = true end
+        if State.DB.useFlights == nil then State.DB.useFlights = true end
+        State.DB.dLater = State.DB.dLater or {}
+        if State.DB.wp == nil then State.DB.wp = true end
         self:UnregisterEvent("ADDON_LOADED")
         self:RegisterEvent("PLAYER_LOGIN")
     elseif event == "PLAYER_LOGIN" then
-        if DB._new then
+        if State.DB._new then
             if type(HordeGuideCharDB) == "table" then
-                for k, v in pairs(HordeGuideCharDB) do if DB[k] == nil or type(v) == "table" then DB[k] = v end end
+                for k, v in pairs(HordeGuideCharDB) do if State.DB[k] == nil or type(v) == "table" then State.DB[k] = v end end
             end
-            DB._new = nil
+            State.DB._new = nil
         end
         local _, c = UnitClass("player")
         local _, r = UnitRace("player")
         State.myClass, State.myRace = c, r
-        DB._class = c   -- pour etalonner le temps par monstre selon la classe (collecte.py)
+        State.DB._class = c   -- pour etalonner le temps par monstre selon la classe (collecte.py)
         pcall(Est.ResolveNewMaps)
         Window.CreateUI()
         ns.Trace("bouton minicarte"); pcall(ns.UI.CreateMinimapButton)
         ns.Trace("options du jeu (Settings)"); pcall(ns.UI.RegisterBlizzardOptions)
         ns.Trace("connexion terminee")
         if C_Timer and C_Timer.After then C_Timer.After(3, function() pcall(Commands.ShowWelcome) end) end
-        ScanLog()
-        local key = DB.guide
+        Core.ScanLog()
+        local key = State.DB.guide
         if key == "chain" then
-            Core.Guides.chain = DB.chainQ and Est.BuildChainGuide(DB.chainQ, DB.chainSelf) or nil
-            if not Core.Guides.chain then key = DB.chainBack; DB.chainBack, DB.chainQ, DB.chainSelf = nil, nil, nil end
+            Core.Guides.chain = State.DB.chainQ and Est.BuildChainGuide(State.DB.chainQ, State.DB.chainSelf) or nil
+            if not Core.Guides.chain then key = State.DB.chainBack; State.DB.chainBack, State.DB.chainQ, State.DB.chainSelf = nil, nil, nil end
         end
         if key == "chain" and Core.Guides.chain then
             -- une chaine etait en cours : on la garde
-        elseif Core.IS_DUNGEON[key] and DB.main then
+        elseif Core.IS_DUNGEON[key] and State.DB.main then
             -- un donjon etait en cours : on le garde
-        elseif not key or not Core.Guides[key] or not DB.manual then
+        elseif not key or not Core.Guides[key] or not State.DB.manual then
             key = Flow.AutoPick() or key
         end
-        if not (key and SetGuide(key, true)) then
-            say(T("noRace", tostring(r)))
-            Refresh()
+        if not (key and Flow.SetGuide(key, true)) then
+            Core.say(Core.T("noRace", tostring(r)))
+            Skin.Refresh()
         else
-            say(T("login", Core.Title(State.G), State.current, #State.steps))
-            if not next(DB.fp) then say(T("fpHint")) end
+            Core.say(Core.T("login", Core.Title(State.G), State.current, #State.steps))
+            if not next(State.DB.fp) then Core.say(Core.T("fpHint")) end
         end
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
         self:RegisterEvent("QUEST_ACCEPTED")
@@ -126,7 +126,7 @@ function OnEvent(self, event, ...)
             C_Timer.After(30, function() if IsInGuild and IsInGuild() then ns.ShareDrops("GUILD"); ns.SendVersion("GUILD", Core.VERSION) end end)
         end
         ns.Drops.Refresh(Core.logById, Est.EST)
-        if C_Timer and C_Timer.After then C_Timer.After(4, CheckDungeons); C_Timer.After(9, CheckClassQuests) else CheckDungeons() end
+        if C_Timer and C_Timer.After then C_Timer.After(4, Flow.CheckDungeons); C_Timer.After(9, Flow.CheckClassQuests) else Flow.CheckDungeons() end
     elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
         Est.OnXPGain(...)
     elseif event == "LOOT_OPENED" then
@@ -135,7 +135,7 @@ function OnEvent(self, event, ...)
         ns.Drops.OnBagUpdate()
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         local who, fn = ...
-        if who == ADDON then say(T("errBlocked", tostring(fn)), "error") end
+        if who == ADDON then Core.say(Core.T("errBlocked", tostring(fn)), "error") end
     elseif event == "CHAT_MSG_ADDON" then
         local prefix, msg, _, sender = ...
         if prefix == ns.COMM then
@@ -154,9 +154,9 @@ function OnEvent(self, event, ...)
             for _, t in ipairs(ns.Trainers or {}) do if t.n == who then prof = true; break end end
         end
         if IsTradeskillTrainer then local ok, v = pcall(IsTradeskillTrainer); if ok and v then prof = true end end
-        if not prof then DB.trainDue = nil end
+        if not prof then State.DB.trainDue = nil end
         -- arrive chez l'entraineur vise : la fleche revient au guide
-        if DB.errand and Near.ClearErrand then Near.ClearErrand() end
+        if State.DB.errand and Near.ClearErrand then Near.ClearErrand() end
     elseif event == "PLAYER_REGEN_ENABLED" then
         ns.Comfort.UpdateItemButton()
     elseif event == "GROUP_ROSTER_UPDATE" then
@@ -169,12 +169,12 @@ function OnEvent(self, event, ...)
         Flow.ScheduleAdvance()
     elseif event == "PLAYER_LEVEL_UP" then
         local nl = ...
-        if type(nl) == "number" and nl % 2 == 0 then DB.trainDue = nl; if Profs.TrainReminder then pcall(Profs.TrainReminder) end end
+        if type(nl) == "number" and nl % 2 == 0 then State.DB.trainDue = nl; if Profs.TrainReminder then pcall(Profs.TrainReminder) end end
         Flow.ScheduleAdvance()
-        if C_Timer and C_Timer.After then C_Timer.After(1.5, CheckDungeons); C_Timer.After(4, CheckClassQuests); C_Timer.After(2.5, function() pcall(CheckZoneLevel) end) else CheckDungeons(); pcall(CheckZoneLevel) end
+        if C_Timer and C_Timer.After then C_Timer.After(1.5, Flow.CheckDungeons); C_Timer.After(4, Flow.CheckClassQuests); C_Timer.After(2.5, function() pcall(Flow.CheckZoneLevel) end) else Flow.CheckDungeons(); pcall(Flow.CheckZoneLevel) end
     elseif event == "QUEST_TURNED_IN" then
         local id = ...
-        if id then DB.done[id] = true end
+        if id then State.DB.done[id] = true end
         State.peek = nil
         Flow.ScheduleAdvance()
     elseif event == "UI_INFO_MESSAGE" then
@@ -188,19 +188,19 @@ function OnEvent(self, event, ...)
     elseif event == "TAXIMAP_CLOSED" or event == "PLAYER_CONTROL_LOST" then
         if event == "TAXIMAP_CLOSED" then Window.OnTaxiClosed() end
         -- decollage : la fleche passe tout de suite a la vraie destination (plus au maitre de vol)
-        local function retarget() State.lastWP = nil; Refresh(true) end
+        local function retarget() State.lastWP = nil; Skin.Refresh(true) end
         if C_Timer and C_Timer.After then C_Timer.After(0.5, retarget); C_Timer.After(2, retarget) else retarget() end
     elseif event == "PLAYER_CONTROL_GAINED" then
         if not (UnitOnTaxi and UnitOnTaxi("player")) then ns.Comfort.OnLanded() end
         -- fin d'un vol : on recalcule le trajet depuis l'endroit ou tu as atterri
         State.lastWP = nil
-        Refresh(true)
+        Skin.Refresh(true)
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         -- entree dans l'instance du donjon suivi : le journal du donjon prend le relais
         pcall(Flow.OnInstanceChange)
         -- nouveau continent / nouvelle zone : on recalcule (et la fleche passe du zeppelin a la vraie cible)
         Flow.ScheduleAdvance()
-        Refresh(true)
+        Skin.Refresh(true)
     else
         if event == "QUEST_ACCEPTED" then State.peek = nil end
         Flow.ScheduleAdvance()
@@ -209,10 +209,10 @@ end
 
 -- Une erreur interne ne doit jamais spammer l'ecran : on la signale une seule fois dans le chat.
 ev:SetScript("OnEvent", function(self, event, ...)
-    local ok, err = pcall(OnEvent, self, event, ...)
-    if not ok and not errShown then
-        errShown = true
-        say(T("errInternal", tostring(err)), "error")
+    local ok, err = pcall(Events.OnEvent, self, event, ...)
+    if not ok and not Events.errShown then
+        Events.errShown = true
+        Core.say(Core.T("errInternal", tostring(err)), "error")
     end
 end)
 
