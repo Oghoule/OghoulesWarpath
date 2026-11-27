@@ -72,8 +72,9 @@ local function ChoiceRow(parent, w, onClick)
     b:SetScript("OnClick", onClick)
     b:SetScript("OnEnter", function(self)
         local glow = self.glow and self.glow:IsShown()
-        if not self.tipKey and not glow then return end
+        if not self.tipKey and not glow and not self.offRoute then return end
         E.Tip():SetOwner(self, "ANCHOR_RIGHT")
+        if self.offRoute then E.Tip():AddLine(T("stOffRoute")); E.Tip():AddLine(T("stOffRouteTip"), 1, 1, 1, true) end
         if self.tipKey then E.Tip():AddLine(T("stLow")); E.Tip():AddLine(T(self.tipKey), 1, 1, 1, true) end
         if glow then E.Tip():AddLine(T("atLevel"), 0.88, 0.74, 0.43) end
         E.Tip():Show()
@@ -170,6 +171,117 @@ local function ScaleRow(pg, y, lblKey, get, set)
     return y - 30
 end
 
+-- v1.52 (audit des options) : haut de l'onglet Parcours (resume, deux cartes de parcours, style de jeu).
+-- A part de CreateOptions, qui depassait la limite de 200 variables locales du Lua 5.1 de WoW.
+local function BuildRouteStyle(pg)
+    -- v1.52 (audit des options) : onglet Parcours = resume, parcours (deux cartes), style de jeu, puis la zone
+    local sum = FS(pg, 12, COL.white, FONT, "LEFT"); sum:SetWidth(CW); sum:SetPoint("TOPLEFT", 0, 0)
+    optRows[#optRows + 1] = function()
+        local wb = ns.Mod.Core.Parcours() == "warband"
+        local g = DB.guide
+        sum:SetText(T("optSum", "|cffd6b866" .. Caps(T(wb and "routeWarband" or "routeScout")) .. "|r",
+            "|cffd6b866" .. ((g and Guides[g]) and Caps(ZoneName(g)) or "—") .. "|r"))
+    end
+    -- PARCOURS : un clic sur une carte change de parcours (rien n'est perdu)
+    local ph = SmallHeader(pg, "secParcours"); ph:SetPoint("TOPLEFT", 0, -26)
+    local CWH = math.floor((CW - 12) / 2)
+    for k, r in ipairs({ "warband", "scout" }) do
+        local c = CreateFrame("Button", nil, pg); c:SetSize(CWH, 40)
+        c:SetPoint("TOPLEFT", (k - 1) * (CWH + 12), -44)
+        local cb = Tex(c, { 0.16, 0.06, 0.05 }, 1, "BACKGROUND"); cb:SetAllPoints()
+        -- v1.52 (demande de l'auteur) : images de l'ecran de choix (Media/Choix*, a lui, hors Git), recadrees sur la
+        -- bande des yeux, placee a droite ; version « Fx » en fondu au survol ; fondu sombre a gauche sous le texte.
+        -- Seulement avec /warpath art (WarpathDropDB._artPerso) ; sinon la carte reste unie.
+        if WarpathDropDB and WarpathDropDB._artPerso then
+            local BAND = { warband = { 0.242, 0.633, 0.156, 0.186 }, scout = { 0.047, 0.750, 0.200, 0.254 } }
+            local base, b = "Interface\\AddOns\\" .. ADDON .. "\\Media\\Choix" .. (r == "warband" and "Warband" or "Scout"), BAND[r]
+            c.art = c:CreateTexture(nil, "BACKGROUND", nil, 1); c.art:SetAllPoints(); c.art:SetTexture(base)
+            c.fx = c:CreateTexture(nil, "BACKGROUND", nil, 2); c.fx:SetAllPoints(); c.fx:SetTexture(base .. "Fx"); c.fx:SetAlpha(0)
+            for _, t in ipairs({ c.art, c.fx }) do t:SetTexCoord(b[1], b[2], b[3], b[4]) end
+            local sh = c:CreateTexture(nil, "BACKGROUND", nil, 3)
+            sh:SetPoint("TOPLEFT"); sh:SetPoint("BOTTOMLEFT"); sh:SetWidth(math.floor(CWH * 0.62))
+            sh:SetColorTexture(1, 1, 1, 1)
+            local d0, d1 = { 0.06, 0.03, 0.02, 0.92 }, { 0.06, 0.03, 0.02, 0 }
+            if CreateColor and sh.SetGradient then
+                pcall(sh.SetGradient, sh, "HORIZONTAL", CreateColor(d0[1], d0[2], d0[3], d0[4]), CreateColor(d1[1], d1[2], d1[3], d1[4]))
+            elseif sh.SetGradientAlpha then
+                sh:SetGradientAlpha("HORIZONTAL", d0[1], d0[2], d0[3], d0[4], d1[1], d1[2], d1[3], d1[4])
+            end
+            c.fxA, c.want = 0, 0
+            c:SetScript("OnUpdate", function(self, el)
+                if self.fxA == self.want then return end
+                local step = (el or 0.016) * 4
+                self.fxA = (self.want > self.fxA) and math.min(self.want, self.fxA + step) or math.max(self.want, self.fxA - step)
+                self.fx:SetAlpha(self.fxA)
+            end)
+        end
+        K.Border(c, COL.line, 0.9)
+        local chl = Tex(c, COL.accent, 0.08, "HIGHLIGHT"); chl:SetAllPoints()
+        c.glow = K.GoldFrame(c)
+        c.gem = Diamond(c, 7, COL.red); c.gem:SetPoint("TOPLEFT", 10, -10)
+        c.name = FS(c, 11, COL.accent, FONT, "LEFT"); c.name:SetPoint("TOPLEFT", 24, -6)
+        c.desc = FS(c, 10, COL.soft, FONT, "LEFT"); c.desc:SetPoint("TOPLEFT", 24, -22); c.desc:SetPoint("RIGHT", -8, 0)
+        if c.desc.SetWordWrap then c.desc:SetWordWrap(false) end
+        Loc(function()
+            c.name:SetText(Caps(T(r == "warband" and "routeWarband" or "routeScout")))
+            c.desc:SetText(T(r == "warband" and "routeWarbandShort" or "routeScoutShort"))
+        end)
+        c:SetScript("OnClick", function()
+            local Ch = ns.Mod.Choice
+            if ns.Mod.Core.Parcours() ~= r and Ch and Ch.SetRoute then Ch.SetRoute(r) end
+            RefreshOptions()
+        end)
+        c:SetScript("OnEnter", function(self)
+            self.want = 1
+            E.Tip():SetOwner(self, "ANCHOR_RIGHT"); E.Tip():AddLine(T(r == "warband" and "routeWarband" or "routeScout"))
+            E.Tip():AddLine(T(r == "warband" and "routeWarbandTip" or "routeScoutTip"), 1, 1, 1, true); E.Tip():Show()
+        end)
+        c:SetScript("OnLeave", function(self) self.want = 0; E.Tip():Hide() end)
+        optRows[#optRows + 1] = function()
+            local on = ns.Mod.Core.Parcours() == r
+            c.glow:SetOn(on); c.gem:SetShown(on)
+            local col = on and COL.accent or COL.soft
+            if c.name.SetTextColor then c.name:SetTextColor(col[1], col[2], col[3]) end
+        end
+    end
+    -- STYLE DE JEU (venu de l'onglet Style) : prereglages, puis trois choix et deux cases
+    local sh2 = SmallHeader(pg, "tabStyle"); sh2:SetPoint("TOPLEFT", 0, -96)
+    local sy = -114
+    local pl = FS(pg, 10, COL.gold, FONT, "LEFT"); pl:SetPoint("TOPLEFT", 0, sy - 8)
+    Loc(function() pl:SetText(Caps(T("presets"))) end)
+    local plh = CreateFrame("Frame", nil, pg); plh:SetSize(130, 24); plh:SetPoint("TOPLEFT", 0, sy)
+    if plh.EnableMouse then plh:EnableMouse(true) end
+    plh:SetScript("OnEnter", function(self) E.Tip():SetOwner(self, "ANCHOR_RIGHT"); E.Tip():AddLine(T("stNote"), 1, 1, 1, true); E.Tip():Show() end)
+    plh:SetScript("OnLeave", function() E.Tip():Hide() end)
+    local PW = math.floor((CW - 140) / 4) - 6
+    for k, p in ipairs({ "solo", "group", "calm", "safe" }) do
+        local b = FlatButton(pg, PW, 24, function() E.ApplyPreset(p); RefreshOptions() end)
+        b:SetPoint("TOPLEFT", 140 + (k - 1) * (PW + 6), sy)
+        Loc(function() b:SetLabel(Caps(T("preset_" .. p))) end)
+        if b.fs.SetFont then b.fs:SetFont(FONT, 9, "") end
+    end
+    sy = sy - 30
+    local CHW = math.floor((CW - 140) / 3) - 4
+    for _, gdef in ipairs({ { "stElite", "elite", { "always", "group", "never" } }, { "stXp", "xpMode", { "farm", "dungeon", "both" } } }) do   -- (v1.52 : « Priorite » retiree)
+        local labelKey, field = gdef[1], gdef[2]
+        local lab = FS(pg, 10, COL.gold, FONT, "LEFT"); lab:SetPoint("TOPLEFT", 0, sy - 8); lab:SetWidth(136)
+        Loc(function() lab:SetText(Caps(T(labelKey))) end)
+        for k, ch in ipairs(gdef[3]) do
+            local r = ChoiceRow(pg, CHW, function() E.StyleGet()[field] = ch; RefreshOptions(); E.StyleChanged() end)
+            r:SetPoint("TOPLEFT", 140 + (k - 1) * (CHW + 4), sy); r.top:Hide()
+            Loc(function() r.label:SetText(T("st_" .. field .. "_" .. ch)) end)
+            optRows[#optRows + 1] = function() r:SetChecked(E.StyleGet()[field] == ch) end
+        end
+        sy = sy - 28
+    end
+    local es = CheckRow(pg, CWH, "stEscort", function() return E.StyleGet().noEscort end,
+        function(v) E.StyleGet().noEscort = v and true or nil; E.StyleChanged() end)
+    es:SetPoint("TOPLEFT", 0, sy)
+    local pr = CheckRow(pg, CWH, "stPrudent", function() return E.StyleGet().prudent end,
+        function(v) E.StyleGet().prudent = v and true or nil; E.StyleChanged() end)
+    pr:SetPoint("TOPLEFT", CWH + 12, sy)
+end
+
 local showTabFn
 local function CreateOptions()
     if opt then return end
@@ -261,15 +373,26 @@ local function CreateOptions()
         end
     end
     -- navigation laterale (ordre d'affichage) ; les numeros de pages restent ceux du code ci-dessous
-    local TABS = { "tabCampaign", "tabDungeons", "tabClass", "tabStyle", "tabRoute", "tabDisplay", "tabAuto", "tabProf" }
-    local ORDER = { 1, 4, 2, 3, 8, 5, 7, 6 }
+    -- v1.52 (audit des options) : 7 onglets en 2 groupes. TON AVENTURE (quoi faire) : Parcours, Donjons,
+    -- Quetes a part ; REGLAGES (comment l'addon t'aide) : Guidage, Propositions, Fenetre, Extras.
+    local TABS = { "tabParcours", "tabDungeons", "tabQuests", "tabGuide", "tabPropose", "tabWindow", "tabExtras" }
+    local ORDER = { 1, 2, 3, 4, 5, 6, 7 }
+    local GROUP_AT = { [1] = "grpAdventure", [4] = "grpSettings" }   -- titre de groupe avant cette position
     local navLine = Tex(opt, COL.faint); navLine:SetWidth(1)
     navLine:SetPoint("TOPLEFT", NAVW + 10, -58); navLine:SetPoint("BOTTOMLEFT", NAVW + 10, 34)
+    local ny = -50
     for pos, k in ipairs(ORDER) do
         local key = TABS[k]
+        if GROUP_AT[pos] then
+            if pos > 1 then ny = ny - 12 end
+            local gh = FS(opt, 9, COL.dim, FONT, "LEFT"); gh:SetPoint("TOPLEFT", 28, ny)
+            local gk = GROUP_AT[pos]
+            Loc(function() gh:SetText(Caps(T(gk))) end)
+            ny = ny - 16
+        end
         local tb = CreateFrame("Button", nil, opt)
         tb:SetSize(NAVW - 20, 32)
-        tb:SetPoint("TOPLEFT", 20, -62 - (pos - 1) * 36)
+        tb:SetPoint("TOPLEFT", 20, ny); ny = ny - 36
         tb.sel = Tex(tb, COL.panel, 1, "BACKGROUND"); tb.sel:SetAllPoints()
         local hl = Tex(tb, COL.accent, 0.06, "HIGHLIGHT"); hl:SetAllPoints()
         tb.fs = FS(tb, 10, COL.gold, FONT, "LEFT"); tb.fs:SetPoint("LEFT", 14, 0)
@@ -295,8 +418,10 @@ local function CreateOptions()
     do
         local pg = pages[1]
         local colW = math.floor((CW - 24) / 2)
-        local h1 = SmallHeader(pg, "chapters"); h1:SetPoint("TOPLEFT", 0, 0)
-        local y = -16
+        BuildRouteStyle(pg)   -- resume, parcours, style de jeu (fonction a part : limite de 200 locales du Lua 5.1)
+        -- ZONE (l'ancien onglet Campagne, en plus court : 6 lignes par colonne)
+        local h1 = SmallHeader(pg, "chapters"); h1:SetPoint("TOPLEFT", 0, -234)
+        local y = -250
         local auto = ChoiceRow(pg, CW, function()
             DB.manual = nil
             local k = AutoPick()
@@ -308,17 +433,20 @@ local function CreateOptions()
             auto:SetChecked(not DB.manual and not IS_DUNGEON[DB.guide])
             auto.label:SetText(T("auto"))
             local g = DB.guide
-            auto.status:SetText((not DB.manual and g and Guides[g] and not IS_DUNGEON[g]) and ZoneName(g) or "")
+            auto.status:SetText("")   -- v1.52 : le nom de la zone est deja dans le resume en haut
         end
         y = y - ROW_H
-        local ROWS = 12
+        local ROWS = 7
         local PER = ROWS * 2
         local all = {}
         for _, key in ipairs(MAIN_ORDER) do if Guides[key] then all[#all + 1] = key end end
         local list, hidden, page, npages = {}, 0, 1, 1
         local function hide(key)
             local st = GuideState(key)
-            return (st == "done" or st == "low") and key ~= DB.guide
+            -- v1.52 (demande de l'auteur) : aussi les zones qui commencent plus de 10 niveaux au-dessus du tien
+            local lo = GuideRange(key)
+            local me = UnitLevel and UnitLevel("player") or 1
+            return (st == "done" or st == "low" or (lo or 1) > me + 10) and key ~= DB.guide
         end
         local function build()
             list, hidden = {}, 0
@@ -373,25 +501,25 @@ local function CreateOptions()
                 if key then
                     local lo, hi = GuideRange(key)
                     local st = GuideState(key)
-                    b.glow:SetOn(me >= lo and me <= hi and st ~= "done" and st ~= "low")
-                    b:SetChecked(DB.manual and DB.guide == key)
+                    b.glow:SetOn(false)   -- v1.52 (demande de l'auteur) : plus de contour dore « a ton niveau » dans la liste
+                    b:SetChecked(DB.guide == key)   -- v1.52 : la zone en cours (auto ou choisie) = losange rouge
                     b.label:SetText(ZoneName(key))
                     b.status:SetText((st == "done" and ("|cff9cc7a8" .. Caps(T("stDone")) .. "|r"))
                         or (st == "low" and ("|cff8c7f62" .. Caps(T("stLow")) .. "|r")) or (lo .. " - " .. hi))
                     b.tipKey = (st == "low") and "stLowTip" or nil
+                    -- v1.52 : zone sautee par la Bande de guerre : grisee, toujours choisissable
+                    local C = ns.Mod.Core
+                    local skip = C.D and C.D.WARBAND_SKIP
+                    b.offRoute = (C.Parcours() == "warband" and skip and skip[key]) and true or nil
+                    if b.offRoute then
+                        b.glow:SetOn(false)
+                        if not b.checked and b.label.SetTextColor then b.label:SetTextColor(COL.line[1], COL.line[2], COL.line[3]) end
+                        if st ~= "done" then b.status:SetText("|cff8c7f62" .. Caps(T("stOffRoute")) .. "|r") end
+                    end
                 end
             end
         end
-        y = y - 26
-        local bottom = Tex(pg, COL.faint); bottom:SetHeight(1)
-        bottom:SetPoint("TOPLEFT", 0, y); bottom:SetPoint("TOPRIGHT", pg, "TOPRIGHT", 0, y)
-        -- langue
-        y = y - 34
-        local lh = SmallHeader(pg, "language"); lh:SetPoint("TOPLEFT", 0, y - 8)
-        local rfr = ChoiceRow(pg, 130, function() SetLang("fr") end); rfr:SetPoint("TOPLEFT", 150, y)
-        local ren = ChoiceRow(pg, 130, function() SetLang("en") end); ren:SetPoint("TOPLEFT", 310, y)
-        rfr.label:SetText("Français"); ren.label:SetText("English")
-        optRows[#optRows + 1] = function() rfr:SetChecked(Lang() == "fr"); ren:SetChecked(Lang() == "en") end
+        -- (v1.52, audit des options : la langue est passee dans Fenetre)
     end
 
     -- 2. Donjons
@@ -476,65 +604,46 @@ local function CreateOptions()
         end
         y = y - math.ceil(n / 2) * 26
         y = y - 6
-        local ask = CheckRow(pg, CW, "askDungeons", function() return not DB.noDungeonAsk end, function(v) DB.noDungeonAsk = not v end)
-        ask:SetPoint("TOPLEFT", 0, y)
+        -- (v1.52, audit des options : « Me proposer les donjons » est dans Propositions)
         local stop = FlatButton(pg, 200, 28, function() StopDungeon(); RefreshOptions() end)
-        stop:SetPoint("TOPLEFT", 0, y - 32)
+        stop:SetPoint("TOPLEFT", 0, y)
         Loc(function() stop:SetLabel(Caps(T("leaveDungeon"))) end)
     end
 
-    -- 3. Classe : quetes de classe importantes (la variante de ta race)
+    -- 3. Quetes a part (v1.52, audit des options, demande de l'auteur) : quetes de classe, quetes speciales
+    -- (Cozy Sleeping Bag...) et quetes de metier dans le meme onglet. Les metiers sont ceux que le perso a
+    -- appris (lus dans le jeu) : plus de cases a cocher. Les trois listes se placent l'une sous l'autre.
     do
         local pg = pages[3]
-        local h = SmallHeader(pg, "tabClass"); h:SetPoint("TOPLEFT", 0, 0)
-        local rows = {}
-        for k = 1, 12 do
-            local b = FlatButton(pg, CW, 26, function(self) if self.q then E.AskClass(self.q) end end)
-            b:SetPoint("TOPLEFT", 0, -18 - (k - 1) * 30)
+        local function listRow(onClick)
+            local b = FlatButton(pg, CW, 26, onClick)
             b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 12, 0)
             if b.fs.SetFont then b.fs:SetFont(FONT, 11, "") end
             b.lv = FS(b, 9, COL.gold, FONT, "RIGHT"); b.lv:SetPoint("RIGHT", -12, 0)
-            b.glow = GlowRow(b)   -- v1.45 : quete de classe que tu peux commencer maintenant
-            rows[k] = b
+            b.glow = GlowRow(b)   -- quete que tu peux faire maintenant
+            return b
         end
-        local none = FS(pg, 11, COL.soft, FONT, "LEFT"); none:SetWidth(CW); none:SetPoint("TOPLEFT", 0, -22)
-        local ask = CheckRow(pg, CW, "askClass", function() return not DB.noClassAsk end, function(v) DB.noClassAsk = not v end)
-        ask:SetPoint("TOPLEFT", 0, -18 - 3 * 30 - 10)
-        -- v1.52 : quetes speciales (Cozy Sleeping Bag...) : un clic ouvre la proposition (« Faire maintenant »)
-        local spHdr = SmallHeader(pg, "specialHdr")
-        local spRows = {}
-        for k = 1, 2 do
-            local b = FlatButton(pg, CW, 26, function(self) if self.k then E.AskSpecial(self.k) end end)
-            b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 12, 0)
-            if b.fs.SetFont then b.fs:SetFont(FONT, 11, "") end
-            b.lv = FS(b, 9, COL.gold, FONT, "RIGHT"); b.lv:SetPoint("RIGHT", -12, 0)
-            b.glow = GlowRow(b)
-            spRows[k] = b
-        end
+        local hClass, hSp, hProf = SmallHeader(pg, "tabClass"), SmallHeader(pg, "specialHdr"), SmallHeader(pg, "tabProf")
+        local cRows, sRows, pRows = {}, {}, {}
+        for k = 1, 4 do cRows[k] = listRow(function(self) if self.q then E.AskClass(self.q) end end) end
+        for k = 1, 2 do sRows[k] = listRow(function(self) if self.k then E.AskSpecial(self.k) end end) end
+        for k = 1, 5 do pRows[k] = listRow(function(self) if self.q then E.AskProf(self.q) end end) end
+        local cNone = FS(pg, 11, COL.soft, FONT, "LEFT"); cNone:SetWidth(CW)
+        local mine = FS(pg, 11, COL.soft, FONT, "LEFT"); mine:SetWidth(CW)
+        if mine.SetWordWrap then mine:SetWordWrap(true) end
+        local pNone = FS(pg, 11, COL.soft, FONT, "LEFT"); pNone:SetWidth(CW)
         optRows[#optRows + 1] = function()
-            local list = E.ClassQuestList()
             local me = UnitLevel and UnitLevel("player") or 0
-            none:SetText(#list == 0 and T("classNone") or ""); none:SetShown(#list == 0)
-            ask:ClearAllPoints(); ask:SetPoint("TOPLEFT", 0, -18 - math.max(1, math.min(#list, 12)) * 30 - 12)
-            local sy = -18 - math.max(1, math.min(#list, 12)) * 30 - 12 - ROW_H - 12
-            local sp = E.SpecialList()
-            spHdr:ClearAllPoints(); spHdr:SetPoint("TOPLEFT", 0, sy); spHdr:SetShown(#sp > 0)
-            for k, b in ipairs(spRows) do
-                local c = sp[k]
-                if c then
-                    b:ClearAllPoints(); b:SetPoint("TOPLEFT", 0, sy - 18 - (k - 1) * 30)
-                    b.k = (c.state ~= "done") and c.key or nil
-                    b.fs:SetText(c.name)
-                    local col = (c.state == "done") and COL.gold or ((me >= c.lvl) and COL.white or COL.soft)
-                    if b.fs.SetTextColor then b.fs:SetTextColor(col[1], col[2], col[3]) end
-                    b.lv:SetText(c.state == "done" and T("classDone") or (c.state == "doing" and T("spStateDoing", c.n, c.total)) or T("classLvl", c.lvl))
-                    b.glow:SetOn(c.state ~= "done" and me >= c.lvl)
-                    b:Show()
-                else
-                    b.k = nil; b.glow:SetOn(false); b:Hide()
-                end
-            end
-            for k, b in ipairs(rows) do
+            local y = 0
+            local function at(o, h) o:ClearAllPoints(); o:SetPoint("TOPLEFT", 0, y); y = y - h end
+            -- QUETES DE CLASSE : celles qui restent a faire d'abord (4 au plus)
+            at(hClass, 18)
+            local all, list = E.ClassQuestList() or {}, {}
+            for _, c in ipairs(all) do if not c.done then list[#list + 1] = c end end
+            for _, c in ipairs(all) do if c.done then list[#list + 1] = c end end
+            cNone:SetText(T("classNone")); cNone:SetShown(#list == 0)
+            if #list == 0 then at(cNone, 22) end
+            for k, b in ipairs(cRows) do
                 local c = list[k]
                 if c then
                     b.q = (not c.done) and c.q or nil
@@ -546,54 +655,55 @@ local function CreateOptions()
                     local woven = (not c.done) and c.q and DB.woven and DB.woven[c.q]
                     b.lv:SetText(c.done and T("classDone") or woven and Caps(T("wovenTag")) or c.alt and T("classAlt") or (c.lvl2 > c.lvl and T("classLvls", c.lvl, c.lvl2) or T("classLvl", c.lvl)))
                     b.glow:SetOn(not c.done and not c.alt and me >= c.lvl)
-                    b:Show()
+                    at(b, 30); b:Show()
                 else
                     b.q = nil; b.glow:SetOn(false); b:Hide()
                 end
             end
-        end
-    end
-
-    -- 8. Metiers : cocher ses metiers, voir leurs quetes
-    do
-        local pg = pages[8]
-        local h = SmallHeader(pg, "tabProf"); h:SetPoint("TOPLEFT", 0, 0)
-        local half = math.floor((CW - 12) / 2)
-        for k, id in ipairs(E.ProfOrder() or {}) do
-            local key = E.ProfKey(id)
-            local row = CheckRow(pg, half, key, function() return E.ProfOn(id) end, function(v) E.ProfSet(id, v); E.TrainerPins() end)
-            Loc(function() row.label:SetText(E.ProfName(id)) end)
-            row:SetPoint("TOPLEFT", ((k - 1) % 2) * (half + 12), -18 - math.floor((k - 1) / 2) * ROW_H)
-        end
-        local y = -18 - 6 * ROW_H - 6
-        local ask = CheckRow(pg, CW, "askProf", function() return not DB.noProfAsk end, function(v) DB.noProfAsk = not v end)
-        ask:SetPoint("TOPLEFT", 0, y); y = y - ROW_H
-        local tp = CheckRow(pg, CW, "trainerOpt", function() return DB.trainerPins ~= false end, function(v) DB.trainerPins = v; E.TrainerPins() end)
-        tp:SetPoint("TOPLEFT", 0, y); y = y - ROW_H - 8
-        local h2 = SmallHeader(pg, "profListHdr"); h2:SetPoint("TOPLEFT", 0, y); y = y - 18
-        local none = FS(pg, 11, COL.soft, FONT, "LEFT"); none:SetWidth(CW); none:SetPoint("TOPLEFT", 0, y - 4)
-        local rows = {}
-        for k = 1, 6 do
-            local b = FlatButton(pg, CW, 24, function(self) if self.q then E.AskProf(self.q) end end)
-            b:SetPoint("TOPLEFT", 0, y - (k - 1) * 28)
-            b.fs:ClearAllPoints(); b.fs:SetPoint("LEFT", 12, 0)
-            if b.fs.SetFont then b.fs:SetFont(FONT, 11, "") end
-            b.lv = FS(b, 9, COL.gold, FONT, "RIGHT"); b.lv:SetPoint("RIGHT", -12, 0)
-            b.glow = GlowRow(b)   -- v1.45 : quete de metier que tu peux faire maintenant
-            rows[k] = b
-        end
-        optRows[#optRows + 1] = function()
-            local all, me = E.ProfQuestList(), UnitLevel and UnitLevel("player") or 0
-            local list = {}
-            -- une meme quete existe en plusieurs exemplaires (une par ville de depart) : on la montre une fois
-            local seen = {}
-            for _, c in ipairs(all) do
-                local key = (c.name or "") .. ":" .. tostring(c.s)
-                if not c.done and c.l + 6 >= me and not seen[key] then seen[key] = true; list[#list + 1] = c end
+            y = y - 10
+            -- QUETES SPECIALES : un clic ouvre la proposition (« Faire maintenant »)
+            local okS, sp = pcall(E.SpecialList)
+            if not okS or type(sp) ~= "table" then sp = {} end
+            hSp:SetShown(#sp > 0)
+            if #sp > 0 then at(hSp, 18) end
+            for k, b in ipairs(sRows) do
+                local c = sp[k]
+                if c then
+                    b.k = (c.state ~= "done") and c.key or nil
+                    b.fs:SetText(c.name)
+                    local col = (c.state == "done") and COL.gold or ((me >= c.lvl) and COL.white or COL.soft)
+                    if b.fs.SetTextColor then b.fs:SetTextColor(col[1], col[2], col[3]) end
+                    b.lv:SetText(c.state == "done" and T("classDone") or (c.state == "doing" and T("spStateDoing", c.n, c.total)) or T("classLvl", c.lvl))
+                    b.glow:SetOn(c.state ~= "done" and me >= c.lvl)
+                    at(b, 30); b:Show()
+                else
+                    b.k = nil; b.glow:SetOn(false); b:Hide()
+                end
             end
-            none:SetText(#list == 0 and T("profNone") or ""); none:SetShown(#list == 0)
-            for k, b in ipairs(rows) do
-                local c = list[k]
+            if #sp > 0 then y = y - 10 end
+            -- METIERS : ceux que tu as appris, puis leurs quetes (5 au plus)
+            at(hProf, 18)
+            local okD, det = pcall(E.ProfDetect)
+            if not okD or type(det) ~= "table" then det = {} end
+            local names = {}
+            for _, id in ipairs(E.ProfOrder() or {}) do
+                local r = det[id]
+                if r then names[#names + 1] = E.ProfName(id) .. ((type(r) == "number" and r > 0) and (" (" .. r .. ")") or "") end
+            end
+            mine:SetText(#names > 0 and T("profMine", table.concat(names, ", ")) or T("profNoneLearned"))
+            at(mine, math.max(20, ((mine.GetStringHeight and mine:GetStringHeight()) or 14) + 8))
+            local plist, seen = {}, {}
+            if #names > 0 then
+                -- une meme quete existe en plusieurs exemplaires (une par ville de depart) : on la montre une fois
+                for _, c in ipairs(E.ProfQuestList() or {}) do
+                    local key = (c.name or "") .. ":" .. tostring(c.s)
+                    if not c.done and c.l + 6 >= me and not seen[key] then seen[key] = true; plist[#plist + 1] = c end
+                end
+            end
+            pNone:SetText(T("profNone")); pNone:SetShown(#names > 0 and #plist == 0)
+            if #names > 0 and #plist == 0 then at(pNone, 22) end
+            for k, b in ipairs(pRows) do
+                local c = plist[k]
                 if c then
                     b.q = c.q
                     local tag = c.spec and T("profSpec") or (c.dungeon and T("profDungeon") or "")
@@ -602,7 +712,7 @@ local function CreateOptions()
                     if b.fs.SetTextColor then b.fs:SetTextColor(col[1], col[2], col[3]) end
                     b.lv:SetText(T("profLvl", c.r, c.m))
                     b.glow:SetOn((me >= c.r and c.rank) and true or false)
-                    b:Show()
+                    at(b, 30); b:Show()
                 else
                     b.q = nil; b.glow:SetOn(false); b:Hide()
                 end
@@ -610,85 +720,101 @@ local function CreateOptions()
         end
     end
 
-    -- 4. Style de jeu (tous les guides 1-60)
+    -- v1.52 (audit des options, maquette validee par l'auteur) : RÉGLAGES = Guidage · Propositions · Fenetre · Extras.
+    -- Chaque onglet repond a une seule question ; les cases « me proposer » sont toutes dans Propositions.
+
+    -- 4. Guidage : fleche, trajets et vols, cartes, ciblage
     do
         local pg = pages[4]
-        local h = SmallHeader(pg, "tabStyle"); h:SetPoint("TOPLEFT", 0, 0)
-        local y = -20
-        -- prereglages
-        local pl = FS(pg, 10, COL.gold, FONT, "LEFT"); pl:SetPoint("TOPLEFT", 0, y - 8)
-        Loc(function() pl:SetText(Caps(T("presets"))) end)
-        local PW = math.floor((CW - 140) / 4) - 6
-        for k, p in ipairs({ "solo", "group", "calm", "safe" }) do
-            local b = FlatButton(pg, PW, 26, function() E.ApplyPreset(p); RefreshOptions() end)
-            b:SetPoint("TOPLEFT", 140 + (k - 1) * (PW + 6), y)
-            Loc(function() b:SetLabel(Caps(T("preset_" .. p))) end)
-            if b.fs.SetFont then b.fs:SetFont(FONT, 9, "") end
-        end
-        y = y - 44
-        local CHW = math.floor((CW - 140) / 3) - 4
-        local function Group(labelKey, field, choices)
-            local lab = FS(pg, 10, COL.gold, FONT, "LEFT"); lab:SetPoint("TOPLEFT", 0, y - 8); lab:SetWidth(136)
-            Loc(function() lab:SetText(Caps(T(labelKey))) end)
-            for k, ch in ipairs(choices) do
-                local r = ChoiceRow(pg, CHW, function() E.StyleGet()[field] = ch; RefreshOptions(); E.StyleChanged() end)
-                r:SetPoint("TOPLEFT", 140 + (k - 1) * (CHW + 4), y); r.top:Hide()
-                Loc(function() r.label:SetText(T("st_" .. field .. "_" .. ch)) end)
-                optRows[#optRows + 1] = function() r:SetChecked(E.StyleGet()[field] == ch) end
+        local y = 0
+        local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
+        local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
+        -- FLECHE
+        sec("secArrow")
+        -- v1.52 (demande de l'auteur : alleger) : une ligne de choix au lieu de 4 cases. Warpath = notre fleche + le
+        -- repere jaune du jeu ; Aucune = pas de fleche (v1.52 : « Celle du jeu » retiree, demande de l'auteur). Fleche intelligente toujours.
+        local al = FS(pg, 12, COL.white, FONT, "LEFT"); al:SetPoint("TOPLEFT", 22, y - 7)
+        Loc(function() al:SetText(T("arrowLbl")) end)
+        local AW = math.floor((CW - 200) / 3) - 4
+        for k, mode in ipairs({ "own", "none" }) do
+            local r = ChoiceRow(pg, AW, function()
+                local was = DB.wp
+                DB.wp = (mode ~= "none")
+                DB.ownArrow = nil
+                DB.gameWP = (mode ~= "none") and true or false
+                if mode == "none" then ClearWaypoint() end
+                if was ~= DB.wp then E.ResetWP(); Refresh(true) else E.PlaceWaypointAgain() end
+                RefreshOptions()
+            end)
+            r:SetPoint("TOPLEFT", 200 + (k - 1) * (AW + 4), y); r.top:Hide()
+            Loc(function() r.label:SetText(T("arrow_" .. mode)) end)
+            optRows[#optRows + 1] = function()
+                local cur = (not DB.wp) and "none" or "own"
+                r:SetChecked(cur == mode)
             end
-            y = y - ROW_H - 18
         end
-        Group("stElite", "elite", { "always", "group", "never" })
-        Group("stXp", "xpMode", { "farm", "dungeon", "both" })
-        Group("stPrio", "prio", { "balanced", "xp", "travel" })
-        local es = CheckRow(pg, CW, "stEscort", function() return E.StyleGet().noEscort end,
-            function(v) E.StyleGet().noEscort = v and true or nil; E.StyleChanged() end)
-        es:SetPoint("TOPLEFT", 0, y)
-        local pr = CheckRow(pg, CW, "stPrudent", function() return E.StyleGet().prudent end,
-            function(v) E.StyleGet().prudent = v and true or nil; E.StyleChanged() end)
-        pr:SetPoint("TOPLEFT", 0, y - ROW_H)
-        local note = FS(pg, 10, COL.soft, FONT, "LEFT"); note:SetWidth(CW); note:SetPoint("TOPLEFT", 0, y - 2 * ROW_H - 14)
-        Loc(function() note:SetText(T("stNote")) end)
+        y = y - ROW_H - 2
+        y = ScaleRow(pg, y, "arrowScale", function() return DB.arrowScale or 1 end, function(v) DB.arrowScale = v end)
+        -- (sur sa propre ligne : a cote du reglage de taille, il chevauchait « 100 % »)
+        local ra = FlatButton(pg, math.floor((CW - 12) / 2), 24, function() if ns.Arrow then ns.Arrow.Reset() end end)
+        ra:SetPoint("TOPLEFT", 22, y)
+        Loc(function() ra:SetLabel(Caps(T("arrowReset"))) end)
+        if ra.fs.SetFont then ra.fs:SetFont(FONT, 9, "") end
+        y = y - 30
+        y = y - 6
+        -- TRAJETS ET VOLS
+        sec("secTrips")
+        row(CheckRow(pg, CW, "flyAuto", function() return DB.flyAuto == true end, function(v) DB.flyAuto = v and true or false end))
+        row(CheckRow(pg, CW, "hearthTips", function() return DB.hearthTips ~= false end,
+            function(v) DB.hearthTips = v; Refresh(true) end))
+        y = y - 6
+        -- CARTES (repere et chemin ; entraineurs de metier, venus de Metiers)
+        sec("secMaps")
+        -- v1.52 (alleger) : repere et chemin ensemble, une case par carte (avant : 4 cases)
+        row(CheckRow(pg, CW, "mmBoth", function() return DB.mmPin ~= false end, function(v) DB.mmPin = v; DB.mmPath = v end))
+        row(CheckRow(pg, CW, "wmBoth", function() return DB.mapPin ~= false end, function(v) DB.mapPin = v; DB.mapPath = v end))
+        row(CheckRow(pg, CW, "trainerPinsOpt", function() return DB.trainerPins ~= false end, function(v) DB.trainerPins = v; E.TrainerPins() end))
+        y = y - 6
+        -- CIBLAGE (la legende des icones passe dans l'infobulle de la case)
+        sec("secTargeting")
+        local tg = CheckRow(pg, CW, "targets", function() return DB.targets ~= false end, function(v) DB.targets = v; if ns.Targets then ns.Targets.Refresh() end end)
+        row(tg)
+        tg:SetScript("OnEnter", function(self)
+            local function ico(n, r, g, b) return string.format("|TInterface\\AddOns\\OghoulesWarpath\\Media\\%s:12:12:0:0:32:32:0:32:0:32:%d:%d:%d|t", n, r, g, b) end
+            E.Tip():SetOwner(self, "ANCHOR_RIGHT"); E.Tip():AddLine(T("targets"))
+            E.Tip():AddLine(T("tgtLegend", ico("IcoAccept", 214, 184, 102), ico("IcoTurnin", 156, 199, 168),
+                ico("IcoDo", 205, 187, 142), "|TInterface\\Minimap\\Tracking\\FlightMaster:12|t"), 1, 1, 1, true)
+            E.Tip():Show()
+        end)
     end
 
-    -- 3. Itineraire
+    -- 5. Propositions : tout ce que le guide te propose, puis ce qu'il fait pour toi
     do
-        -- v1.41 (audit, point 8) : sections Trajets et vols · Ciblage (v1.46 : la Fleche est passee dans Apparence)
         local pg = pages[5]
         local y = 0
         local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
         local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
-        -- TRAJETS ET VOLS
-        sec("secTrips")
-        row(CheckRow(pg, CW, "useFlights", function() return DB.useFlights ~= false end,
-            function(v) DB.useFlights = v; E.ResetWP(); Refresh(true) end))
-        row(CheckRow(pg, CW, "flyAuto", function() return DB.flyAuto == true end, function(v) DB.flyAuto = v and true or false end))
-        row(CheckRow(pg, CW, "hearthTips", function() return DB.hearthTips ~= false end,
-            function(v) DB.hearthTips = v; Refresh(true) end))
-        local BW2 = math.floor((CW - 12) / 2)
-        local rc = FlatButton(pg, BW2, 28, function() SlashCmdList.WARPATH("now") end)
-        rc:SetPoint("TOPLEFT", 0, y - 4)
-        Loc(function() rc:SetLabel(Caps(T("recalc"))) end)
-        local un = FlatButton(pg, BW2, 28, function() SlashCmdList.WARPATH("unskip all") end)
-        un:SetPoint("TOPLEFT", BW2 + 12, y - 4)
-        Loc(function() un:SetLabel(Caps(T("unignore"))) end)
-        if un.fs.SetFont then un.fs:SetFont(FONT, 9, ""); rc.fs:SetFont(FONT, 9, "") end
-        y = y - 48
-        -- CIBLAGE
-        sec("secTargeting")
-        row(CheckRow(pg, CW, "targets", function() return DB.targets ~= false end, function(v) DB.targets = v; if ns.Targets then ns.Targets.Refresh() end end))
-        local legend = FS(pg, 11, COL.gold, FONT, "LEFT"); legend:SetWidth(CW - 22)
-        legend:SetPoint("TOPLEFT", 22, y)
-        Loc(function()
-            local function ico(n, r, g, b) return string.format("|TInterface\\AddOns\\OghoulesWarpath\\Media\\%s:12:12:0:0:32:32:0:32:0:32:%d:%d:%d|t", n, r, g, b) end
-            legend:SetText(T("tgtLegend", ico("IcoAccept", 214, 184, 102), ico("IcoTurnin", 156, 199, 168),
-                ico("IcoDo", 205, 187, 142), "|TInterface\\Minimap\\Tracking\\FlightMaster:12|t"))
-        end)
+        local function flag(key, field)
+            return CheckRow(pg, CW, key, function() return DB[field] ~= false end,
+                function(v) DB[field] = v; if field == "trainer" and not v then DB.trainDue = nil end; Refresh(true) end)
+        end
+        -- ME PROPOSER (venues de Donjons, Classe, Metiers, Itineraire, Comportement)
+        sec("secPropose")
+        row(CheckRow(pg, CW, "askDungeons", function() return not DB.noDungeonAsk end, function(v) DB.noDungeonAsk = not v end))
+        row(CheckRow(pg, CW, "askClass", function() return not DB.noClassAsk end, function(v) DB.noClassAsk = not v end))
+        row(CheckRow(pg, CW, "askProf", function() return not DB.noProfAsk end, function(v) DB.noProfAsk = not v end))
+        row(flag("dgPickOpt", "dgPick"))
+        row(flag("bagOpt", "bagRemind"))
+        row(flag("trainerOpt", "trainer"))
+        y = y - 10
+        -- FAIRE POUR MOI
+        sec("secDoForMe")
+        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" } }) do row(flag(o[1], o[2])) end
+        local note = FS(pg, 10, COL.soft, FONT, "LEFT"); note:SetWidth(CW); note:SetPoint("TOPLEFT", 0, y - 4)
+        Loc(function() note:SetText(T("autoNote")) end)
     end
 
-    -- 4. Apparence (v1.46, retour d'un joueur : la taille de la fleche etait cachee dans Itineraire)
-    -- Fenetre · Fleche · Cartes, puis les deux boutons « replacer » cote a cote. La fleche s'affiche en
-    -- apercu tant que l'onglet est ouvert. Messages et Extras sont passes dans Comportement (page 7).
+    -- 6. Fenetre : la fenetre du guide, les messages, la langue, le bouton de minicarte
     do
         local pg = pages[6]
         local y = 0
@@ -700,36 +826,15 @@ local function CreateOptions()
         end
         -- FENETRE
         sec("secWindow")
-        row(CheckRow(pg, CW, "showWindow", function() return DB.shown ~= false end, function(v) E.ShowGuide(v) end))
+        -- (v1.52, alleger : « Afficher la fenetre » = clic droit sur le bouton de minicarte ou /warpath ;
+        -- « Mode compact » = le « - » de la fenetre)
         row(CheckRow(pg, CW, "lock", function() return DB.locked end, function(v) DB.locked = v end))
-        row(flag("miniOpt", "mini", false))
-        row(flag("compact", "compact", false))
         y = ScaleRow(pg, y, "scaleWin", function() return DB.scale or 1 end, function(v)
             DB.scale = v
             local f = E.Frame(); if f then f:SetScale(v); local mf = rawget(f, "mini"); if mf then mf:SetScale(v) end end
         end)
-        y = y - 8
-        -- FLECHE
-        sec("secArrow")
-        row(CheckRow(pg, CW, "arrow", function() return DB.wp end,
-            function(v) DB.wp = v; if not v then ClearWaypoint() end; E.ResetWP(); Refresh(true) end))
-        row(CheckRow(pg, CW, "arrowOwn", function() return DB.ownArrow ~= false end,
-            function(v) DB.ownArrow = v; E.PlaceWaypointAgain() end))
-        row(CheckRow(pg, CW, "gameWP", function() return DB.gameWP ~= false end,
-            function(v) DB.gameWP = v; E.PlaceWaypointAgain() end))
-        row(flag("smartArrowOpt", "smartArrow", true))
-        y = ScaleRow(pg, y, "arrowScale", function() return DB.arrowScale or 1 end, function(v) DB.arrowScale = v end)
-        y = y - 8
-        -- CARTES
-        sec("secMaps")
-        row(CheckRow(pg, CW, "mmPin", function() return DB.mmPin ~= false end, function(v) DB.mmPin = v end))
-        row(CheckRow(pg, CW, "mapPin", function() return DB.mapPin ~= false end, function(v) DB.mapPin = v end))
-        row(CheckRow(pg, CW, "mmButton", function() return not DB.mmHide end,
-            function(v) DB.mmHide = not v; if mm then mm:SetShown(v) end end))
-        y = y - 8
-        -- replacer la fenetre et la fleche, cote a cote
-        local BW2 = math.floor((CW - 12) / 2)
-        local rp = FlatButton(pg, BW2, 28, function()
+        -- (sur sa propre ligne : a cote du reglage de taille, il chevauchait « 100 % »)
+        local rp = FlatButton(pg, math.floor((CW - 12) / 2), 24, function()
             DB.wpos = nil
             local f = E.Frame()
             if f then
@@ -738,38 +843,12 @@ local function CreateOptions()
                 else f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -240) end
             end
         end)
-        rp:SetPoint("TOPLEFT", 0, y)
+        rp:SetPoint("TOPLEFT", 22, y)
         Loc(function() rp:SetLabel(Caps(T("resetPos"))) end)
-        local ra = FlatButton(pg, BW2, 28, function() if ns.Arrow then ns.Arrow.Reset() end end)
-        ra:SetPoint("TOPLEFT", BW2 + 12, y)
-        Loc(function() ra:SetLabel(Caps(T("arrowReset"))) end)
-        -- apercu de la fleche tant que l'onglet est visible (sinon on regle sa taille a l'aveugle)
-        pg:HookScript("OnShow", function() if ns.Arrow and ns.Arrow.Preview then ns.Arrow.Preview(true) end end)
-        pg:HookScript("OnHide", function() if ns.Arrow and ns.Arrow.Preview then ns.Arrow.Preview(false) end end)
-    end
-
-    -- Comportement (v1.46 : Automatisation, puis Messages et Extras venus d'Affichage)
-    do
-        local pg = pages[7]
-        local y = 0
-        local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
-        local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
-        local function flag(key, field, def)
-            return CheckRow(pg, CW, key, function() if def then return DB[field] ~= false end return DB[field] and true or false end,
-                function(v) DB[field] = v; if field == "trainer" and not v then DB.trainDue = nil end; Refresh(true) end)
-        end
-        -- AUTOMATISATION
-        sec("secAuto")
-        for _, o in ipairs({ { "autoQuest", "autoQuest" }, { "itemBtn", "itemBtn" }, { "nearOpt", "near" }, { "dgPickOpt", "dgPick" }, { "bagOpt", "bagRemind" } }) do
-            row(flag(o[1], o[2], true))
-        end
-        row(CheckRow(pg, CW, "shareOpt", function() return WarpathDropDB and WarpathDropDB._share ~= false end,
-            function(v) if WarpathDropDB then WarpathDropDB._share = v end end))
-        local note = FS(pg, 10, COL.soft, FONT, "LEFT"); note:SetWidth(CW); note:SetPoint("TOPLEFT", 0, y - 4)
-        Loc(function() note:SetText(T("autoNote")) end)
-        local nh = note.GetStringHeight and note:GetStringHeight()
-        y = y - 4 - ((type(nh) == "number" and nh > 0) and nh or 28) - 14
-        -- MESSAGES : chat (tous / importants / aucun ; erreurs et commandes toujours), conseils, rappel d'entraineur
+        if rp.fs.SetFont then rp.fs:SetFont(FONT, 9, "") end
+        y = y - 30
+        y = y - 8
+        -- MESSAGES : chat (tous / importants / aucun ; erreurs et commandes toujours), astuces
         sec("secMessages")
         local cl = FS(pg, 12, COL.white, FONT, "LEFT"); cl:SetPoint("TOPLEFT", 22, y - 7)
         Loc(function() cl:SetText(T("chatLbl")) end)
@@ -786,25 +865,55 @@ local function CreateOptions()
         cb:HookScript("OnLeave", function() E.Tip():Hide() end)
         y = y - 30
         row(flag("tipsOpt", "tips", true))
-        row(flag("trainerOpt", "trainer", true))
-        y = y - 10
-        -- EXTRAS : Trophees de guerre, Chronique (venus de l'onglet Automatisation ; la ligne XP/h a disparu avec le pied)
+        y = y - 8
+        -- LANGUE (venue de Campagne)
+        sec("language")
+        local rfr = ChoiceRow(pg, 130, function() SetLang("fr") end); rfr:SetPoint("TOPLEFT", 0, y); rfr.top:Hide()
+        local ren = ChoiceRow(pg, 130, function() SetLang("en") end); ren:SetPoint("TOPLEFT", 150, y); ren.top:Hide()
+        rfr.label:SetText("Français"); ren.label:SetText("English")
+        optRows[#optRows + 1] = function() rfr:SetChecked(Lang() == "fr"); ren:SetChecked(Lang() == "en") end
+        y = y - ROW_H - 8
+        -- MINICARTE
+        sec("secMinimap")
+        row(CheckRow(pg, CW, "mmButton", function() return not DB.mmHide end,
+            function(v) DB.mmHide = not v; if mm then mm:SetShown(v) end end))
+    end
+
+    -- 7. Extras : actions sur le guide, visite guidee, Trophees de guerre, Chronique, partage des taux
+    do
+        local pg = pages[7]
+        local y = 0
+        local function sec(key) local h = SmallHeader(pg, key); h:SetPoint("TOPLEFT", 0, y); y = y - 18 end
+        local function row(r) r:SetPoint("TOPLEFT", 0, y); y = y - ROW_H end
+        local BW2 = math.floor((CW - 12) / 2)
+        -- LE GUIDE (venus d'Itineraire et de Comportement)
+        sec("secGuideActions")
+        -- (v1.52, alleger : « Recalculer l'etape » retire, le guide recalcule seul ; reste /warpath now)
+        local un = FlatButton(pg, BW2, 28, function() SlashCmdList.WARPATH("unskip all") end)
+        un:SetPoint("TOPLEFT", 0, y - 2)
+        Loc(function() un:SetLabel(Caps(T("unignore"))) end)
+        local tv = FlatButton(pg, BW2, 28, function()
+            if opt then opt:Hide() end
+            SlashCmdList.WARPATH("tuto")
+        end)
+        tv:SetPoint("TOPLEFT", BW2 + 12, y - 2)
+        Loc(function() tv:SetLabel(Caps(T("tutoReplay"))) end)
+        for _, b in ipairs({ un, tv }) do if b.fs.SetFont then b.fs:SetFont(FONT, 9, "") end end
+        y = y - 44
+        -- TROPHEES DE GUERRE · CHRONIQUE
         sec("hdrExtras")
         row(CheckRow(pg, CW, "pvpShow", function() return not (WarpathDropDB and WarpathDropDB._pvpShow == false) end,
             function(v) if WarpathDropDB then WarpathDropDB._pvpShow = v end; if _G.WarpathPvPRefresh then pcall(_G.WarpathPvPRefresh, true) end end))
         row(CheckRow(pg, CW, "pvpShot", function() return DB.pvpShot and true or false end, function(v) DB.pvpShot = v end))
         row(CheckRow(pg, CW, "chronBanner", function() return DB.chronBanner ~= false end, function(v) DB.chronBanner = v end))
-        local BW2 = math.floor((CW - 12) / 2)
         local cv = FlatButton(pg, BW2, 28, function() E.ChronShow() end)
         cv:SetPoint("TOPLEFT", 0, y - 4)
         Loc(function() cv:SetLabel(K.Upper(T("chOpen"))) end)
-        -- v1.43 : revoir la visite guidee (ferme les options pour laisser voir la fenetre du guide)
-        local tv = FlatButton(pg, BW2, 28, function()
-            if opt then opt:Hide() end
-            SlashCmdList.WARPATH("tuto")
-        end)
-        tv:SetPoint("TOPLEFT", BW2 + 12, y - 4)
-        Loc(function() tv:SetLabel(Caps(T("tutoReplay"))) end)
+        y = y - 46
+        -- PARTAGE (taux de drop anonymes)
+        sec("secShare")
+        row(CheckRow(pg, CW, "shareOpt", function() return WarpathDropDB and WarpathDropDB._share ~= false end,
+            function(v) if WarpathDropDB then WarpathDropDB._share = v end end))
     end
 
     opt:SetScript("OnShow", function()

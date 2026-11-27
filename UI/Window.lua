@@ -122,7 +122,11 @@ function CreateUI()
     local utb = Skin.Tex(Core.f.upToggle, Skin.COL.bg, 1, "BACKGROUND"); utb:SetAllPoints()
     Core.f.upToggle.fs = Skin.FS(Core.f.upToggle, 10, Skin.COL.accent, Skin.FONT, "RIGHT"); Core.f.upToggle.fs:SetPoint("RIGHT", -1, 0)
     local uth = Skin.Tex(Core.f.upToggle, Skin.COL.accent, 0.10, "HIGHLIGHT"); uth:SetAllPoints()
-    Core.f.upToggle:SetScript("OnClick", function() State.DB.upOpen = not State.DB.upOpen; Skin.Refresh() end)
+    Core.f.upToggle:SetScript("OnClick", function()
+        -- v1.52 : « LA SUITE » repliee : « +N » la rouvre ; sinon 2 ou 4 etapes comme avant
+        if State.DB.upHidden then State.DB.upHidden = nil else State.DB.upOpen = not State.DB.upOpen end
+        Skin.Refresh()
+    end)
     Core.f.upToggle:Hide()
     Core.f.coord = Skin.FS(Core.f.dest, 11, Skin.COL.soft, Skin.FONT, "LEFT"); Core.f.coord:SetPoint("TOPLEFT", Core.f.destName, "BOTTOMLEFT", 0, -5); Core.f.coord:SetPoint("RIGHT", Core.f.dist, "LEFT", -8, 0)
     if Core.f.coord.SetWordWrap then Core.f.coord:SetWordWrap(false) end
@@ -159,6 +163,25 @@ function CreateUI()
         t:Show()
     end)
     Core.f.progHit:SetScript("OnLeave", function() Skin.Tip():Hide() end)
+    -- v1.52 (audit) : parcours choisi (Bande de guerre / Eclaireur), a gauche au-dessus de la barre, en face de
+    -- « Etape x / y » ; clic = ecran de choix du parcours (texte remis par SetHeader, Skin.lua)
+    Core.f.routeBtn = CreateFrame("Button", nil, Core.f); Core.f.routeBtn:SetSize(100, 14)
+    Core.f.routeBtn:SetPoint("BOTTOMLEFT", Core.f.progBg, "TOPLEFT", 0, 2)
+    if Core.f.routeBtn.SetFrameLevel and Core.f.progHit.GetFrameLevel then Core.f.routeBtn:SetFrameLevel((Core.f.progHit:GetFrameLevel() or 1) + 2) end
+    Core.f.routeBtn.gem = Skin.Diamond(Core.f.routeBtn, 6, Skin.COL.red); Core.f.routeBtn.gem:SetPoint("LEFT", 0, 0)
+    Core.f.routeBtn.fs = Skin.FS(Core.f.routeBtn, 10, Skin.COL.gold, Skin.FONT, "LEFT"); Core.f.routeBtn.fs:SetPoint("LEFT", 11, 0)
+    local rbh = Skin.Tex(Core.f.routeBtn, Skin.COL.accent, 0.10, "HIGHLIGHT"); rbh:SetAllPoints()
+    Core.f.routeBtn:SetScript("OnClick", function() if SlashCmdList and SlashCmdList.WARPATH then SlashCmdList.WARPATH("parcours") end end)
+    Core.f.routeBtn:SetScript("OnEnter", function(self)
+        local wb = Core.Parcours() == "warband"
+        local t = Skin.Tip(); t:SetOwner(self, "ANCHOR_BOTTOM")
+        t:AddLine(Core.T(wb and "routeWarband" or "routeScout"))
+        t:AddLine(Core.T(wb and "routeWarbandTip" or "routeScoutTip"), 1, 1, 1, true)
+        t:AddLine(Core.T("routeBtnTip"), 0.66, 0.60, 0.48, true)
+        t:Show()
+    end)
+    Core.f.routeBtn:SetScript("OnLeave", function() Skin.Tip():Hide() end)
+    Core.f.routeBtn:Hide()
 
     Core.f.name = Skin.FS(Core.f, 13, Skin.COL.white, Skin.FONT, "CENTER"); Core.f.name:SetWidth(Skin.INNER); Core.f.name:Hide() -- (garde pour les tests)
     Core.f.div = Skin.Divider(Core.f, Skin.INNER); Core.f.div:Hide()
@@ -275,6 +298,55 @@ function CreateUI()
     end)
     Core.f.chainBtn:SetScript("OnLeave", function() Skin.Tip():Hide() end)
     Core.f.chainBtn:Hide()
+
+    -- v1.52 (audit A) : etape « Donjon » : bouton qui ouvre la fiche du donjon (Features/DungeonSheet.lua)
+    Core.f.dsBtn = Skin.FlatButton(Core.f, Skin.INNER, 24, function(self)
+        local DS = ns.Mod.DungeonSheet
+        if self.key and DS and DS.DungeonSheetOpen then DS.DungeonSheetOpen(self.key) end
+    end)
+    if Core.f.dsBtn.fs.SetFont then Core.f.dsBtn.fs:SetFont(Skin.FONT, 9, ""); Core.f.dsBtn.fs:SetTextColor(Skin.COL.accent[1], Skin.COL.accent[2], Skin.COL.accent[3]) end
+    Core.f.dsBtn:Hide()
+    -- v1.52 (audit C) : « Autour de toi » : quetes en attente de niveau, notes du lieu, quetes en chemin,
+    -- repliees par defaut (DB.aroundOpen) ; un clic sur la ligne deplie / replie
+    Core.f.aroundBtn = CreateFrame("Button", nil, Core.f); Core.f.aroundBtn:SetSize(Skin.INNER, 14)
+    Core.f.aroundBtn.label = Skin.FS(Core.f.aroundBtn, 10, Skin.COL.gold, Skin.FONT, "LEFT"); Core.f.aroundBtn.label:SetPoint("LEFT")
+    Core.f.aroundBtn.right = Skin.FS(Core.f.aroundBtn, 10, Skin.COL.accent, Skin.FONT, "RIGHT"); Core.f.aroundBtn.right:SetPoint("RIGHT", -1, 0)
+    local arh = Skin.Tex(Core.f.aroundBtn, Skin.COL.accent, 0.08, "HIGHLIGHT"); arh:SetAllPoints()
+    Core.f.aroundBtn:SetScript("OnClick", function() State.DB.aroundOpen = not State.DB.aroundOpen; Skin.Refresh() end)
+    Core.f.aroundBtn:Hide()
+    -- v1.52 (demande de l'auteur) : parties repliables directement dans la fenetre (remplace l'option
+    -- « Fenetre allegee ») : titre « DETAILS » au-dessus du texte (DB.detailsHidden), titre « LA SUITE » (DB.upHidden)
+    local function foldHead(onClick)
+        local b = CreateFrame("Button", nil, Core.f); b:SetSize(Skin.INNER, 14)
+        b.label = Skin.FS(b, 10, Skin.COL.gold, Skin.FONT, "LEFT"); b.label:SetPoint("LEFT")
+        b.right = Skin.FS(b, 10, Skin.COL.accent, Skin.FONT, "RIGHT"); b.right:SetPoint("RIGHT", -1, 0)
+        local hl = Skin.Tex(b, Skin.COL.accent, 0.08, "HIGHLIGHT"); hl:SetAllPoints()
+        b:SetScript("OnClick", onClick)
+        b:SetScript("OnEnter", function(self) Skin.Tip():SetOwner(self, "ANCHOR_LEFT"); Skin.Tip():AddLine(Core.T("foldTip"), 1, 1, 1, true); Skin.Tip():Show() end)
+        b:SetScript("OnLeave", function() Skin.Tip():Hide() end)
+        b:Hide()
+        return b
+    end
+    Core.f.textHead = foldHead(function() State.DB.detailsHidden = not State.DB.detailsHidden or nil; Skin.Refresh() end)
+    -- titre « LA SUITE » cliquable (le « +2 / - » a droite garde son role : 2 ou 4 etapes)
+    Core.f.nextHit = CreateFrame("Button", nil, Core.f.nextRule)
+    Core.f.nextHit:SetPoint("TOPLEFT", Core.f.nextRule, "TOPLEFT"); Core.f.nextHit:SetPoint("BOTTOMRIGHT", Core.f.nextRule, "BOTTOMRIGHT", -48, 0)
+    local nhh = Skin.Tex(Core.f.nextHit, Skin.COL.accent, 0.08, "HIGHLIGHT"); nhh:SetAllPoints()
+    Core.f.nextHit:SetScript("OnClick", function() State.DB.upHidden = not State.DB.upHidden or nil; Skin.Refresh() end)
+    Core.f.nextHit:SetScript("OnEnter", function(self) Skin.Tip():SetOwner(self, "ANCHOR_LEFT"); Skin.Tip():AddLine(Core.T("foldTip"), 1, 1, 1, true); Skin.Tip():Show() end)
+    Core.f.nextHit:SetScript("OnLeave", function() Skin.Tip():Hide() end)
+    -- ancienne option « Fenetre allegee » (DB.compact) : devient « LA SUITE » repliee
+    if State.DB.compact then State.DB.upHidden = true; State.DB.compact = nil end
+    -- v1.52 (options allegees) : fleche intelligente et vols connus toujours actifs (cases retirees) ;
+    -- repere et chemin reunis en une case par carte : le chemin suit le repere
+    State.DB.smartArrow, State.DB.useFlights, State.DB.ownArrow = nil, nil, nil   -- (et fleche Warpath : « celle du jeu » retiree)
+    State.DB.mmPath = (State.DB.mmPin == false) and false or nil
+    State.DB.mapPath = (State.DB.mapPin == false) and false or nil
+    Core.f.aroundText = Skin.FS(Core.f, 11, Skin.COL.soft, Skin.FONT, "LEFT"); Core.f.aroundText:SetWidth(Skin.INNER)
+    if Core.f.aroundText.SetJustifyV then Core.f.aroundText:SetJustifyV("TOP") end
+    if Core.f.aroundText.SetWordWrap then Core.f.aroundText:SetWordWrap(true) end
+    if Core.f.aroundText.SetSpacing then Core.f.aroundText:SetSpacing(3) end
+    Core.f.aroundText:Hide()
 
     -- conseil (journal plein, pierre de foyer)
     Core.f.advice = CreateFrame("Frame", nil, Core.f); Core.f.advice:SetSize(Skin.INNER, 16)
@@ -490,8 +562,21 @@ function CreateUI()
         b.fs = Skin.FS(b, 12, Skin.COL.gold, Skin.FONT, "CENTER"); b.fs:SetPoint("CENTER")
         b.fs:SetText(Skin.Glyph(b, label, Skin.COL.gold) and "" or label)   -- v1.42 : signe dessine, bien centre
         local h = Skin.Tex(b, Skin.COL.accent, 0.12, "HIGHLIGHT"); h:SetAllPoints()
-        b:SetScript("OnClick", function() ToggleMini() end)
-        b:SetScript("OnEnter", function(self) Skin.Tip():SetOwner(self, "ANCHOR_LEFT"); Skin.Tip():AddLine(Core.T(tipKey), 1, 1, 1, true); Skin.Tip():Show() end)
+        b:SetScript("OnClick", function()
+            -- v1.52 (demande de l'auteur) : Maj + clic sur le « - » = replier / deplier toutes les parties d'un coup
+            if tipKey == "miniEnter" and IsShiftKeyDown and IsShiftKeyDown() then
+                local fold = not (State.DB.upHidden and State.DB.detailsHidden and not State.DB.aroundOpen)
+                State.DB.upHidden = fold or nil; State.DB.detailsHidden = fold or nil; State.DB.aroundOpen = (not fold) or nil
+                Skin.Refresh()
+                return
+            end
+            ToggleMini()
+        end)
+        b:SetScript("OnEnter", function(self)
+            Skin.Tip():SetOwner(self, "ANCHOR_LEFT"); Skin.Tip():AddLine(Core.T(tipKey), 1, 1, 1, true)
+            if tipKey == "miniEnter" then Skin.Tip():AddLine(Core.T("miniShiftTip"), 0.66, 0.60, 0.48, true) end
+            Skin.Tip():Show()
+        end)
         b:SetScript("OnLeave", function() Skin.Tip():Hide() end)
         return b
     end
@@ -663,7 +748,9 @@ function Window.UpdateMini()
         if s then
             local nm = (s.t ~= "do" and Core.f.dest and Core.f.dest:IsShown() and Core.f.destName:GetText()) or (s.t ~= "do" and s.quest and Core.QName(s)) or ""
             if nm == "" and Core.StepText then nm = (Core.StepText(s) or ""):gsub("\n.*", "") end
-            lines[1] = { verb = Skin.Caps(Core.T(s.t)), text = nm }
+            -- v1.52 (audit G) : detour ou etape « Donjon » : le meme en-tete que la grande fenetre
+            local mv = rawget(Core.f, "miniVerb")
+            lines[1] = { verb = Skin.Caps(mv or Core.T(s.t)), text = nm }
         end
     end
     -- en-tete : nom de la quete (cliquable), sinon Intendance / donjon / guide
@@ -673,7 +760,9 @@ function Window.UpdateMini()
     else
         local s = State.steps[State.peek or State.focus or State.current]
         local qn = s and s.quest and Core.QName(s)
-        if qn and qn ~= "" then head = qn:match("^(.-) %+ ") or qn; click = true
+        local mh = rawget(Core.f, "miniHead")
+        if type(mh) == "string" and mh ~= "" then head = mh
+        elseif qn and qn ~= "" then head = qn:match("^(.-) %+ ") or qn; click = true
         else head = Core.Title and State.G and Core.Title(State.G) or "" end
     end
     head = (head or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
@@ -747,7 +836,7 @@ ns.E = {
     Tip = function() return Skin.Tip() end, GuideStatus = function(k) return Flow.GuideStatus(k) end,
     ProfOrder = function() return Profs.PROF_ORDER end, ProfKey = function(id) return Profs.PROF_KEY[id] end, ProfName = function(id) return Profs.ProfName(id) end, TrainerPins = function() if Profs.TrainerPinsRefresh then pcall(Profs.TrainerPinsRefresh, true) end end,
     ProfQuestList = function() return Profs.ProfQuestList() end, ProfOn = function(id) return Profs.ProfOn(id) end,
-    ProfSet = function(id, v) Profs.ProfSet(id, v) end, ProfDetect = function() return Profs.ProfDetect(true) end,
+    ProfDetect = function() return Profs.ProfDetect(true) end,
     AskProf = function(q) Flow.AskChain(q, true, "prof") end,
     -- v1.52 : quetes speciales (Features/Special.lua, charge apres ce fichier)
     SpecialList = function() return ns.Mod.Special.List and ns.Mod.Special.List() or {} end,

@@ -275,14 +275,18 @@ do
         if qm and qm.IsShown and qm:IsShown() then f = qm end
         if not (f and f:IsShown() and f:GetLeft()) then return end
         local sc, l, b, w = f:GetScale(), f:GetLeft(), f:GetBottom(), f:GetWidth()
-        local key = sc .. ":" .. math.floor(l) .. ":" .. math.floor(b) .. ":" .. math.floor(w)
+        -- v1.52 (demande de l'auteur) : avec le bouton de l'objet de quete colle a droite (Comfort.lua, 50 px + 4),
+        -- le panneau raccourcit pour que les deux fassent ensemble la largeur de la fenetre du guide
+        local ib = _G.WarpathItemButton
+        local item = ib and ib.IsShown and ib:IsShown() and not State.DB.itemPos and not State.DB.tgtW
+        local key = sc .. ":" .. math.floor(l) .. ":" .. math.floor(b) .. ":" .. math.floor(w) .. (item and ":i" or "")
         if key == lastDock then return end
         lastDock = key
         panel:SetScale(sc)
         panel:ClearAllPoints()
         panel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, b - 2)
-        -- largeur choisie avec la poignee, sinon celle de la fenetre du guide
-        panel:SetWidth(tonumber(State.DB.tgtW) or w)
+        -- largeur choisie avec la poignee, sinon celle de la fenetre du guide (moins le bouton d'objet)
+        panel:SetWidth(tonumber(State.DB.tgtW) or (item and (w - 54) or w))
     end
     -- monstres pas en vue (sans plaque de nom a l'ecran) : ligne grisee, pour savoir tout de suite sur qui cliquer.
     -- Si aucune plaque n'est visible (plaques desactivees), on ne grise rien.

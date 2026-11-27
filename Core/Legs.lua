@@ -10,8 +10,10 @@ local State = ns.State
 local Core = ns.Mod.Core -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : module ns.Mod.Legs (publie en fin de fichier pour les autres fichiers)
-local LegPoint
+local LegPoint, LegPath
 
+-- v1.52 : dernier trajet donne a la fleche (pour dessiner le chemin sur les cartes, Arrow.lua)
+local lastLeg
 local ON_LEG = 120   -- yards : au-dela, tu n'es sur aucun trajet prevu
 local NEAR_GOAL = 40 -- yards : assez pres de l'objectif, on le vise directement
 local PASSED = 20    -- yards : un point de passage atteint compte comme passe
@@ -67,7 +69,7 @@ function LegPoint(s, me)
             if Route.Dist(me[1], me[2], goal[1], goal[2]) <= NEAR_GOAL then return nil end
             for i = 1, #pts - 1 do
                 local d, t = segDist(me[1], me[2], pts[i], pts[i + 1])
-                if d <= ON_LEG and (not best or d < best.d) then best = { d = d, pts = pts, i = i, t = t } end
+                if d <= ON_LEG and (not best or d < best.d) then best = { d = d, pts = pts, i = i, t = t, c = leg.c } end
             end
         end
     end
@@ -77,11 +79,21 @@ function LegPoint(s, me)
     while k < #pts and Route.Dist(me[1], me[2], pts[k][1], pts[k][2]) <= PASSED do k = k + 1 end
     if k >= #pts then return nil end -- plus rien entre toi et l'objectif : la fleche normale suffit
     local p = pts[k]
+    lastLeg = { pts = pts, k = k, c = best.c, m = p[3], x = p[4], y = p[5] }
     return { m = p[3], x = p[4], y = p[5], name = Core.T("legVia"), kind = "leg" }
+end
+
+-- v1.52 : le reste du trajet (points {monde x, monde y, carte, x, y}, le dernier = objectif) et l'indice du
+-- prochain point et le continent, seulement si la fleche vise en ce moment ce trajet (t = Skin.distTarget) ; sinon nil.
+function LegPath(t)
+    local L = lastLeg
+    if not (L and t and t[1] == L.m and t[2] == L.x and t[3] == L.y) then return nil end
+    return L.pts, L.k, L.c
 end
 
 -- v1.50 : ce que ce fichier offre aux autres (ns.Mod.Legs)
 do
     local M = ns.Mod.Legs
     M.LegPoint = LegPoint
+    M.LegPath = LegPath
 end

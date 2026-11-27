@@ -8,6 +8,7 @@ local Core = ns.Mod.Core -- v1.50 : module
 -- v1.50 : module ns.Mod.Events (publie en fin de fichier pour les autres fichiers)
 local ev
 local Commands = ns.Mod.Commands -- v1.50 : module
+local Choice = ns.Mod.Choice -- v1.52 : ecran de choix du parcours
 local Profs = ns.Mod.Profs -- v1.50 : module
 local Window = ns.Mod.Window -- v1.50 : module
 local Flow = ns.Mod.Flow -- v1.50 : module
@@ -79,7 +80,13 @@ function Events.OnEvent(self, event, ...)
         ns.Trace("bouton minicarte"); pcall(ns.UI.CreateMinimapButton)
         ns.Trace("options du jeu (Settings)"); pcall(ns.UI.RegisterBlizzardOptions)
         ns.Trace("connexion terminee")
-        if C_Timer and C_Timer.After then C_Timer.After(3, function() pcall(Commands.ShowWelcome) end) end
+        -- v1.52 : d'abord le choix du parcours (une fois par personnage), puis la bienvenue / le Quoi de neuf
+        if C_Timer and C_Timer.After then
+            C_Timer.After(3, function()
+                local welcome = function() pcall(Commands.ShowWelcome) end
+                if not pcall(Choice.MaybeShowChoice, welcome) then welcome() end
+            end)
+        end
         Core.ScanLog()
         local key = State.DB.guide
         if key == "chain" then

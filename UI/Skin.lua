@@ -19,7 +19,7 @@ local Route = ns.Mod.Route -- v1.50 : module
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local DungeonLogHide, DungeonLogRender, DungeonLore, FIXED_H, MAPBAR, MIN_H, SKIP_ICON, STEP_ICON
 local STEP_TINT, SetChain, SetHeader, SetObjRows, SetRoute, SetSkip, SetUpcoming, SplitPlace, adviceArgs
-local advicePos, adviceT, autoGoBusy, lightCtx
+local advicePos, adviceT, autoGoBusy, lightCtx, StepPos
 
 ------------------------------------------------------------------
 -- Habillage "cinematique" : noir, filets fins, losanges, capitales espacees
@@ -215,18 +215,22 @@ Skin.distTarget = nil -- { m, x, y } : prochaine position a atteindre (pour la d
 STEP_ICON = {
     accept = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoAccept", turnin = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoTurnin",
     ["do"] = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoDo",
+    dungeon = "Interface\\AddOns\\OghoulesWarpath\\Media\\IcoDo",   -- v1.52 : epees en rouge
 }
-STEP_TINT = { accept = COL.accent, turnin = COL.green, ["do"] = COL.gold }
+STEP_TINT = { accept = COL.accent, turnin = COL.green, ["do"] = COL.gold, dungeon = COL.red }
 function SetUpcoming(items, passed)
     if not Core.f or not Core.f.up then return end
     -- v1.41 (audit, proposition A) : 2 etapes a venir, « +N ▾ » pour deplier jusqu'a 4 (DB.upOpen)
-    local limit = State.DB.upOpen and 4 or 2
-    local more = math.max(0, math.min(#items, 4) - 2)
+    -- v1.52 (demande de l'auteur) : « LA SUITE » repliee entierement (DB.upHidden) : il reste la ligne et « +N »
+    local hidden = State.DB.upHidden and true or false
+    local limit = hidden and 0 or (State.DB.upOpen and 4 or 2)
+    local more = hidden and math.min(#items, 4) or math.max(0, math.min(#items, 4) - 2)
     Core.f.nUp = math.min(#items, limit)
+    Core.f.upCount = #items
     local tg = rawget(Core.f, "upToggle")
     if tg then
         -- (la police du jeu n'a pas les fleches ▾ ▴ : un petit carre s'affichait)
-        tg.fs:SetText(more > 0 and (State.DB.upOpen and "-" or ("+" .. more)) or "")
+        tg.fs:SetText(more > 0 and ((State.DB.upOpen and not hidden) and "-" or ("+" .. more)) or "")
         tg:SetShown(more > 0)
     end
     for k = 1, 4 do
@@ -246,7 +250,7 @@ function SetUpcoming(items, passed)
     end
     if Core.f.passed then
         Core.f.passed:SetText((passed or 0) > 0 and Core.T("passedN", passed) or "")
-        Core.f.passed:SetShown((passed or 0) > 0 and #items > 0)
+        Core.f.passed:SetShown((passed or 0) > 0 and #items > 0 and not hidden)
     end
 end
 
@@ -290,7 +294,6 @@ function Layout()
     if badge and (top - y) < 46 then y = top - 46 end
     y = y - 18
     if Core.f.dest and Core.f.dest:IsShown() then
-        if State.DB.compact then Core.f.coord:Hide() end
         -- hauteur selon le lieu (1 ou 2 lignes) et la ligne de precision
         local dh = math.max(34, 18 + sh(Core.f.destName, 12) + (Core.f.coord:IsShown() and 15 or 0))
         Core.f.dest:SetHeight(dh); put(Core.f.dest, dh, 18)
@@ -310,7 +313,19 @@ function Layout()
         end
         y = y - 16
     end
+    -- v1.52 : titre « DETAILS » (repliable) au-dessus du texte quand il a plus d'un paragraphe
+    local th = rawget(Core.f, "textHead")
+    if th and th:IsShown() then put(th, 14, 6) end
     if Core.f.text:IsShown() then put(Core.f.text, sh(Core.f.text), 18) end
+    -- v1.52 (audit) : fiche du donjon (etape « Donjon »), puis « Autour de toi » (replie par defaut)
+    local dsb = rawget(Core.f, "dsBtn")
+    if dsb and dsb:IsShown() then put(dsb, 24, 16) end
+    local ab, at = rawget(Core.f, "aroundBtn"), rawget(Core.f, "aroundText")
+    if ab and ab:IsShown() then
+        put(ab, 14, 6)
+        if at and at:IsShown() then put(at, sh(at), 6) end
+        y = y - 12
+    end
     if (Skin.DL.n or 0) > 0 then
         for k = 1, Skin.DL.n do
             local r = Skin.DL.rows[k]
@@ -350,8 +365,8 @@ function Layout()
         local ah = math.max(16, (Core.f.advice.label.GetStringHeight and Core.f.advice.label:GetStringHeight() or 12) + 4)
         Core.f.advice:SetHeight(ah); put(Core.f.advice, ah, 14)
     end
-    if State.DB.compact then for k = 1, 4 do Core.f.up[k]:Hide() end; if Core.f.passed then Core.f.passed:Hide() end end
-    if (Core.f.nUp or 0) > 0 and not State.DB.compact then
+    -- v1.52 : « LA SUITE » repliee : la ligne de titre reste (avec « +N » pour rouvrir)
+    if (Core.f.nUp or 0) > 0 or (State.DB.upHidden and (Core.f.upCount or 0) > 0) then
         Core.f.nextRule:Show(); put(Core.f.nextRule, 12, 8)
         for k = 1, 4 do if Core.f.up[k]:IsShown() then put(Core.f.up[k], 26, 0) end end
         if Core.f.passed and Core.f.passed:IsShown() then put(Core.f.passed, 22, 0, PAD + 22) end
@@ -370,7 +385,9 @@ function Layout()
     local bottomH = 34 + (footOn and (16 + 13) or 0) + BOT
     -- v1.41 (audit) : la hauteur suit le contenu (plus de bande vide), avec un minimum pour que la fenetre
     -- ne change pas trop de taille d'une etape a l'autre (avant : hauteur fixe aux proportions de la maquette)
-    local h = math.max(State.DB.compact and 0 or MIN_H, -y + 24 + bottomH)
+    -- (une partie repliee : pas de hauteur minimale, sinon replier ne raccourcirait pas la fenetre)
+    local folded = State.DB.upHidden or State.DB.detailsHidden
+    local h = math.max(folded and 0 or MIN_H, -y + 24 + bottomH)
     Core.f:SetHeight(h)
     if foot then
         foot:SetShown(footOn and true or false)
@@ -519,6 +536,13 @@ function SetHeader(zone, right, frac)
     local aw = Core.f.title.GetWidth and Core.f.title:GetWidth()
     if type(sw) == "number" and type(aw) == "number" and aw > 0 and sw > aw then Core.f.title:SetText(Core.Upper(zone or "")) end
     if Core.f.stepNo then Core.f.stepNo:SetText(right or "") end
+    -- v1.52 (audit) : parcours choisi, a gauche au-dessus de la barre (Window.lua, f.routeBtn)
+    local rb = rawget(Core.f, "routeBtn")
+    if rb then
+        rb.fs:SetText(Caps(Core.T(Core.Parcours() == "warband" and "routeWarband" or "routeScout")))
+        rb:SetWidth(14 + ((rb.fs.GetStringWidth and rb.fs:GetStringWidth()) or 80))
+        rb:SetShown((zone or "") ~= "")
+    end
     if Core.f.progFill then
         frac = math.max(0, math.min(1, frac or 0))
         Core.f.progFill:SetWidth(math.max(1, INNER * frac)); Core.f.progFill:SetShown(frac > 0)
@@ -543,9 +567,32 @@ function SplitPlace(txt)
     end
     return txt, nil
 end
+-- v1.52 (audit) : « Etape x / y » et la barre ne comptent que les etapes pour toi (parcours, classe, race) ;
+-- avant, les etapes de l'autre parcours gonflaient le total. Calcule une fois par liste d'etapes et parcours.
+local posCache = {}
+function StepPos(i)
+    local list, r = State.steps, Core.Parcours()
+    if posCache.list ~= list or posCache.route ~= r then
+        local pos, k = {}, 0
+        for j, s in ipairs(list or {}) do
+            if Core.Applies(s) then k = k + 1 end
+            pos[j] = k
+        end
+        posCache.list, posCache.route, posCache.pos, posCache.n = list, r, pos, k
+    end
+    return math.max(1, posCache.pos[i] or 1), math.max(1, posCache.n)
+end
+
 function Skin.RefreshInner(forceWP)
     if not Core.f then return end
     SetObjRows(nil)
+    -- v1.52 (audit) : remis plus bas pour l'etape courante ; caches sinon (pas de guide, fin, journal du donjon)
+    local dsb, ab, at = rawget(Core.f, "dsBtn"), rawget(Core.f, "aroundBtn"), rawget(Core.f, "aroundText")
+    if dsb then dsb.key = nil; dsb:Hide() end
+    if ab then ab:Hide() end
+    if at then at:Hide() end
+    local th0 = rawget(Core.f, "textHead"); if th0 then th0:Hide() end
+    Core.f.miniHead, Core.f.miniVerb = nil, nil
     Core.f.name:SetText(Caps(WarpathName()))
     if not State.steps then
         SetHeader("", "", 0); Core.f.summary = Core.T("noGuide")
@@ -582,7 +629,8 @@ function Skin.RefreshInner(forceWP)
     else
         local zone = Core.Title(State.G):gsub("%s*%b()", ""):gsub("%s+%d+%-%d+$", "")
         if Core.IS_DUNGEON[State.DB.guide] then zone = zone:gsub("^[^:]+:%s*", "") end
-        SetHeader(zone, Core.T("stepOf", i, n), i / n)
+        local pi, pn = StepPos(i)
+        SetHeader(zone, Core.T("stepOf", pi, pn), pi / math.max(1, pn))
         local st = State.peek and State.doneCache[i]
         -- prise impossible tant qu'un prerequis du journal n'est pas fini : on guide vers ce prerequis
         -- v1.51 : ou quete de donjon (ou de sa chaine) a prendre / rendre en passant
@@ -637,6 +685,14 @@ function Skin.RefreshInner(forceWP)
         kc = "cdbb8e"
         -- v1.45 : entree d'un donjon : « Aller a Blackfathom Deeps » plutot que « Aller » seul
         local kindTxt = (s.t == "go" and Core.IS_DUNGEON[State.DB.guide] and zone ~= "") and Core.T("goDg", zone) or Core.T(s.t)
+        -- v1.52 (audit A) : etape « Donjon » : niveaux du donjon a cote du type
+        local dgi = (s.t == "dungeon" and s.dg) and Core.IS_DUNGEON[s.dg] or nil
+        if dgi and dgi.min then kindTxt = kindTxt .. "  ·  " .. Core.T("dsLevels", dgi.min, dgi.max or dgi.min) end
+        -- v1.52 (audit) : un detour (entraineur, quete de donjon en passant, prerequis) prend l'en-tete : c'est la
+        -- que va la fleche. L'etape du guide passe en sous-titre « Ensuite : ... ».
+        if det then
+            Core.f.kind:SetText("|cffd69a66" .. Caps(Core.T("detTag")) .. "|r  |cff8c7f62·|r  |cff" .. kc .. Caps(det.train and Core.T("detTrain") or Core.T(g.t)) .. "|r")
+        else
         Core.f.kind:SetText("|cff" .. kc .. Caps(kindTxt) .. "|r" .. (nq > 1 and ("  |cff8c7f62·|r  |cff" .. kc .. Caps(Core.T("nQuests", nq)) .. "|r") or "")
             .. (s.optional and ("   |cff8c7f62" .. Core.T("optional") .. "|r") or "")
             .. (s.woven and ("   |cffcdbb8e" .. Caps(Core.T("wovenTag")) .. "|r") or "")   -- v1.47 : etape d'une chaine integree
@@ -645,9 +701,10 @@ function Skin.RefreshInner(forceWP)
                 or State.peek and ("   |cffd69a66" .. Core.T("stepTodo") .. "|r") or "")
             .. ((not State.peek and State.focus) and ("   |cffcdbb8e" .. Core.T("chosen") .. "|r") or "")
             .. ((not State.peek and not State.focus and Near.nearKind and i == State.current) and ("   |cff9cc7a8" .. Core.T(Near.nearKind == "pass" and "nearPass" or "nearNear") .. "|r") or ""))
+        end
         -- rendement estime (quete + monstres) compare au simple farm de monstres de ton niveau
         Core.f.rateTip = nil
-        if (s.t == "do" or (s.optional and s.t == "accept")) and type(s.id) == "number" and Est.EST[s.id] then
+        if not det and (s.t == "do" or (s.optional and s.t == "accept")) and type(s.id) == "number" and Est.EST[s.id] then
             local e = Est.Estimate({ s.id }, false)
             if e.secs > 0 and e.perHour > 0 then
                 local p = UnitLevel("player") or 1
@@ -660,7 +717,37 @@ function Skin.RefreshInner(forceWP)
         end
         Core.f.kind:Show()
         local qn = s.quest and Core.QName(s)
-        if qn and qn ~= "" then
+        if det then
+            -- v1.52 (audit) : detour en titre, son niveau dans le badge, l'etape du guide dessous
+            local ql = (not det.train) and type(det.id) == "number" and Est.EST[det.id] and Est.EST[det.id].l
+            if Core.f.badge then
+                local c = ql and ql > 0 and GetQuestDifficultyColor and GetQuestDifficultyColor(ql)
+                if ql and ql > 0 then
+                    Core.f.badge.num:SetText(ql); Core.f.badge.lbl:SetText(Core.T("lvlShort"))
+                    if type(c) == "table" and Core.f.badge.num.SetTextColor then Core.f.badge.num:SetTextColor(c.r or 1, c.g or 1, c.b or 1) end
+                    Core.f.badge:Show()
+                else Core.f.badge:Hide() end
+            end
+            Core.f.qtitle:SetText(det.name or "?"); Core.f.qtitle:Show()
+            local nxt = (qn and qn ~= "") and qn or ((Core.StepText(s) or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("\n.*", ""):sub(1, 60))
+            local verb = Core.T(s.t) or ""
+            if Core.f.qsub then
+                Core.f.qsub:SetText("|cff8c7f62" .. Core.T("detThen", (verb ~= "" and (verb .. " — ") or "") .. nxt) .. "|r"); Core.f.qsub:Show()
+            end
+            Core.f.miniHead, Core.f.miniVerb = det.name, Core.T("detTag")
+        elseif s.t == "dungeon" and s.dg then
+            -- v1.52 (audit A) : carte « Donjon » : nom du donjon en titre, duree et XP dessous
+            if Core.f.badge then Core.f.badge:Hide() end
+            local dn = ((Flow.DungeonName(s.dg) or s.dg):gsub("%s*%b()", ""))
+            Core.f.qtitle:SetText(dn); Core.f.qtitle:Show()
+            local okE, mins, xp = pcall(Est.DungeonStepEstimate, s.dg)
+            if Core.f.qsub then
+                local on = okE and mins and true or false
+                Core.f.qsub:SetText(on and ("|cff8c7f62" .. Core.T("dsEstShort", mins, Est.FormatNum(xp or 0)) .. "|r") or "")
+                Core.f.qsub:SetShown(on)
+            end
+            Core.f.miniHead, Core.f.miniVerb = dn, Core.T("dungeon")
+        elseif qn and qn ~= "" then
             -- niveau de la quete, colore selon la difficulte (gris / vert / jaune / orange / rouge)
             local qid = type(s.id) == "number" and s.id or (type(s.id) == "table" and s.id[1])
             local ql = qid and Est.EST[qid] and Est.EST[qid].l
@@ -697,7 +784,30 @@ function Skin.RefreshInner(forceWP)
         end
         -- etape "faire" : objectifs en direct (le texte complet passe dans l'infobulle du titre)
         local live, lead, orows
-        if Near.LiveObjectives then live, lead, orows = Near.LiveObjectives(s) end
+        -- v1.52 (audit) : pendant un detour, les objectifs du prerequis a faire (rien pour l'etape du guide, en sous-titre)
+        if det then
+            if Near.LiveObjectives and not (det.pick or det.train or det.done) and type(det.id) == "number" then
+                live, lead, orows = Near.LiveObjectives({ t = "do", id = det.id, quest = det.name, text = "" })
+            end
+        elseif s.t == "dungeon" and s.dg then
+            -- v1.52 (audit A) : quetes du 1er passage : en main (cochee), a prendre dehors, ou prise dedans
+            local dq, dqo = Core.DungeonStepQuests(s.dg)
+            local outside, list, have = {}, {}, 0
+            for _, q in ipairs(dqo or {}) do outside[q] = true end
+            for _, q in ipairs(dq or {}) do
+                if not Core.Rendue(q) and not State.DB.ignored[q] then
+                    local inLog = Core.logById[q] ~= nil
+                    if inLog then have = have + 1 end
+                    list[#list + 1] = { k = "obj", done = inLog, text = (Core.QuestTitle and Core.QuestTitle(q)) or (Est.EST[q] and Est.EST[q].n) or tostring(q),
+                        count = Core.T(inLog and "dsHave" or (outside[q] and "dsTake" or "dsInside")) }
+                end
+            end
+            if #list > 0 then
+                orows = { { k = "verb", text = Core.T("dsStepQuests", have, #list) } }
+                for k = 1, math.min(#list, 8) do orows[#orows + 1] = list[k] end
+            end
+            if dsb then dsb.key = s.dg; dsb:SetLabel(Caps(Core.T("dsSheet"))); dsb:Show() end
+        elseif Near.LiveObjectives then live, lead, orows = Near.LiveObjectives(s) end
         Core.f.objPlain = live
         if orows and #orows > 0 then SetObjRows(orows); live = "" end
         -- prendre / rendre : le PNJ et son lieu vont dans le bloc destination (texte court d'une ligne)
@@ -705,11 +815,11 @@ function Skin.RefreshInner(forceWP)
         if not live and not det and (s.t == "accept" or s.t == "turnin") and not st0:find("\n") and #st0 <= 80 and st0 ~= "" then
             lead = st0
         end
-        local body = live or (lead and "" or st0)
-        Core.f.qtitleTip = live and Core.StepText(s) or nil
+        local body = live or ((lead or det) and "" or st0)
+        Core.f.qtitleTip = (live and not det) and Core.StepText(s) or nil
         -- astuce de quete (Tips.lua)
         Core.f.tipText = nil
-        if State.DB.tips ~= false and ns.Tips and s.t ~= "note" then
+        if not det and State.DB.tips ~= false and ns.Tips and s.t ~= "note" then
             local qid = type(s.id) == "number" and s.id or (type(s.id) == "table" and s.id[1])
             local tip = qid and ns.Tips[qid]
             Core.f.tipText = tip and ((Core.Lang() == "en") and tip[2] or tip[1]) or nil
@@ -744,11 +854,13 @@ function Skin.RefreshInner(forceWP)
         elseif det and det.pick then body = "|cffd69a66" .. Core.T(det.turn and "dgPickTurn" or "dgPickStep", det.name, det.dg) .. "|r\n\n" .. body
         elseif det then body = "|cffd69a66" .. Core.T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
         -- quetes pas encore prises faute de niveau, quetes laissees pour plus tard, et la suite
+        -- v1.52 (audit C) : ce qui n'est pas a faire tout de suite va dans « Autour de toi » (replie par defaut)
+        local around = {}
         if not State.peek then
             local lw = Near.LevelWaitLines and Near.LevelWaitLines(s) or {}
-            if #lw > 0 then body = body .. "\n\n" .. Near.ListBlock(Core.T("lvlWaitHdr"), lw, "d69a66") end
+            if #lw > 0 then around[#around + 1] = Near.ListBlock(Core.T("lvlWaitHdr"), lw, "d69a66") end
             local hn = Near.HubNotes and Near.HubNotes(i)
-            if hn then body = body .. "\n\n" .. hn end
+            if hn then around[#around + 1] = hn end
             local tg = Near.TurninGroup and Near.TurninGroup(i)
             if tg then body = tg .. "\n\n" .. body end
             local ag = Near.AcceptGroup and Near.AcceptGroup(i)
@@ -756,7 +868,7 @@ function Skin.RefreshInner(forceWP)
             local fu = Near.FollowUpAccepts and Near.FollowUpAccepts(i)
             if fu then body = body .. "\n\n" .. fu end
             local ow = Near.OnTheWay and Near.OnTheWay(i)
-            if ow then body = body .. "\n\n" .. ow end
+            if ow then around[#around + 1] = ow end
             local dt = Near.DeathTip and Near.DeathTip(i)
             -- conseil de mort : dans l'infobulle du titre, une seule ligne dans la fenetre
             if dt then
@@ -768,16 +880,19 @@ function Skin.RefreshInner(forceWP)
         -- donjon : toutes les quetes en main, on marche sur l'entree
         if s.t == "go" and Core.IS_DUNGEON[State.DB.guide] and not State.peek then body = "|cffd6b866" .. DungeonLore(zone) .. "|r\n\n" .. body end
         -- v1.52 : etape « Donjon » (parcours Bande de guerre) : le donjon, ses quetes en main, cherche un groupe
-        if s.t == "dungeon" and s.dg then
-            local dq = Core.DungeonStepQuests(s.dg)
-            local have = 0
-            for _, q in ipairs(dq) do if Core.logById[q] ~= nil then have = have + 1 end end
-            body = "|cffd6b866" .. Core.T("dsInfo", Flow.DungeonName(s.dg), have) .. "|r\n\n" .. body
-            -- v1.52 : estimation (duree d'un passage + groupe, XP des quetes en main et des monstres)
-            local okE, mins, xp = pcall(Est.DungeonStepEstimate, s.dg)
-            if okE and mins then body = body .. "\n\n|cff8c7f62" .. Core.T("dsEst", mins, Est.FormatNum(xp)) .. "|r" end
+        -- (v1.52, audit A : nom, quetes et estimation sont dans la carte du haut ; ici seulement le mode d'emploi)
+        if s.t == "dungeon" and s.dg and not det then
+            body = "|cff8c7f62" .. Core.T("dsHelp") .. "|r" .. (body ~= "" and ("\n\n" .. body) or "")
         end
-        body = body:gsub("^%s+", "")
+        body = body:gsub("^%s+", ""):gsub("%s+$", "")
+        if ab and at and #around > 0 then
+            local open = State.DB.aroundOpen and true or false
+            ab.label:SetText(Caps(Core.T("aroundLbl")))
+            ab.right:SetText(open and "-" or ("+" .. #around))
+            ab:Show()
+            at:SetText(table.concat(around, "\n\n")); at:SetShown(open)
+        end
+        Core.f.aroundPlain = (#around > 0) and table.concat(around, "\n\n") or nil   -- (tests, journal de debug)
         Core.f.text:SetText(body); Core.f.text:SetShown(body ~= "")
         -- itineraire : au plus 3 etapes (vol, zeppelin/bateau, puis l'objectif)
         local legs = {}
@@ -936,6 +1051,19 @@ function Skin.RefreshInner(forceWP)
                     quest = Core.T(tr.kind == "boat" and "boat" or "zep") .. " -> " .. tr.dest })
             else
                 Route.SetWaypoint(g)
+            end
+        end
+        -- v1.52 (demande de l'auteur) : « DETAILS » repliable : replie (DB.detailsHidden), seul le 1er paragraphe
+        -- du texte reste (l'essentiel de l'etape) ; le titre n'apparait que s'il y a plus d'un paragraphe
+        local th = rawget(Core.f, "textHead")
+        if th and Core.f.text:IsShown() then
+            local full = Core.f.text:GetText() or ""
+            local first = full:match("^(.-)\n\n")
+            if first and first ~= "" then
+                local open = not State.DB.detailsHidden
+                th.label:SetText(Caps(Core.T("detailsLbl"))); th.right:SetText(open and "-" or "+")
+                th:Show()
+                if not open then Core.f.text:SetText(first) end
             end
         end
         Skin.UpdateDistance()

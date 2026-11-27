@@ -6,6 +6,7 @@ local Core = ns.Mod.Core -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
 local Perf = ns.Mod.Perf -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
+local Legs = ns.Mod.Legs -- v1.52 : chemin du GPS sur les cartes
 
 -- La fleche tourne vers la prochaine position du trajet (distTarget) a partir de ta position et de ton
 -- orientation. Hors instance seulement : en donjon et en raid, le jeu ne donne plus ces informations.
@@ -97,7 +98,7 @@ do
             local bg = menu:CreateTexture(nil, "BACKGROUND"); bg:SetColorTexture(Skin.COL.bg[1], Skin.COL.bg[2], Skin.COL.bg[3], 0.96); bg:SetAllPoints()
             Skin.Border(menu, Skin.COL.accent, 0.6)
             local items = {
-                { "arrowMenuOpts", function() if ns.UI and ns.UI.OpenOptionsTab then ns.UI.OpenOptionsTab(6) end end },
+                { "arrowMenuOpts", function() if ns.UI and ns.UI.OpenOptionsTab then ns.UI.OpenOptionsTab(4) end end },
                 { "arrowReset", function() if ns.Arrow then ns.Arrow.Reset() end end },
                 { "arrowMenuHide", function()
                     State.DB.ownArrow = false; State.lastWP = nil; Skin.Refresh(true)
@@ -204,6 +205,28 @@ do
     end
     local OUT = { 466 + 2 / 3, 400, 333 + 1 / 3, 266 + 2 / 3, 200, 133 + 1 / 3 }
     local IN = { 300, 240, 180, 120, 80, 50 }
+    -- echelle, rotation et demi-diametre de la minicarte : demandes au jeu une seule fois par image (v1.52)
+    local mm = { k = 1, c = 1, s = 0, half = 70 }
+    local function MMParams(mmap)
+        local zoom = (mmap.GetZoom and mmap:GetZoom() or 0) + 1
+        local diam = ((IsIndoors and IsIndoors()) and IN or OUT)[zoom] or OUT[1]
+        mm.c, mm.s = 1, 0
+        if GetCVar and GetCVar("rotateMinimap") == "1" then
+            local f = -(GetPlayerFacing and GetPlayerFacing() or 0)
+            mm.c, mm.s = math.cos(f), math.sin(f)
+        end
+        mm.half = mmap:GetWidth() / 2
+        mm.k = mm.half / (diam / 2)
+        mm.square = GetMinimapShape and GetMinimapShape() == "SQUARE"
+        return mm
+    end
+    -- position a l'ecran (par rapport au centre de la minicarte) d'un point du monde (wx, wy)
+    local function MMXY(me, wx, wy)
+        local dx, dy = wx - me[1], wy - me[2]                -- x : nord, y : ouest
+        local sx, sy = -dy, dx                               -- a l'ecran : droite = est, haut = nord
+        sx, sy = sx * mm.c - sy * mm.s, sx * mm.s + sy * mm.c
+        return sx * mm.k, sy * mm.k
+    end
     local function UpdatePin()
         local mmap = _G.Minimap
         if not mmap or not State.DB or State.DB.wp == false or State.DB.mmPin == false or not Skin.distTarget
@@ -222,21 +245,12 @@ do
             pinTex:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\Media\\ArrowHere")
             pin.halo = Halo(pin)
         end
-        local zoom = (mmap.GetZoom and mmap:GetZoom() or 0) + 1
-        local diam = ((IsIndoors and IsIndoors()) and IN or OUT)[zoom] or OUT[1]
-        local dx, dy = w[1] - me[1], w[2] - me[2]          -- x : nord, y : ouest
-        local sx, sy = -dy, dx                               -- a l'ecran : droite = est, haut = nord
-        if GetCVar and GetCVar("rotateMinimap") == "1" then
-            local f = -(GetPlayerFacing and GetPlayerFacing() or 0)
-            local c, s = math.cos(f), math.sin(f)
-            sx, sy = sx * c - sy * s, sx * s + sy * c
-        end
-        local half = mmap:GetWidth() / 2
-        local k = half / (diam / 2)
-        sx, sy = sx * k, sy * k
+        MMParams(mmap)
+        local sx, sy = MMXY(me, w[1], w[2])
+        local half = mm.half
         local r = half - 7
         local d = math.sqrt(sx * sx + sy * sy)
-        local square = GetMinimapShape and GetMinimapShape() == "SQUARE"
+        local square = mm.square
         local edge = false
         if square then
             local m = math.max(math.abs(sx), math.abs(sy))
@@ -277,6 +291,170 @@ do
         wpin:SetPoint("CENTER", child, "TOPLEFT", Skin.distTarget[2] / 100 * child:GetWidth() * cs, -Skin.distTarget[3] / 100 * child:GetHeight() * cs)
         Pulse(wpin.halo, WPIN)
         wpin:Show()
+    end
+
+    -- v1.52 (maquettes A + D + E choisies par l'auteur) : le trajet du GPS (Legs.lua) en perles dorees, de toi
+    -- jusqu'a l'objectif, sur la minicarte (option mmPath) et sur la carte du monde (option mapPath). Seulement
+    -- quand la fleche suit un trajet pre-calcule. Minicarte : perles cachees hors du rond, estompees pres du bord.
+    -- v1.52 (retour de l'auteur : « beaucoup trop de points ») : l'ecart se compte en pixels a l'ecran, pas en
+    -- yards (10 yards faisaient une perle tous les 3-4 px au zoom de la minicarte) ; MAXB = nombre maximum
+    local BEAD_MM_PX, BEAD_WM_PX, MAXB = 18, 24, 80
+    local bA, bB, bU = {}, {}, {}                -- perles calculees : segment (a, b) et position sur le segment
+    local start = {}
+    -- remplit bA/bB/bU tous les `gap` yards de `from` (comme un point du trajet) au bout de pts ; renvoie le nombre
+    -- (la derniere perle est l'objectif lui-meme)
+    local function PathBeads(from, pts, k, gap)
+        local n, d = 0, gap
+        local a = from
+        for i = k, #pts do
+            local b = pts[i]
+            local L = Route.Dist(a[1], a[2], b[1], b[2]) or 0
+            while d < L and n < MAXB do
+                n = n + 1; bA[n], bB[n], bU[n] = a, b, d / L
+                d = d + gap
+            end
+            d = d - L
+            a = b
+        end
+        n = n + 1; bA[n], bB[n], bU[n] = a, a, 0
+        return n
+    end
+    local function Bead(parent, pool, n)
+        local t = pool[n]
+        if not t then
+            -- v1.52 (retour de l'auteur, captures) : losange dore plein avec un fin contour sombre, comme les
+            -- losanges de l'addon (couleur unie tournee de 45°). Avant : texture Gem rouge (rouge), puis
+            -- desaturee + teinte doree (presque invisible, trop sombre sur le terrain).
+            t = CreateFrame("Frame", nil, parent)
+            local g = Skin.COL.accent
+            t.edge = t:CreateTexture(nil, "OVERLAY", nil, 1); t.edge:SetAllPoints()
+            t.edge:SetColorTexture(0.08, 0.05, 0.03, 0.9)
+            t.fill = t:CreateTexture(nil, "OVERLAY", nil, 2)
+            t.fill:SetPoint("TOPLEFT", 1.5, -1.5); t.fill:SetPoint("BOTTOMRIGHT", -1.5, 1.5)
+            t.fill:SetColorTexture(g[1], g[2], g[3], 1)
+            if t.edge.SetRotation then t.edge:SetRotation(math.rad(45)); t.fill:SetRotation(math.rad(45)) end
+            pool[n] = t
+        end
+        return t
+    end
+    local function HideBeads(pool, from)
+        for i = from, #pool do pool[i]:Hide() end
+    end
+    -- v1.52 (demande de l'auteur) : sans trajet pre-calcule, perles en ligne droite jusqu'au point vise par la
+    -- fleche (objectif, maitre de vol, grotte...). Pas sur place dans une zone de chasse (t[4]), comme la fleche.
+    -- La table est gardee tant que la cible ne change pas (Same compare les trajets par identite).
+    local straightFor, straight, straightC
+    local function PathFor(t)
+        local pts, k, cont = Legs.LegPath(t)
+        if pts or not t or t[4] then return pts, k, cont end
+        if straightFor ~= t then
+            straightFor, straight, straightC = t, nil, nil
+            local w = Route.WP(t[1], t[2], t[3])
+            if w then straight, straightC = { { w[1], w[2], t[1], t[2], t[3] } }, w[3] end
+        end
+        if straight then return straight, 1, straightC end
+    end
+
+    -- rien n'a bouge depuis la derniere image (position, trajet, et pour la minicarte zoom / rotation / taille) :
+    -- les perles restent ou elles sont (v1.52, presque rien a l'arret)
+    local mmLast, wmLast = {}, {}
+    local function Same(last, a, b, c, d, e, f, g, h)
+        if last[1] == a and last[2] == b and last[3] == c and last[4] == d and last[5] == e and last[6] == f
+            and last[7] == g and last[8] == h then
+            return true
+        end
+        last[1], last[2], last[3], last[4], last[5], last[6], last[7], last[8] = a, b, c, d, e, f, g, h
+        return false
+    end
+
+    local mmPool, mmLayer = {}, nil
+    local function UpdatePathMM()
+        local mmap = _G.Minimap
+        local pts, k, cont = PathFor(Skin.distTarget)
+        local me = pts and Route.PlayerWP()
+        if not (mmap and me and State.DB and State.DB.wp ~= false and State.DB.mmPath ~= false and me[3] == cont)
+            or (IsInInstance and IsInInstance()) then
+            HideBeads(mmPool, 1); mmLast[1] = nil; return
+        end
+        MMParams(mmap)
+        if Same(mmLast, me[1], me[2], pts, k, mm.k, mm.c, mm.s, mm.half) then return end
+        if not mmLayer then
+            mmLayer = CreateFrame("Frame", nil, mmap)
+            mmLayer:SetAllPoints(mmap)
+            mmLayer:SetFrameStrata(mmap:GetFrameStrata())
+            mmLayer:SetFrameLevel(mmap:GetFrameLevel() + 6)   -- sous le losange (+8)
+        end
+        start[1], start[2] = me[1], me[2]
+        local n = PathBeads(start, pts, k, math.max(4, BEAD_MM_PX / math.max(mm.k, 0.01)))
+        local square = mm.square
+        local r = mm.half - 4
+        for i = 1, n do
+            local a, b, u = bA[i], bB[i], bU[i]
+            local sx, sy = MMXY(me, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u)
+            local d = square and math.max(math.abs(sx), math.abs(sy)) or math.sqrt(sx * sx + sy * sy)
+            local t = Bead(mmLayer, mmPool, i)
+            if d > r then
+                t:Hide()
+            else
+                local size = (i == n) and 10 or 6
+                t:SetSize(size, size)
+                t:ClearAllPoints(); t:SetPoint("CENTER", mmap, "CENTER", sx, sy)
+                t:SetAlpha(d > r - 14 and 0.4 or 0.95)
+                t:Show()
+            end
+        end
+        HideBeads(mmPool, n + 1)
+    end
+
+    local wmPool, wmLayer = {}, nil
+    local function UpdatePathWM()
+        local wm = _G.WorldMapFrame
+        local child = wm and wm.ScrollContainer and wm.ScrollContainer.Child
+        local pts, k = PathFor(Skin.distTarget)
+        local me = pts and Route.PlayerWP()
+        local pm, px, py = Route.PlayerPos()
+        local shown = child and wm:IsShown() and wm.GetMapID and wm:GetMapID()
+        if not (shown and me and px and State.DB and State.DB.wp ~= false and State.DB.mapPath ~= false) then
+            HideBeads(wmPool, 1); wmLast[1] = nil; return
+        end
+        local cs = child:GetScale() or 1
+        local W, H = child:GetWidth(), child:GetHeight()
+        if Same(wmLast, me[1], me[2], pts, k, shown, cs, W, H) then return end
+        if not wmLayer then
+            wmLayer = CreateFrame("Frame", nil, child)
+            wmLayer:SetAllPoints(child); wmLayer:SetFrameStrata("HIGH")
+        end
+        start[1], start[2], start[3], start[4], start[5] = me[1], me[2], pm, px, py
+        -- pixels par yard sur la carte affichee, mesures sur le 1er bout de trajet qui y est (sinon 25 yards)
+        local gap = 25
+        local a0 = start
+        for i = k, #pts do
+            local b0 = pts[i]
+            if a0[3] == shown and b0[3] == shown then
+                local L = Route.Dist(a0[1], a0[2], b0[1], b0[2]) or 0
+                if L > 1 then
+                    local px = math.sqrt(((b0[4] - a0[4]) / 100 * W) ^ 2 + ((b0[5] - a0[5]) / 100 * H) ^ 2) * cs
+                    if px > 0 then gap = math.max(5, BEAD_WM_PX * L / px) end
+                    break
+                end
+            end
+            a0 = b0
+        end
+        local n = PathBeads(start, pts, k, gap)
+        local used = 0
+        for i = 1, n do
+            local a, b, u = bA[i], bB[i], bU[i]
+            if a[3] == shown and b[3] == shown then          -- les deux bouts sur la carte affichee
+                used = used + 1
+                local t = Bead(wmLayer, wmPool, used)
+                local size = ((i == n) and 13 or 9) / cs
+                t:SetSize(size, size)
+                t:ClearAllPoints()
+                t:SetPoint("CENTER", child, "TOPLEFT", (a[4] + (b[4] - a[4]) * u) / 100 * W, -(a[5] + (b[5] - a[5]) * u) / 100 * H)
+                t:SetAlpha(0.95); t:Show()
+            end
+        end
+        HideBeads(wmPool, used + 1)
     end
 
     -- v1.43 (demande de l'auteur) : la petite fleche du bloc destination (fenetre du guide) tourne comme la
@@ -330,6 +508,8 @@ do
         if preview and not (frame and frame:IsShown()) then pcall(Preview) end
         if not pcall(UpdatePin) and pin then pin:Hide() end
         if not pcall(UpdateMapPin) and wpin then wpin:Hide() end
+        if not pcall(UpdatePathMM) then HideBeads(mmPool, 1); mmLast[1] = nil end
+        if not pcall(UpdatePathWM) then HideBeads(wmPool, 1); wmLast[1] = nil end
         pcall(UpdateDestIcon, 0.04)
         if t0 and Perf.PerfMark then Perf.PerfMark("Fleche + cartes (25/s)", debugprofilestop() - t0, m0 and (Perf.PerfMem() - m0)) end
     end)

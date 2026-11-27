@@ -7,6 +7,7 @@ local Perf = ns.Mod.Perf -- v1.50 : module
 -- v1.50 : module ns.Mod.Commands (publie en fin de fichier pour les autres fichiers)
 local BugWindow, ShowWelcome
 local Tutorial = ns.Mod.Tutorial -- v1.50 : module
+local Choice = ns.Mod.Choice -- v1.52 : ecran de choix du parcours
 local DungeonSheet = ns.Mod.DungeonSheet -- v1.50 : module
 local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
 local PvP = ns.Mod.PvP -- v1.50 : module
@@ -48,20 +49,21 @@ SlashCmdList["WARPATH"] = function(msg)
         Window.ToggleMini()
     elseif cmd == "parcours" or cmd == "path" then
         -- v1.52 : parcours Bande de guerre (warband, donjons imbriques) / Eclaireur (scout, classique) ;
-        -- en attendant le choix dans les options. Changer de parcours ne perd rien (tout est recalcule).
+        -- sans argument : l'ecran de choix (UI/Choice.lua). Changer de parcours ne perd rien (tout est recalcule).
         local a = (arg or ""):lower()
         local want = (a == "warband" or a == "bande") and "warband" or ((a == "scout" or a == "eclaireur" or a == "éclaireur") and "scout") or nil
-        local name = function(r) return Core.T(r == "warband" and "routeWarband" or "routeScout") end
         if want then
-            State.DB.route = (want == "warband") and "warband" or nil
-            Core.say(Core.T("routeSet", name(want)))
-            Core.say(Core.T(want == "warband" and "routeWarbandTip" or "routeScoutTip"))
-            State.lastWP = nil
-            if State.DB.guide and Core.Guides[State.DB.guide] then Flow.SetGuide(State.DB.guide, true) end
-            Skin.Refresh(true)
+            Choice.SetRoute(want)
+        elseif a == "" then
+            Choice.ShowChoice()
         else
-            Core.say(Core.T("routeUsage", name(Core.Parcours())))
+            Core.say(Core.T("routeUsage", Core.T(Core.Parcours() == "warband" and "routeWarband" or "routeScout")))
         end
+    elseif cmd == "art" then
+        -- v1.52 : images personnelles de l'ecran de parcours (Media/Choix*.tga, hors Git), par compte
+        -- (pas une bascule : /warpath art = oui, /warpath art off = non ; tape deux fois, on restait sans images)
+        if WarpathDropDB then WarpathDropDB._artPerso = ((arg or ""):lower() ~= "off") or nil end
+        Core.say(Core.T(WarpathDropDB and WarpathDropDB._artPerso and "artOn" or "artOff"))
     elseif cmd == "intendance" or cmd == "quartermaster" or cmd == "qm" then
         if arg == "stop" or arg == "quitter" or arg == "quit" then Quartermaster.QMQuit() else Quartermaster.QMOpen() end
     elseif cmd == "skip" or cmd == "ignore" then
@@ -122,7 +124,7 @@ SlashCmdList["WARPATH"] = function(msg)
     elseif cmd == "perf" then
         Perf.PerfStart(tonumber(arg))   -- v1.47 : mesure des performances (60 s par defaut)
     elseif cmd == "fleche" or cmd == "flèche" or cmd == "arrow" or cmd == "apparence" or cmd == "appearance" then
-        ns.UI.OpenOptionsTab(6)   -- v1.46 : onglet Apparence (fenetre, fleche, cartes)
+        ns.UI.OpenOptionsTab(4)   -- v1.52 : onglet Guidage (fleche, trajets, cartes)
     elseif cmd == "lang" or cmd == "langue" or cmd == "language" then
         local l = arg:lower()
         if l == "fr" or l == "en" then ns.UI.SetLang(l) else ns.UI.SetLang(Core.Lang() == "fr" and "en" or "fr") end
@@ -327,8 +329,26 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.52", fr = "Barrens : Root Samples (Mebok Mizzyrix, Ratchet) est réservée aux herboristes ; sa prise devient facultative (OK pour passer si Mebok ne te la propose pas).",
+      en = "Barrens: Root Samples (Mebok Mizzyrix, Ratchet) is for herbalists only; picking it up is now optional (click OK to skip if Mebok doesn't offer it)." },
     { v = "1.52", fr = "Moins de farm : en arrivant en Arathi par Tarren Mill, cinq quêtes des montagnes d'Alterac (Prison Break In, Stone Tokens, Helcular's Revenge, Infiltration et Gol'dir) et The Hammer May Fall ; en fin de parcours, la suite de Nathanos Blightcaller en Eastern Plaguelands (niveau 56, de Duskwing à Demetria ; les élites sont retirées si tu joues seul). Mount Hyjal presque au complet : la chaîne des dieux sauvages (avec un aller-retour à Moonglade) jusqu'au Staff of the Mountain et Ve'han au sommet, l'atelier de Kaylaena, Barkskin Burrow et Deadwood Den, et toutes les quêtes du sommet. Le registre des Sawyer se rend à Undercity en passant.",
       en = "Less grinding: on the way into Arathi through Tarren Mill, five Alterac Mountains quests (Prison Break In, Stone Tokens, Helcular's Revenge, Infiltration and Gol'dir) and The Hammer May Fall; at the end of the route, Nathanos Blightcaller's follow-up in the Eastern Plaguelands (level 56, from Duskwing to Demetria; elites are removed if you play solo). Mount Hyjal almost complete: the Wild Gods chain (with a round trip to Moonglade) up to the Staff of the Mountain and Ve'han at the summit, Kaylaena's workshop, Barkskin Burrow and Deadwood Den, and every summit quest. The Sawyer ledger is turned in at Undercity on the way." },
+    { v = "1.52", fr = "Deux parcours au choix, présentés par un écran de cartes à l'ouverture (une fois par personnage) : Bande de guerre, où les donjons font partie du trajet avec leurs quêtes (tu quêtes seul le reste du temps), ou Éclaireur, le guide classique. Changer plus tard : bouton « Changer de parcours » dans les options (onglet Itinéraire) ou /warpath parcours. Rien n'est perdu en changeant.",
+      en = "Two routes to choose from, shown on a card screen at startup (once per character): Warband, where dungeons are part of the route with their quests (you quest solo the rest of the time), or Scout, the classic guide. Change later: \"Change route\" button in the options (Route tab) or /warpath parcours. Nothing is lost when switching." },
+    { v = "1.52", fr = "Fenêtre du guide : ton parcours (Bande de guerre ou Éclaireur) s'affiche au-dessus de la barre de progression (clic pour en changer) ; « Étape x / y » ne compte plus que les étapes de ton parcours ; un détour (entraîneur, quête de donjon en passant, prérequis) prend maintenant le titre de la fenêtre, avec l'étape du guide dessous (« Ensuite : … »). Options > Campagne : en Bande de guerre, les zones que ton parcours saute sont grisées (« Hors parcours »), toujours choisissables.",
+      en = "Guide window: your route (Warband or Scout) is shown above the progress bar (click to change it); \"Step x / y\" now only counts the steps of your route; a detour (trainer, dungeon quest on the way, prerequisite) now takes the window title, with the guide step below (\"Then: ...\"). Options > Campaign: with Warband, the zones your route skips are greyed out (\"Off route\"), still selectable." },
+    { v = "1.52", fr = "Fenêtre du guide repliable par parties, à la place de l'option « Fenêtre allégée » : un clic sur « LA SUITE » la replie (il reste « +N » pour la rouvrir) ; un clic sur « DÉTAILS » ne garde que le premier paragraphe du texte de l'étape ; « Autour de toi » reste replié par défaut. Maj + clic sur le « - » en haut de la fenêtre replie ou déplie tout d'un coup.",
+      en = "The guide window folds by parts, replacing the \"Lighter window\" option: click \"COMING UP\" to fold it (\"+N\" reopens it); click \"DETAILS\" to keep only the first paragraph of the step text; \"Around you\" stays folded by default. Shift + click on the \"-\" at the top of the window folds or unfolds everything at once." },
+    { v = "1.52", fr = "Bouton de l'objet de quête habillé comme l'addon (fond sombre, filet doré), de la hauteur de « Cibles de l'objectif » ; il se colle à droite de ce panneau et le suit (sans cibles : sous la fenêtre du guide). Il ne s'affiche plus pendant l'Intendance ni quand la fenêtre du guide est cachée.",
+      en = "The quest item button now looks like the addon (dark background, gold border), as tall as \"Objective targets\"; it sticks to the right of that panel and follows it (no targets: under the guide window). It no longer shows during the Quartermaster or when the guide window is hidden." },
+    { v = "1.52", fr = "Options allégées : une seule ligne pour la flèche (Warpath ou aucune), une case par carte pour le repère et le chemin, et moins de cases en double (afficher la fenêtre : clic droit sur le bouton de minicarte ; mode compact : le « - » de la fenêtre ; recalculer : automatique, ou /warpath now). La flèche intelligente et les trajets de vol connus sont toujours actifs. La liste des zones cache aussi celles qui commencent plus de 10 niveaux au-dessus du tien (case en bas pour les montrer). Le réglage « Priorité » (XP par heure / moins de trajets) est retiré : mesuré sur tout le 1-60, le premier ne sautait qu'une quête, et le second sautait surtout des quêtes de voyage utiles.",
+      en = "Lighter options: one row for the arrow (Warpath or none), one checkbox per map for the marker and path, and fewer duplicate checkboxes (show the window: right-click the minimap button; compact mode: the \"-\" on the window; recalculate: automatic, or /warpath now). The smart arrow and known flight paths are always on. The zone list also hides zones starting more than 10 levels above yours (checkbox at the bottom to show them). The \"Priority\" setting (XP per hour / less travel) is removed: measured over the whole 1-60, the first skipped a single quest and the second mostly skipped useful travel quests." },
+    { v = "1.52", fr = "Options rangées autrement : 7 onglets en deux groupes. TON AVENTURE : Parcours (ton parcours en deux cartes cliquables, ton style de jeu, la zone), Donjons, Quêtes à part (quêtes de classe, quêtes spéciales comme le sac de couchage, et quêtes de tes métiers). RÉGLAGES : Guidage (flèche, trajets et vols, cartes, ciblage), Propositions (toutes les cases « me proposer… » au même endroit, et ce que le guide fait pour toi), Fenêtre (fenêtre, messages, langue), Extras. Les métiers ne se cochent plus : le guide lit ceux que ton personnage a appris. Le texte de la case « Rappel d'entraîneur » était remplacé par celui d'une autre case : corrigé.",
+      en = "Options reorganized: 7 tabs in two groups. YOUR JOURNEY: Route (your route as two clickable cards, your play style, the zone), Dungeons, Side quests (class quests, special quests like the sleeping bag, and your professions' quests). SETTINGS: Guidance (arrow, routes and flights, maps, targeting), Suggestions (every \"suggest to me\" checkbox in one place, and what the guide does for you), Window (window, messages, language), Extras. Professions are no longer ticked by hand: the guide reads the ones your character has learned. The \"Trainer reminder\" checkbox showed another checkbox's text: fixed." },
+    { v = "1.52", fr = "Étape « Donjon » repensée : le nom du donjon en titre avec ses niveaux, la durée et l'XP estimées dessous, une ligne par quête du donjon (en main, à prendre ou dedans) et un bouton « Fiche du donjon ». Les informations moins urgentes (quêtes en attente de niveau, notes du lieu, quêtes en chemin) sont rangées sous « Autour de toi », replié par défaut (clic pour l'ouvrir). Le mode compact suit les détours et l'étape « Donjon ».",
+      en = "Reworked \"Dungeon\" step: the dungeon name as the title with its levels, estimated time and XP below, one line per dungeon quest (in your log, to pick up, or inside) and a \"Dungeon sheet\" button. Less urgent information (quests waiting for a level, notes about the place, quests on the way) is tucked under \"Around you\", collapsed by default (click to open). Compact mode follows detours and the \"Dungeon\" step." },
+    { v = "1.52", fr = "Chemin sur les cartes : des perles dorées montrent le chemin jusqu'au point visé par la flèche, sur la minicarte (elles s'estompent au bord quand l'objectif est loin) et sur la carte du monde. Elles suivent le trajet à pied quand il contourne un obstacle, sinon elles vont en ligne droite. Cachées une fois sur place dans une zone de chasse. Deux cases dans les options, section Cartes.",
+      en = "Path on the maps: gold beads show the way to the point the arrow is aiming at, on the minimap (they fade at the edge when the objective is far) and on the world map. They follow the walking route when it goes around an obstacle, otherwise they go in a straight line. Hidden once you are in a hunting area. Two checkboxes in the options, Maps section." },
     { v = "1.52", fr = "Style de jeu « Donjon » ou « Les deux » : le guide te propose maintenant le donjon à l'avance, dès qu'il voit que les quêtes qui restent dans ta zone ne suffiront pas pour la prochaine étape « Niveau » (il te dit combien d'XP il manquera). Plus besoin d'attendre la fin de la zone pour savoir qu'il faudra farmer. Une seule question par étape.",
       en = "\"Dungeon\" or \"Both\" play style: the guide now suggests the dungeon ahead of time, as soon as it sees the quests left in your zone won't be enough for the next \"Level\" step (it tells you how much XP you'll be short). No more waiting for the end of the zone to find out you'll have to grind. Only one question per step." },
     { v = "1.52", fr = "Cozy Sleeping Bag (+3 % sur toute l'XP) : la chaîne est dans le guide, dès le sud de Camp Taurajo (vers 19), puis Westfall, Stonetalon, Loch Modan et Arathi, chaque morceau placé là où ton trajet passe. Ensuite, le guide te rappelle de te coucher 1 min dans le sac quand le bonus (2 h) est absent ou presque fini ; case « Rappel du sac de couchage » dans Comportement. Nouveau : les quêtes spéciales (Options > Classe) : la chaîne du sac y est, avec « Y aller » pour la faire tout de suite en détour (le guide te ramène ensuite à ta zone) ; en Éclaireur, le guide te la propose quand tu es dans une capitale à zeppelins.",

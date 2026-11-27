@@ -124,7 +124,41 @@ local function FlightInfo()
 end
 
 -- bouton de l'objet a utiliser pour l'etape (seulement les objets avec un effet "Utiliser")
-local itemBtn, itemWanted
+local itemBtn, itemWanted, itemDockKey
+-- v1.52 (demande de l'auteur) : meme regle que « Cibles de l'objectif » (UI/Targets.lua) : colle a droite de ce
+-- panneau, en haut, et le suit ; sans panneau, sous la fenetre du guide (ou la petite fenetre), la ou il serait.
+-- Bouton securise : pas d'ancrage direct, on recopie la position hors combat (toutes les 0,25 s, si elle a change).
+-- Deplace a la main (Maj + glisser) : il reste ou tu l'as mis ; Maj + clic droit le recolle.
+local function DockItem()
+    if not itemBtn or State.DB.itemPos or (InCombatLockdown and InCombatLockdown()) then return end
+    local tp = _G.WarpathTargets
+    local ref, side = nil, nil
+    if tp and tp.IsShown and tp:IsShown() and tp:GetRight() then ref, side = tp, "right"
+    else
+        local f = _G.WarpathFrame
+        local mini = _G.WarpathMini
+        if mini and mini.IsShown and mini:IsShown() then f = mini end
+        if f and f.IsShown and f:IsShown() and f:GetLeft() then ref, side = f, "below" end
+    end
+    if not ref then return end
+    local sc = ref:GetScale() or 1
+    local x, y = (side == "right") and (ref:GetRight() + 4) or ref:GetLeft(), (side == "right") and ref:GetTop() or (ref:GetBottom() - 2)
+    local key = side .. sc .. ":" .. math.floor(x) .. ":" .. math.floor(y)
+    if key == itemDockKey then return end
+    itemDockKey = key
+    itemBtn:SetScale(sc)
+    itemBtn:ClearAllPoints()
+    itemBtn:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+end
+do
+    local tick, acc = CreateFrame("Frame"), 0
+    tick:SetScript("OnUpdate", function(_, el)
+        acc = acc + (el or 0)
+        if acc < 0.25 then return end
+        acc = 0
+        if itemBtn and itemBtn:IsShown() then pcall(DockItem) end
+    end)
+end
 local function StepItem()
     if not State.steps or not State.current or not State.steps[State.current] then return nil end
     local s = State.steps[State.current]
@@ -139,15 +173,24 @@ local function StepItem()
 end
 local function UpdateItemButton()
     if not Core.f or (InCombatLockdown and InCombatLockdown()) then return end
-    local it = State.DB.itemBtn ~= false and StepItem() or nil
+    -- v1.52 (bug vu par l'auteur) : pas de bouton d'objet pendant l'Intendance (tournee ou ecran de choix) ni quand
+    -- le guide est cache : l'objet est celui de l'etape du guide, pas celui de la tournee
+    local QM = ns.Mod.Quartermaster
+    local qmOn = State.DB.qm or (QM and QM.QMPanelState and QM.QMPanelState())
+    local it = (State.DB.itemBtn ~= false and State.DB.shown ~= false and not qmOn) and StepItem() or nil
     if not itemBtn then
         if not it then return end
         ns.Trace("bouton d'objet (creation)")
         itemBtn = CreateFrame("Button", "WarpathItemButton", UIParent, "SecureActionButtonTemplate")
-        itemBtn:SetSize(36, 36)
+        -- v1.52 (demande de l'auteur) : meme hauteur que « Cibles de l'objectif » avec une cible (26 + 6 + 18 px)
+        itemBtn:SetSize(50, 50)
         itemBtn:SetAttribute("type", "item")
-        itemBtn.icon = itemBtn:CreateTexture(nil, "ARTWORK"); itemBtn.icon:SetAllPoints()
-        local hl = itemBtn:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.15)
+        -- v1.52 (demande de l'auteur) : habille comme l'addon : fond sombre, filet dore
+        local bg = Skin.Tex(itemBtn, Skin.COL.bg, 0.92, "BACKGROUND"); bg:SetAllPoints()
+        Skin.Border(itemBtn, Skin.COL.accent, 0.8)
+        itemBtn.icon = itemBtn:CreateTexture(nil, "ARTWORK"); itemBtn.icon:SetPoint("TOPLEFT", 3, -3); itemBtn.icon:SetPoint("BOTTOMRIGHT", -3, 3)
+        itemBtn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)   -- sans le bord gris des icones du jeu
+        local hl = itemBtn:CreateTexture(nil, "HIGHLIGHT"); hl:SetPoint("TOPLEFT", 3, -3); hl:SetPoint("BOTTOMRIGHT", -3, 3); hl:SetColorTexture(1, 1, 1, 0.15)
         if itemBtn.RegisterForClicks then itemBtn:RegisterForClicks("AnyUp", "AnyDown") end
         -- Maj + glisser : deplacer le bouton (hors combat, fenetre non verrouillee) ; Maj + clic droit : le recoller
         -- a cote du guide. Maj + clic n'utilise pas l'objet (pour ne pas gaspiller son temps de recharge).
@@ -161,7 +204,7 @@ local function UpdateItemButton()
             moving = false
             itemBtn:StopMovingOrSizing()
             local point, _, rel, x, y = itemBtn:GetPoint(1)
-            if point then State.DB.itemPos = { point, rel or point, math.floor(x + 0.5), math.floor(y + 0.5) } end
+            if point then State.DB.itemPos = { point, rel or point, math.floor(x + 0.5), math.floor(y + 0.5), itemBtn:GetScale() } end
         end
         itemBtn:SetScript("OnDragStart", function(self)
             if IsShiftKeyDown() and not State.DB.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving(); moving = true end
@@ -186,15 +229,10 @@ local function UpdateItemButton()
     if it == itemWanted and itemBtn:IsShown() == (it ~= nil) then return end
     itemWanted = it
     if it then
-        itemBtn:ClearAllPoints()
-        local l, t = Core.f:GetLeft(), Core.f:GetTop()
-        local sc = (Core.f:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
-        local r = Core.f:GetRight()
         local p = State.DB.itemPos
-        if p then itemBtn:SetPoint(p[1], UIParent, p[2], p[3], p[4])
-        elseif l and t and l * sc >= 50 then itemBtn:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", l * sc - 6, t * sc - 16)
-        elseif r and t then itemBtn:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", r * sc + 6, t * sc - 16)   -- fenetre collee a gauche : a droite
-        else itemBtn:SetPoint("CENTER", UIParent, "CENTER", -300, 0) end
+        itemDockKey = nil
+        if p then itemBtn:SetScale(p[5] or 1); itemBtn:ClearAllPoints(); itemBtn:SetPoint(p[1], UIParent, p[2], p[3], p[4])
+        else DockItem() end
         ns.Trace("bouton d'objet (objet)"); itemBtn:SetAttribute("item", "item:" .. it)
         local icon = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(it)) or (GetItemIcon and GetItemIcon(it))
         itemBtn.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")

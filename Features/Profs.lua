@@ -11,7 +11,7 @@ local Profs = ns.Mod.Profs -- v1.50 : module
 local Core = ns.Mod.Core -- v1.50 : module
 local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
 -- v1.50 : module ns.Mod.Profs (publie en fin de fichier pour les autres fichiers)
-local NearestTrainer, PROF_KEY, PROF_ORDER, ProfName, ProfOn, ProfQuestList, ProfSet, TrainReminder
+local NearestTrainer, PROF_KEY, PROF_ORDER, ProfName, ProfOn, ProfQuestList, TrainReminder
 local TrainerPinsRefresh
 local Skin = ns.Mod.Skin -- v1.50 : module
 local Near = ns.Mod.Near -- v1.50 : module
@@ -95,12 +95,11 @@ do
     end
 
     -- coche des options : ton choix s'il y en a un, sinon ce que le jeu indique
+    -- v1.52 (demande de l'auteur) : seulement les metiers que le perso a appris (lus dans le jeu) ; plus de
+    -- cases a cocher dans les options (l'ancien choix a la main, DB.profs, est ignore)
     function ProfOn(id)
-        State.DB.profs = State.DB.profs or {}
-        if State.DB.profs[id] ~= nil then return State.DB.profs[id] end
         return Profs.ProfDetect()[id] ~= nil
     end
-    function ProfSet(id, v) State.DB.profs = State.DB.profs or {}; State.DB.profs[id] = v and true or false end
 
     local function rankOk(e)
         local r = Profs.ProfDetect()[e.s]
@@ -172,7 +171,9 @@ do
             timeout = 0, whileDead = true, hideOnEscape = true,
             OnAccept = function()
                 State.DB.profIntro = "done"
-                if ns.UI and ns.UI.OpenOptionsTab then ns.UI.OpenOptionsTab(8) end
+                -- v1.52 : plus de metiers a cocher : « Voir les entraineurs » les montre tous sur la carte du monde
+                State.DB.trainerAll = true
+                if Profs.TrainerPinsRefresh then pcall(Profs.TrainerPinsRefresh, true) end
                 Core.say(Core.T("trainerHint"))
             end,
             OnCancel = function(_, _, why)
@@ -392,7 +393,6 @@ do
     M.ProfName = ProfName
     M.ProfOn = ProfOn
     M.ProfQuestList = ProfQuestList
-    M.ProfSet = ProfSet
     M.TrainReminder = TrainReminder
     M.TrainerPinsRefresh = TrainerPinsRefresh
 end
