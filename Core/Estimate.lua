@@ -302,6 +302,21 @@ function BuildChainGuide(q, withSelf)
     return { title = "Chaine : " .. target.n, title_en = "Chain: " .. target.n, races = { State.myRace }, steps = list, side = true }
 end
 
+-- v1.52 : estimation d'une etape « Donjon » : quetes du donjon dans ton journal (XP de la table x 2,7, bonus Forever
+-- mesure sur les quetes de donjon) + monstres (0,6 monstre de ton niveau par minute, BFD chronometre), sur la duree d'un
+-- passage (D.DUNGEON_RUN) + 13 min de recherche de groupe. -> minutes, xp, nombre de quetes comptees
+function Est.DungeonStepEstimate(key)
+    local run = (Core.D.DUNGEON_RUN or {})[key] or 60
+    local p = UnitLevel and UnitLevel("player") or 1
+    local xp, n = 0, 0
+    for _, q in ipairs(Core.DungeonStepQuests(key) or {}) do
+        local e = EST[q]
+        if e and e.x and Core.logById[q] ~= nil then xp = xp + e.x * 2.7; n = n + 1 end
+    end
+    xp = xp + math.floor(0.6 * run) * MobXP(p, p, 0)
+    return run + 13, math.floor(xp / 100 + 0.5) * 100, n
+end
+
 function Est.LockCandidates()
     local out = {}
     if not State.steps then return out end

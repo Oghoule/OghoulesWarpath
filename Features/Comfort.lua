@@ -237,26 +237,79 @@ end
 
 
 -- Etape "Monte au niveau X" : proposer le donjon de ton niveau (une fois par etape)
-function Comfort.SuggestDungeonForLevel()
-    if not State.DB or not State.steps or Core.IS_DUNGEON[State.DB.guide] or State.DB.guide == "chain" or State.asking or not StaticPopup_Show then return end
-    local st = Style.StyleGet()
-    if st.xpMode ~= "dungeon" and st.xpMode ~= "both" then return end
-    local s = State.steps[State.current]
-    if not s or s.t ~= "level" or (UnitLevel("player") or 0) >= (s.level or 0) then return end
-    State.DB.lvlAsked = State.DB.lvlAsked or {}
-    local key = Core.SeenKey(State.current)
-    if State.DB.lvlAsked[key] then return end
-    local lvl = UnitLevel("player") or 1
+-- v1.52 (Eclaireur) : aussi A L'AVANCE : si les quetes qui restent avant la prochaine etape « Monte au niveau » ne
+-- suffiront pas (il manquera au moins AHEAD_MIN d'un niveau), le donjon est propose tout de suite, pendant qu'on est
+-- dans la zone, au lieu de farmer a la fin. Une seule question par etape « Monte au niveau » (meme cle DB.lvlAsked).
+local AHEAD_MIN = 0.25
+Comfort.aheadFor = nil   -- etape courante deja examinee (le calcul n'est refait que si elle change ; les tests la remettent a nil)
+local function bestDungeon(lvl)
     local best
     for _, d in ipairs(Core.DUNGEONS) do
         if Core.Guides[d.key] and lvl >= d.min and lvl <= d.max and State.DB.dAnswer[d.key] ~= "no" and not Flow.DungeonDone(d.key) and Flow.DungeonOpen(d.key) then
             if not best or d.min > best.min then best = d end
         end
     end
+    return best
+end
+-- XP qu'il faut encore pour atteindre le niveau « target »
+local function xpTo(target)
+    local lvl = UnitLevel("player") or 1
+    if lvl >= target then return 0 end
+    local XPL = DungeonSheet.XPL or {}
+    local need = ((UnitXPMax and UnitXPMax("player")) or XPL[lvl] or 0) - ((UnitXP and UnitXP("player")) or 0)
+    for l = lvl + 1, target - 1 do need = need + (XPL[l] or 0) end
+    return math.max(0, need)
+end
+-- Prochaine etape « Monte au niveau » pas encore faite, et XP qui manquera en y arrivant
+function Comfort.LevelShortfall()
+    local ids, seen, j = {}, {}, nil
+    local dc = State.doneCache or {}   -- etat de chaque etape au dernier recalcul (done / skip / false)
+    for i = State.current, #State.steps do
+        local t = State.steps[i]
+        if t.t == "level" and t.level and not dc[i] then j = i; break end
+        if t.id and (t.t == "accept" or t.t == "do" or t.t == "turnin") and not dc[i] then
+            for _, q in ipairs(Core.Ids(t)) do if not seen[q] and not Core.Rendue(q) then seen[q] = true; ids[#ids + 1] = q end end
+        end
+    end
+    if not j then return nil end
+    local gain = (#ids > 0 and Est.Estimate(ids, false).xp) or 0
+    return j, xpTo(State.steps[j].level) - gain
+end
+function Comfort.SuggestDungeonForLevel()
+    if not State.DB or not State.steps or Core.IS_DUNGEON[State.DB.guide] or State.DB.guide == "chain" or State.asking or not StaticPopup_Show then return end
+    local st = Style.StyleGet()
+    if st.xpMode ~= "dungeon" and st.xpMode ~= "both" then return end
+    if Core.Parcours() == "warband" then return end   -- v1.52 : la Bande de guerre a deja ses donjons dans le parcours
+    if IsInInstance and IsInInstance() then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    local s = State.steps[State.current]
+    if not s then return end
+    State.DB.lvlAsked = State.DB.lvlAsked or {}
+    local lvl = UnitLevel("player") or 1
+    local j, short = State.current, nil
+    if s.t == "level" then
+        if lvl >= (s.level or 0) then return end
+        if State.DB.lvlAsked[Core.SeenKey(j)] then return end
+    else
+        if Comfort.aheadFor == State.current then return end
+        Comfort.aheadFor = State.current
+        j, short = Comfort.LevelShortfall()
+        if not j or State.DB.lvlAsked[Core.SeenKey(j)] then return end
+        local XPL = DungeonSheet.XPL or {}
+        if not short or short < AHEAD_MIN * (XPL[lvl] or 1000) then return end
+    end
+    local best = bestDungeon(lvl)
     if not best then return end
-    State.DB.lvlAsked[key] = true
+    State.DB.lvlAsked[Core.SeenKey(j)] = true
     State.asking = best
-    ns.Trace("popup WARPATH_DUNGEON"); Skin.Popup("WARPATH_DUNGEON", Core.T("dAskXP", s.level, Flow.DungeonName(best), best.min, best.max) .. ((DungeonSheet.DungeonAskLine and DungeonSheet.DungeonAskLine(best.key)) or Flow.DungeonReqText(best.key)))
+    local text
+    if short then
+        local n = math.floor(short / 100 + 0.5) * 100
+        text = Core.T("dAskAhead", n, State.steps[j].level, Flow.DungeonName(best), best.min, best.max)
+    else
+        text = Core.T("dAskXP", s.level, Flow.DungeonName(best), best.min, best.max)
+    end
+    ns.Trace("popup WARPATH_DUNGEON"); Skin.Popup("WARPATH_DUNGEON", text .. ((DungeonSheet.DungeonAskLine and DungeonSheet.DungeonAskLine(best.key)) or Flow.DungeonReqText(best.key)))
 end
 
 -- v1.52 : Cozy Sleeping Bag (fin d'une chaine des guides) : +3 % sur toute l'XP pendant 2 h ; on renouvelle le bonus en se

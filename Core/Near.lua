@@ -876,6 +876,25 @@ local function pickReady(id, e, lvl)
     end
     return true
 end
+-- v1.52 : en Bande de guerre, les quetes de donjon que le parcours fait deja prendre (plus loin, dans une autre zone ou
+-- dans une etape « Donjon ») ne sont pas proposees « en passant » : elles le seront a leur place. En cache par parcours.
+local planned, plannedFor = {}, nil
+local function plannedSet()
+    local key = Core.Parcours() .. ":" .. tostring(State.myRace)
+    if plannedFor == key then return planned end
+    planned, plannedFor = {}, key
+    if Core.Parcours() ~= "warband" then return planned end
+    for _, z in ipairs(Flow.MyChain and Flow.MyChain() or {}) do
+        local g = Core.Guides[z]
+        for _, st in ipairs(g and g.steps or {}) do
+            if Core.Applies(st) then
+                if st.id then for _, id in ipairs(Core.Ids(st)) do planned[id] = true end end
+                if st.t == "dungeon" and st.dg then for _, id in ipairs(Core.DungeonStepQuests(st.dg)) do planned[id] = true end end
+            end
+        end
+    end
+    return planned
+end
 function DungeonPickup(s)
     if not (State.DB and State.steps and State.DB.dgPick ~= false) or Core.IS_DUNGEON[State.DB.guide] then return nil end
     if IsInInstance then local inI = IsInInstance(); if inI then return nil end end
@@ -889,13 +908,14 @@ function DungeonPickup(s)
         if t.id then for _, id in ipairs(Core.Ids(t)) do here[id] = true end end
     end
     local skip = State.DB.dgPickSkip or {}
+    local pl = plannedSet()
     local lvl = UnitLevel("player") or 1
     local zMe = me[4] and Route.ZoneOf and Route.ZoneOf(me[4])
     local city = zMe and PICK_CITY[zMe] and zMe or nil
     local best, bd
     for id, dg in pairs(pickList) do
         local e = Est.EST[id]
-        if e and not here[id] and not skip[id] then
+        if e and not here[id] and not skip[id] and not pl[id] then
             local p, turn
             if Core.logById[id] == true then p, turn = e.e, true
             elseif nLog < PICK_LOG and pickReady(id, e, lvl) then p = e.s end

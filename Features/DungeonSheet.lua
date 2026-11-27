@@ -355,6 +355,7 @@ end
 -- v1.50 : ce que ce fichier offre aux autres (ns.Mod.DungeonSheet)
 do
     local M = ns.Mod.DungeonSheet
+    M.XPL = XPL   -- v1.52 : XP par niveau (proposition de donjon a l'avance, Comfort)
     M.DungeonAskLine = DungeonAskLine
     M.DungeonBadge = DungeonBadge
     M.DungeonSheetDefault = DungeonSheetDefault

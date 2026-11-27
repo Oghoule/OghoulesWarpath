@@ -773,6 +773,9 @@ function Skin.RefreshInner(forceWP)
             local have = 0
             for _, q in ipairs(dq) do if Core.logById[q] ~= nil then have = have + 1 end end
             body = "|cffd6b866" .. Core.T("dsInfo", Flow.DungeonName(s.dg), have) .. "|r\n\n" .. body
+            -- v1.52 : estimation (duree d'un passage + groupe, XP des quetes en main et des monstres)
+            local okE, mins, xp = pcall(Est.DungeonStepEstimate, s.dg)
+            if okE and mins then body = body .. "\n\n|cff8c7f62" .. Core.T("dsEst", mins, Est.FormatNum(xp)) .. "|r" end
         end
         body = body:gsub("^%s+", "")
         Core.f.text:SetText(body); Core.f.text:SetShown(body ~= "")

@@ -19,6 +19,11 @@ D.WARBAND_SKIP = {
     stonetalon = true,   -- 20-23 : remplacee par Ruins of Lordaeron + Shadowfang Keep (2026-11-26, etude_donjons)
     sbarrens = true,     -- 25-27 : remplacee par Blackfathom Deeps + Razorfen Kraul ; aucune quete plus loin n'en depend
 }
+-- v1.52 : duree d'un premier passage efficace (min, premier -> dernier monstre), pour l'estimation de l'etape
+-- « Donjon » (meme table que le simulateur audit/time.lua : BFD chronometre sur Forever, les autres d'apres les forums)
+D.DUNGEON_RUN = { rfc = 30, wc = 70, rol = 45, sfk = 50, bfd = 50, rfk = 55, sm_gy = 25, sm_lib = 35, dalaran = 50,
+    rfd = 60, sm_arm = 40, sm_cath = 45, uld = 75, mara_out = 60, mara_in = 50, zf = 65, st = 75, brd = 180, lbrs = 80,
+    scholo = 100, strat_live = 80, strat_ud = 80 }
 -- Notes ecrites a la main pour l'etape « Faire » des chaines de quetes (guide « chain ») : { fr, en }
 D.CHAINNOTES = {
     -- A Moon-Kissed Blade (paladin, Diplomatic Incident) : lieux confirmes par l'auteur le 2026-11-24

@@ -23,7 +23,6 @@ ns.Skipped = {
   },
   [1424] = {
     { 518, 62.6, 20.6, 8589934770, 34, "The Crown of Will" },
-    { 676, 61.9, 19.6, 8589934770, 30, "The Hammer May Fall" },
   },
   [1440] = {
     { 25, 73.7, 60.0, 8589934770, 23, "Stonetalon Standstill" },
