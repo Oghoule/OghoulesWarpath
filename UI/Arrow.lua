@@ -8,7 +8,7 @@ local Perf = ns.Mod.Perf -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
 local Legs = ns.Mod.Legs -- v1.52 : chemin du GPS sur les cartes
 
--- La fleche tourne vers la prochaine position du trajet (distTarget) a partir de ta position et de ton
+-- La fleche tourne vers la prochaine position du trajet (arrowTarget ; v1.53 : reste sur l'etape actuelle pendant un apercu) a partir de ta position et de ton
 -- orientation. Hors instance seulement : en donjon et en raid, le jeu ne donne plus ces informations.
 do
     local frame, tex, gem, dist, last
@@ -141,23 +141,23 @@ do
     end
 
     local function Update()
-        if not State.DB or State.DB.wp == false or State.DB.ownArrow == false or not Skin.distTarget then
+        if not State.DB or State.DB.wp == false or State.DB.ownArrow == false or not Skin.arrowTarget then
             if frame then frame:Hide() end; return
         end
         local inst = IsInInstance and IsInInstance()
         if inst then if frame then frame:Hide() end; return end
         local facing = GetPlayerFacing and GetPlayerFacing()
         local me = Route.PlayerWP()
-        local w = Route.WP(Skin.distTarget[1], Skin.distTarget[2], Skin.distTarget[3])
+        local w = Route.WP(Skin.arrowTarget[1], Skin.arrowTarget[2], Skin.arrowTarget[3])
         if type(facing) ~= "number" or not me or not w or me[3] ~= w[3] then
             if frame then frame:Hide() end; return
         end
         Create()
         local dx, dy = w[1] - me[1], w[2] - me[2]          -- x : nord, y : ouest
         local d = math.sqrt(dx * dx + dy * dy)
-        local tk = Skin.distTarget[1] .. ":" .. Skin.distTarget[2] .. ":" .. Skin.distTarget[3]
+        local tk = Skin.arrowTarget[1] .. ":" .. Skin.arrowTarget[2] .. ":" .. Skin.arrowTarget[3]
         if tk ~= areaKey then areaKey = tk; inArea = false end   -- nouvelle etape : on repart de zero
-        if Skin.distTarget[4] then
+        if Skin.arrowTarget[4] then
             if d < AREA_IN then inArea = true elseif d > AREA_OUT then inArea = false end
             if inArea then frame:Hide(); return end
         else inArea = false end
@@ -229,12 +229,12 @@ do
     end
     local function UpdatePin()
         local mmap = _G.Minimap
-        if not mmap or not State.DB or State.DB.wp == false or State.DB.mmPin == false or not Skin.distTarget
+        if not mmap or not State.DB or State.DB.wp == false or State.DB.mmPin == false or not Skin.arrowTarget
             or (IsInInstance and IsInInstance()) then
             if pin then pin:Hide() end; return
         end
         local me = Route.PlayerWP()
-        local w = Route.WP(Skin.distTarget[1], Skin.distTarget[2], Skin.distTarget[3])
+        local w = Route.WP(Skin.arrowTarget[1], Skin.arrowTarget[2], Skin.arrowTarget[3])
         if not me or not w or me[3] ~= w[3] then if pin then pin:Hide() end; return end
         if not pin then
             pin = CreateFrame("Frame", "WarpathMinimapPin", mmap)
@@ -274,8 +274,8 @@ do
     local function UpdateMapPin()
         local wm = _G.WorldMapFrame
         local child = wm and wm.ScrollContainer and wm.ScrollContainer.Child
-        if not (child and wm:IsShown()) or not State.DB or State.DB.wp == false or State.DB.mapPin == false or not Skin.distTarget
-            or not (wm.GetMapID and wm:GetMapID() == Skin.distTarget[1]) then
+        if not (child and wm:IsShown()) or not State.DB or State.DB.wp == false or State.DB.mapPin == false or not Skin.arrowTarget
+            or not (wm.GetMapID and wm:GetMapID() == Skin.arrowTarget[1]) then
             if wpin then wpin:Hide() end; return
         end
         if not wpin then
@@ -288,7 +288,7 @@ do
         local cs = child:GetScale() or 1
         wpin:SetScale(1 / cs)
         wpin:ClearAllPoints()
-        wpin:SetPoint("CENTER", child, "TOPLEFT", Skin.distTarget[2] / 100 * child:GetWidth() * cs, -Skin.distTarget[3] / 100 * child:GetHeight() * cs)
+        wpin:SetPoint("CENTER", child, "TOPLEFT", Skin.arrowTarget[2] / 100 * child:GetWidth() * cs, -Skin.arrowTarget[3] / 100 * child:GetHeight() * cs)
         Pulse(wpin.halo, WPIN)
         wpin:Show()
     end
@@ -346,7 +346,10 @@ do
     local straightFor, straight, straightC
     local function PathFor(t)
         local pts, k, cont = Legs.LegPath(t)
-        if pts or not t or t[4] then return pts, k, cont end
+        if pts or not t then return pts, k, cont end
+        -- zone de chasse : ligne droite tant que tu n'y es pas (avant : jamais dessinee sur une etape « Faire »,
+        -- retour de Meauha 2026-11-27) ; cachee avec la fleche une fois sur place (inArea, meme etape)
+        if t[4] and inArea and areaKey == (t[1] .. ":" .. t[2] .. ":" .. t[3]) then return nil end
         if straightFor ~= t then
             straightFor, straight, straightC = t, nil, nil
             local w = Route.WP(t[1], t[2], t[3])
@@ -370,7 +373,7 @@ do
     local mmPool, mmLayer = {}, nil
     local function UpdatePathMM()
         local mmap = _G.Minimap
-        local pts, k, cont = PathFor(Skin.distTarget)
+        local pts, k, cont = PathFor(Skin.arrowTarget)
         local me = pts and Route.PlayerWP()
         if not (mmap and me and State.DB and State.DB.wp ~= false and State.DB.mmPath ~= false and me[3] == cont)
             or (IsInInstance and IsInInstance()) then
@@ -410,7 +413,7 @@ do
     local function UpdatePathWM()
         local wm = _G.WorldMapFrame
         local child = wm and wm.ScrollContainer and wm.ScrollContainer.Child
-        local pts, k = PathFor(Skin.distTarget)
+        local pts, k = PathFor(Skin.arrowTarget)
         local me = pts and Route.PlayerWP()
         local pm, px, py = Route.PlayerPos()
         local shown = child and wm:IsShown() and wm.GetMapID and wm:GetMapID()

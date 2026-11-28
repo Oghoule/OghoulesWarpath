@@ -906,6 +906,8 @@ local function CreateOptions()
             function(v) if WarpathDropDB then WarpathDropDB._pvpShow = v end; if _G.WarpathPvPRefresh then pcall(_G.WarpathPvPRefresh, true) end end))
         row(CheckRow(pg, CW, "pvpShot", function() return DB.pvpShot and true or false end, function(v) DB.pvpShot = v end))
         row(CheckRow(pg, CW, "chronBanner", function() return DB.chronBanner ~= false end, function(v) DB.chronBanner = v end))
+        row(CheckRow(pg, CW, "lvupShow", function() return DB.lvupShow ~= false end, function(v) DB.lvupShow = v end))
+        row(CheckRow(pg, CW, "lvupHideUI", function() return DB.lvupHideUI ~= false end, function(v) DB.lvupHideUI = v end))
         local cv = FlatButton(pg, BW2, 28, function() E.ChronShow() end)
         cv:SetPoint("TOPLEFT", 0, y - 4)
         Loc(function() cv:SetLabel(K.Upper(T("chOpen"))) end)
@@ -914,6 +916,11 @@ local function CreateOptions()
         sec("secShare")
         row(CheckRow(pg, CW, "shareOpt", function() return WarpathDropDB and WarpathDropDB._share ~= false end,
             function(v) if WarpathDropDB then WarpathDropDB._share = v end end))
+        -- v1.53 : mode equipe (seulement aux membres du groupe)
+        row(CheckRow(pg, CW, "teamShareOpt", function() return DB.teamShare ~= false end,
+            function(v) DB.teamShare = (not v) and false or nil end))
+        row(CheckRow(pg, CW, "teamAskOpt", function() return DB.teamAsk ~= false end,
+            function(v) DB.teamAsk = (not v) and false or nil end))
     end
 
     opt:SetScript("OnShow", function()

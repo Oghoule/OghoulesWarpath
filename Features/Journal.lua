@@ -7,6 +7,7 @@ local ADDON, ns = ...
 local State = ns.State
 local Core = ns.Mod.Core -- v1.50 : module
 local Chronicle = ns.Mod.Chronicle -- v1.50 : module
+local LevelUp = ns.Mod.LevelUp -- v1.53 : bilan par niveau
 -- v1.50 : module ns.Mod.Journal (publie en fin de fichier pour les autres fichiers)
 local JournalReport
 local Est = ns.Mod.Est -- v1.50 : module
@@ -56,6 +57,7 @@ do
         j.a = j.a + TICK; g.a = g.a + TICK; s.a = s.a + TICK; sessA = sessA + TICK
         g.l1 = UnitLevel("player")
         if Chronicle.ChronTick then Chronicle.ChronTick(TICK) end
+        if LevelUp.LvTick then LevelUp.LvTick(TICK) end
     end
 
     -- petite ligne discrete au bas de la fenetre du guide : XP/h actif de la session

@@ -920,7 +920,8 @@ function Ignore()
     -- v1.51 : quete de donjon en passant : OK = on ne la propose plus
     local dp = not State.peek and not State.focus and Near.DungeonPickup and Near.DungeonPickup(State.steps[State.current])
     if dp then
-        State.DB.dgPickSkip = State.DB.dgPickSkip or {}; State.DB.dgPickSkip[dp.id] = true
+        if dp.tn then State.turnSkip = State.turnSkip or {}; State.turnSkip[dp.id] = true -- v1.53 : remise en passant
+        else State.DB.dgPickSkip = State.DB.dgPickSkip or {}; State.DB.dgPickSkip[dp.id] = true end
         State.lastWP = nil; Skin.Refresh(true)
         return
     end

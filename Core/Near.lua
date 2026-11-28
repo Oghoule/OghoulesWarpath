@@ -895,12 +895,43 @@ local function plannedSet()
     end
     return planned
 end
+-- v1.53 : remise en passant (retour de Meauha 2026-11-27, Fungal Spores aux Crossroads) : une quete finie de ton
+-- journal dont le PNJ de remise est a moins de 40 m devient une etape temporaire « rends-la », sur n'importe quelle
+-- etape (meme une chasse), hors combat. Le guide se recalcule ensuite tout seul. OK = plus proposee jusqu'au /reload.
+local TURN_R = 40
+local turnLatch
+local function TurnNear(s, me)
+    if UnitAffectingCombat and UnitAffectingCombat("player") then return nil end
+    local cur = {}
+    if s and s.t == "turnin" and s.id then for _, id in ipairs(Core.Ids(s)) do cur[id] = true end end
+    State.turnSkip = State.turnSkip or {}
+    local best, bd
+    for id, st in pairs(Core.logById) do
+        local e = st == true and not cur[id] and not State.turnSkip[id] and Est.EST[id]
+        local p = e and e.e
+        local w = p and Route.WP(p[1], p[2], p[3])
+        if w and w[3] == me[3] then
+            local d = Route.Dist(w[1], w[2], me[1], me[2])
+            local r = (turnLatch == id) and TURN_R * 1.5 or TURN_R
+            if d <= r and (not bd or d < bd) then
+                best, bd = { id = id, done = true, pick = true, turn = true, tn = true, m = p[1], x = p[2], y = p[3],
+                             name = Core.QuestTitle(id) or e.n or ("#" .. id) }, d
+            end
+        end
+    end
+    turnLatch = best and best.id or nil
+    return best
+end
+
 function DungeonPickup(s)
-    if not (State.DB and State.steps and State.DB.dgPick ~= false) or Core.IS_DUNGEON[State.DB.guide] then return nil end
+    if not (State.DB and State.steps) or Core.IS_DUNGEON[State.DB.guide] then return nil end
     if IsInInstance then local inI = IsInInstance(); if inI then return nil end end
+    local me = Route.PlayerWP(); if not me then return nil end
+    local tn = TurnNear(s, me)
+    if tn then return tn end
+    if State.DB.dgPick == false then return nil end
     if not s or s.t == "do" or s.t == "level" then return nil end
     if not pickList then buildPickList() end
-    local me = Route.PlayerWP(); if not me then return nil end
     local nLog = 0
     for _ in pairs(Core.logById) do nLog = nLog + 1 end
     local here = {}

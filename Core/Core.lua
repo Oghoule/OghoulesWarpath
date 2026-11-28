@@ -383,6 +383,10 @@ blockedBy = {}          -- index d'etape -> quetes prerequises manquantes (etape
 -- NearTick refait le calcul quand tu t'en approches ou t'en eloignes.
 Core.heldNear, heldPrev = {}, {}
 HOLD_R = 80             -- metres : meme camp (comme HUB_R dans Near.lua)
+-- v1.53 : quetes qui ont encore une etape « Faire » ou « Rendre » apres l'ancre (rempli par Compute).
+-- Une prise laissee derriere toi pour l'une d'elles est reproposee pres de son PNJ, meme loin du camp de l'ancre
+-- (seance Pinotte, Bloodhoof : prises du village perdues apres avoir rendu Malah, a l'est).
+local usedAhead = {}
 function NearNpc(s, wasNear)
     if State.computingOther or not (s and s.m and s.x and Route.PlayerWP and Route.WP) then return false end
     local me = Route.PlayerWP(); if not me then return false end
@@ -423,9 +427,11 @@ function Core.StepDone(i, anchor)
         -- revenir en arriere pour elle. Donjons et chaines : comportement d'avant.
         local waitLvl = lvlOk and not s.woven and State.DB.lvlWait and State.DB.lvlWait[SeenKey(i)] and true or false
         local passed = (i < anchor and not s.woven) or waitLvl
-        local near = false
+        local near, ahead = false, false
+        for _, id in ipairs(Ids(s)) do if usedAhead[id] then ahead = true end end
         if passed and not s.optional and not IS_DUNGEON[State.DB.guide] and State.DB.guide ~= "chain"   -- optionnelle : comme avant
-            and (waitLvl or SameCamp(s, State.steps[anchor])) then   -- avant l'ancre : seulement le camp de l'ancre
+            -- avant l'ancre : camp de l'ancre, ou quete encore a faire / rendre plus loin dans le guide (v1.53)
+            and (waitLvl or ahead or SameCamp(s, State.steps[anchor])) then
             near = NearNpc(s, heldPrev[i])
             if not State.computingOther then Core.heldNear[i] = near end
         end
@@ -635,6 +641,13 @@ function Core.Compute()
     if not State.computingOther then wipe(blockedBy) end
     local n = #State.steps
     local anchor = FindAnchor()
+    wipe(usedAhead)
+    for i = anchor + 1, n do
+        local s = State.steps[i]
+        if (s.t == "do" or s.t == "turnin") and not s.woven and Applies(s) then
+            for _, id in ipairs(Ids(s)) do usedAhead[id] = true end
+        end
+    end
     if not State.computingOther then heldPrev, Core.heldNear = Core.heldNear, {} end
     for i = 1, n do
         if Applies(State.steps[i]) then State.doneCache[i] = Core.StepDone(i, anchor) else State.doneCache[i] = "skip" end

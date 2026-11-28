@@ -16,6 +16,7 @@ local Flow = ns.Mod.Flow -- v1.50 : module
 local Near = ns.Mod.Near -- v1.50 : module
 local Est = ns.Mod.Est -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
+local Group = ns.Mod.Group -- v1.53 : pastilles du mode equipe
 -- v1.50 : noms propres a ce fichier (sortis de DECL, Core.lua)
 local DungeonLogHide, DungeonLogRender, DungeonLore, FIXED_H, MAPBAR, MIN_H, SKIP_ICON, STEP_ICON
 local STEP_TINT, SetChain, SetHeader, SetObjRows, SetRoute, SetSkip, SetUpcoming, SplitPlace, adviceArgs
@@ -209,6 +210,8 @@ MIN_H = 330                                 -- v1.41 : hauteur minimale ; au-del
 Skin.DL = { rows = {}, n = 0 }   -- mode donjon : lignes du journal, detail ouvert
 INNER = Skin.W - 2 * PAD
 Skin.distTarget = nil -- { m, x, y } : prochaine position a atteindre (pour la distance affichee)
+-- v1.53 : cible de la fleche, des epingles et des perles ; pendant un apercu (< >) elle reste sur l'etape actuelle
+Skin.arrowTarget = nil
 
 -- icone de la liste « La suite » selon le type d'etape (textures du jeu)
 -- icones de l'addon (blanches, teintees ici) : rendre = fleche retour verte, prendre = ! dore, faire = epees
@@ -599,7 +602,7 @@ function Skin.RefreshInner(forceWP)
         if Core.f.badge then Core.f.badge:Hide(); Core.f.qsub:Hide(); Core.f.dest:Hide() end
         Core.f.kind:Hide(); Core.f.qtitle:Hide(); Core.f.text:SetText(Core.T("noGuide")); Core.f.text:Show()
         Core.f.coord:SetText(""); Core.f.coord:Hide(); Core.f.list:SetText(""); SetUpcoming({}); SetRoute({}); SetChain(nil)
-        Skin.distTarget = nil; Layout()
+        Skin.distTarget = nil; Skin.arrowTarget = nil; Layout()
         return
     end
     local n = #State.steps
@@ -613,7 +616,7 @@ function Skin.RefreshInner(forceWP)
     local i = State.peek or State.focus or State.current
     if Core.f.nowBtn then
         local away = (State.peek or State.focus) and State.steps[State.current] and (State.peek or State.focus) ~= State.current
-        if away then Core.f.nowBtn.label:SetText(Core.T("backNow", State.current, (Core.QName(State.steps[State.current]) and Core.QName(State.steps[State.current]) ~= "") and Core.QName(State.steps[State.current]) or (Core.StepText(State.steps[State.current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
+        if away then Core.f.nowBtn.label:SetText(Core.T("backNow", (StepPos(State.current)),(Core.QName(State.steps[State.current]) and Core.QName(State.steps[State.current]) ~= "") and Core.QName(State.steps[State.current]) or (Core.StepText(State.steps[State.current]):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):sub(1, 32) .. "…"))) end
         Core.f.nowBtn:SetShown(away and true or false)
     end
     local s = State.steps[i]
@@ -623,7 +626,7 @@ function Skin.RefreshInner(forceWP)
         Core.f.summary = Core.T("endGuide")
         Core.f.kind:Hide(); Core.f.qtitle:Hide(); Core.f.text:SetText(Core.T("endGuide")); Core.f.text:Show()
         Core.f.coord:SetText(""); Core.f.coord:Hide(); Core.f.list:SetText(""); SetUpcoming({}); SetRoute({}); SetChain(nil)
-        Route.ClearWaypoint(); State.lastWP = nil; Skin.distTarget = nil
+        Route.ClearWaypoint(); State.lastWP = nil; Skin.distTarget = nil; Skin.arrowTarget = nil
         SetSkip("ok")
         Skin.UpdateDistance(); Layout()
     else
@@ -762,7 +765,9 @@ function Skin.RefreshInner(forceWP)
             end
             -- plusieurs quetes : la premiere en titre, les autres dessous
             local main, rest = qn:match("^(.-) %+ (.+)$")
-            Core.f.qtitle:SetText(main or qn); Core.f.qtitle:Show()
+            -- v1.53 : une pastille par coequipier (mode equipe) apres le titre
+            local tm = Group.Marks and Group.Marks(s) or ""
+            Core.f.qtitle:SetText((main or qn) .. (tm ~= "" and ("  " .. tm) or "")); Core.f.qtitle:Show()
             if Core.f.qsub then
                 Core.f.qsub:SetText(rest and (rest:gsub(" %+ ", " · ")) or ""); Core.f.qsub:SetShown(rest ~= nil)
                 -- v1.41 : prise groupee commencee : combien sont prises, et lesquelles manquent (OK les saute)
@@ -851,7 +856,7 @@ function Skin.RefreshInner(forceWP)
             if ent and i > ent then body = "|cffd69a66" .. Core.T("dgGroup") .. "|r\n\n" .. body end
         end
         if det and det.train then body = "|cffd69a66" .. Core.T("trainStep", det.name) .. "|r\n\n" .. body
-        elseif det and det.pick then body = "|cffd69a66" .. Core.T(det.turn and "dgPickTurn" or "dgPickStep", det.name, det.dg) .. "|r\n\n" .. body
+        elseif det and det.pick then body = "|cffd69a66" .. (det.tn and Core.T("turnNear", det.name) or Core.T(det.turn and "dgPickTurn" or "dgPickStep", det.name, det.dg)) .. "|r\n\n" .. body
         elseif det then body = "|cffd69a66" .. Core.T(det.done and "preTurnin" or "preDo", det.name) .. "|r\n\n" .. body end
         -- quetes pas encore prises faute de niveau, quetes laissees pour plus tard, et la suite
         -- v1.52 (audit C) : ce qui n'est pas a faire tout de suite va dans « Autour de toi » (replie par defaut)
@@ -869,6 +874,11 @@ function Skin.RefreshInner(forceWP)
             if fu then body = body .. "\n\n" .. fu end
             local ow = Near.OnTheWay and Near.OnTheWay(i)
             if ow then around[#around + 1] = ow end
+            -- v1.53 : soiree en equipe : consigne pour l'etape (partager, attendre...) et quetes ou aider
+            local th = Group.StepHints and Group.StepHints(s)
+            if th then body = th .. "\n\n" .. body end
+            local hb = Group.HelpBlock and Group.HelpBlock()
+            if hb then around[#around + 1] = hb end
             local dt = Near.DeathTip and Near.DeathTip(i)
             -- conseil de mort : dans l'infobulle du titre, une seule ligne dans la fenetre
             if dt then
@@ -915,6 +925,7 @@ function Skin.RefreshInner(forceWP)
             -- zone de chasse/ramassage (etape "faire", ou prerequis a faire) : la fleche se cache une fois sur place
             local area = (#legs == 0) and ((sp and sp.kind == "farm") or ((not sp or sp.kind == "zone") and ((det and not det.done) or (not det and s.t == "do")))) or false
             Skin.distTarget = first.m and { first.m, first.x, first.y, area } or nil
+            if not State.peek then Skin.arrowTarget = Skin.distTarget end
             -- bloc destination : le lieu (celui du texte de l'etape s'il est precise), puis precision et coordonnees
             local nm, extra = first.name or "", nil
             if lead and lead ~= "" and #legs == 0 and not sp then nm, extra = SplitPlace(lead)
@@ -941,6 +952,7 @@ function Skin.RefreshInner(forceWP)
             if Core.f.dest then Core.f.dest:Show() end
         else
             Skin.distTarget = nil
+            if not State.peek then Skin.arrowTarget = nil end
             Core.f.coord:SetText(""); Core.f.coord:Hide()
             if Core.f.dest then Core.f.dest:Hide() end
             -- pas de point sur la carte : le lieu reste dans le texte
@@ -990,6 +1002,9 @@ function Skin.RefreshInner(forceWP)
                 local right
                 local w = me and t.m and t.x and Route.WP(t.m, t.x, t.y)
                 if w and w[3] == me[3] then right = Core.T("dist", math.floor(Route.Dist(me[1], me[2], w[1], w[2]) + 0.5)) end
+                -- v1.53 : pastilles des coequipiers avant la distance
+                local tm = Group.Marks and Group.Marks(t) or ""
+                if tm ~= "" then right = tm .. (right and ("  " .. right) or "") end
                 items[#items + 1] = { idx = j, text = label, icon = STEP_ICON[t.t], tint = STEP_TINT[t.t], right = right }
             end
         end
@@ -1085,6 +1100,7 @@ function Skin.RetargetLight(sp)
     if now - (c.t or 0) > 10 then return false end      -- une vraie mise a jour de temps en temps (vols, conseils)
     local g = { t = s.t, id = s.id, m = sp.m, x = sp.x, y = sp.y, zone = sp.name or s.zone, quest = s.quest }
     Skin.distTarget = { sp.m, sp.x, sp.y, c.area }
+    Skin.arrowTarget = Skin.distTarget
     if Core.f.destName then Core.f.destName:SetText((g.zone and g.zone ~= "") and g.zone or (Est.MAPNAME[sp.m] or "")) end
     Core.f.destCoord = string.format("%.1f, %.1f", sp.x, sp.y) .. (Est.MAPNAME[sp.m] and ("  ·  " .. Est.MAPNAME[sp.m]) or "")
     State.lastWP = sp.kind .. sp.x .. ":" .. sp.y .. ">" .. State.current
@@ -1605,7 +1621,7 @@ function DungeonLogRender()
     if Core.f.caveBtn then Core.f.caveBtn:Hide() end
     if Core.f.nowBtn then Core.f.nowBtn:Hide() end
     if Core.f.advice then Core.f.advice:Hide() end
-    SetUpcoming({}); SetChain(nil); Skin.distTarget = nil
+    SetUpcoming({}); SetChain(nil); Skin.distTarget = nil; Skin.arrowTarget = nil
     if not Skin.DL.tip then
         Skin.DL.tip = FS(Core.f, 11, COL.soft, FONT, "LEFT"); Skin.DL.tip:SetWidth(INNER - 14)
         if Skin.DL.tip.SetSpacing then Skin.DL.tip:SetSpacing(2) end

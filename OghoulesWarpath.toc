@@ -48,11 +48,14 @@ UI\Targets.lua
 Features\Hearth.lua
 Features\Journal.lua
 Features\Chronicle.lua
+Features\LevelUp.lua
 Features\PvP.lua
 Features\Profs.lua
 Features\Quartermaster.lua
 Features\DungeonSheet.lua
 Features\Tutorial.lua
+Core\Group.lua
+UI\Team.lua
 UI\Choice.lua
 Core\Commands.lua
 Core\Events.lua

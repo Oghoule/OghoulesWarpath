@@ -13,6 +13,8 @@ local Quartermaster = ns.Mod.Quartermaster -- v1.50 : module
 local PvP = ns.Mod.PvP -- v1.50 : module
 local Chronicle = ns.Mod.Chronicle -- v1.50 : module
 local Journal = ns.Mod.Journal -- v1.50 : module
+local LevelUp = ns.Mod.LevelUp -- v1.53 : bilan par niveau
+local Group = ns.Mod.Group -- v1.53 : mode equipe
 local Window = ns.Mod.Window -- v1.50 : module
 local Skin = ns.Mod.Skin -- v1.50 : module
 local Flow = ns.Mod.Flow -- v1.50 : module
@@ -263,6 +265,12 @@ SlashCmdList["WARPATH"] = function(msg)
         if not ShowNews(true) then Core.say(Core.T("newsNone")) end
     elseif cmd == "chronique" or cmd == "chronicle" or cmd == "chron" then
         Chronicle.ChronShow(arg == "now" and 0 or nil)
+    elseif cmd == "niveau" or cmd == "level" or cmd == "lvl" then
+        LevelUp.LvReport(arg)
+    elseif (cmd == "apercu" or cmd == "aperçu" or cmd == "preview") and (arg:match("^niveau") or arg:match("^level")) then
+        -- v1.53 : la cinematique de montee de niveau ; un nombre apres = numero d'animation du perso a essayer
+        -- « fin » / « final » = la version du niveau 60
+        if not LevelUp.LvPreview(tonumber(arg:match("(%d+)")), arg:match("fin") ~= nil) then Core.say(Core.T("lvNone")) end
     elseif cmd == "apercu" or cmd == "aperçu" or cmd == "preview" then
         -- v1.42 : montre tout de suite la banniere de la Chronique et le « Quoi de neuf » (fondus, reflet),
         -- sans rien changer aux sauvegardes
@@ -277,6 +285,9 @@ SlashCmdList["WARPATH"] = function(msg)
         local np = 0
         for _ in pairs(WarpathDropDB._from or {}) do np = np + 1 end
         Core.say(Core.T("shareState", ns.ShareOn() and Core.T("shareOn") or Core.T("shareOff"), np))
+    elseif cmd == "equipe" or cmd == "équipe" or cmd == "team" then
+        -- v1.53 : mode equipe : ce que l'addon sait de chaque coequipier ; on / off ; test / test off
+        Group.Report((arg or ""):lower())
     elseif cmd == "reset" then
         wipe(State.DB.ignored); wipe(State.DB.seen); wipe(State.DB.done); State.DB.manual = nil; State.DB.lvlWait = nil
         local k = Flow.AutoPick()
@@ -329,6 +340,22 @@ end
 -- Premier lancement : courte presentation
 -- Quoi de neuf : les nouveautes depuis la derniere version que tu as vue (une fois par compte)
 local NEWS = {
+    { v = "1.53", fr = "Mode équipe, première partie : groupé avec des joueurs qui ont aussi Warpath, tu vois où ils en sont. Une pastille par coéquipier sur l'étape et dans « La suite » : or = déjà faite, vert = dans son journal, sombre = à faire. Seuls les membres de ton groupe reçoivent tes quêtes (case dans les options, onglet Extras). /warpath equipe pour le détail ; /warpath equipe test pour essayer seul avec un faux coéquipier.",
+      en = "Team mode, part one: grouped with players who also have Warpath, you see where they are. One dot per teammate on the step and in \"Coming up\": gold = already done, green = in their log, dark = to do. Only your group members receive your quests (checkbox in the options, Extras tab). /warpath team for details; /warpath team test to try it alone with a fake teammate." },
+    { v = "1.53", fr = "Mode équipe, soirée ensemble : en te groupant avec un joueur qui a Warpath, vous voyez tous les deux « Jouer ensemble / Chacun son guide ». Il faut deux oui (les boutons ne bougent jamais : un clic tardif ne fait pas d'erreur). Celui qui propose choisit l'activité parmi celles qui vous servent le plus à tous les deux : zone, donjon, ou rattrapage s'il y a 3 niveaux d'écart. Ensuite : bandeau « EN ÉQUIPE » avec la distance, consignes sur l'étape (partager la quête, attendre avant de rendre) et la liste des quêtes où aider ton coéquipier. Quitter le groupe ou « Quitter » te ramène à ton guide. Case dans les options (Extras). Planificateur : choisis la durée de la soirée (1, 2 ou 3 h) et l'addon compose un plan de 1 à 3 activités qui rapporte le plus à vous deux, avec le niveau prévu de chacun en fin de soirée ; quand une activité est finie (ou son temps dépassé), il propose la suivante (/warpath equipe suite).",
+      en = "Team mode, evening together: when you group with a player who has Warpath, both of you see \"Play together / Own guide\". It takes two yeses (the buttons never move: a late click can't cause a mistake). Whoever offers first picks the activity among those that help both of you most: zone, dungeon, or catch-up with a 3-level gap. Then: a \"TEAM\" banner with the distance, hints on the step (share the quest, wait before turning in) and the list of quests where you can help your teammate. Leaving the group or \"Leave\" takes you back to your guide. Checkbox in the options (Extras). Planner: pick the evening's length (1, 2 or 3 h) and the addon builds a plan of 1 to 3 activities that pays off most for both of you, with each player's expected level at the end; when an activity is done (or over time), it offers the next one (/warpath team next)." },
+    { v = "1.53", fr = "Nouveau : une cinématique à chaque niveau. L'interface s'efface, deux bandes noires se referment, ton personnage fait jouer ses muscles et un titre résume ton niveau selon ce qui l'a marqué (« Tueur de loups », « Messager de la Horde », « Pilleur de donjon », « Habitué du cimetière »…), avec la répartition de ton XP, le temps et tes morts. Attend la fin du combat ; un clic la ferme ; version spéciale au niveau 60. Deux cases dans les options (onglet Extras). Aperçu : /warpath apercu niveau. Bilan d'un niveau dans le chat : /warpath niveau [n].",
+      en = "New: a cinematic at every level. The interface fades away, two black bars close in, your character flexes and a title sums up your level based on what stood out (\"Wolf Slayer\", \"Messenger of the Horde\", \"Dungeon Raider\", \"Graveyard Regular\"...), with your XP breakdown, time and deaths. Waits for combat to end; a click closes it; special version at level 60. Two checkboxes in the options (Extras tab). Preview: /warpath preview level. A level's summary in chat: /warpath level [n]." },
+    { v = "1.53", fr = "Aperçu des étapes (< >) : la flèche, les épingles des cartes et les perles dorées restent sur ton étape actuelle pendant que tu regardes une autre étape ; la fenêtre montre toujours le texte et la distance de l'étape regardée. Une étape que tu cliques (« À suivre » ou chaîne) garde la flèche, comme avant.",
+      en = "Step preview (< >): the arrow, map pins and gold beads stay on your current step while you look at another step; the window still shows the text and distance of the step you are looking at. A step you click (\"Coming up\" or chain) still gets the arrow, as before." },
+    { v = "1.53", fr = "« Revenir à l'étape actuelle » affiche maintenant le même numéro d'étape que l'en-tête du guide (avant : un autre décompte, qui comptait aussi les étapes des autres classes).",
+      en = "\"Back to the current step\" now shows the same step number as the guide header (before: a different count that also included other classes' steps)." },
+    { v = "1.53", fr = "Quêtes laissées derrière toi : si tu n'as pas pris une quête que le guide compte te faire faire plus loin, elle t'est reproposée dès que tu repasses près de son PNJ (avant : seulement au camp où tu avais rendu ta dernière quête). Mulgore : Well Stones ramassées au puits de Winterhoof en même temps que le totem, plus d'aller-retour.",
+      en = "Quests left behind: if you skipped a quest the guide plans to have you do later, it is offered again as soon as you pass near its NPC (before: only at the camp where you turned in your last quest). Mulgore: Well Stones picked up at the Winterhoof Water Well together with the totem, no more back-and-forth." },
+    { v = "1.53", fr = "Remise en passant : quand une quête de ton journal est finie et que tu passes à moins de 40 m de son PNJ, le guide te la fait rendre tout de suite, même au milieu d'une chasse (sauf en combat), au lieu d'attendre son étape « Rendre ». OK pour passer.",
+      en = "Turn in on the way: when a quest in your log is complete and you pass within 40 m of its NPC, the guide has you turn it in right away, even in the middle of a hunt (except in combat), instead of waiting for its \"Turn in\" step. OK to skip." },
+    { v = "1.53", fr = "Chemin sur les cartes : les perles dorées s'affichent maintenant aussi en allant vers une zone de chasse (étape « Faire »), et disparaissent une fois sur place. Barrens : le point des Raptor Heads est déplacé sur l'oasis, là où sont les raptors.",
+      en = "Path on the maps: the gold beads now also show on the way to a hunting area (\"Do\" step), and disappear once you are there. Barrens: the Raptor Heads point moved to the oasis, where the raptors are." },
     { v = "1.52", fr = "Barrens : Root Samples (Mebok Mizzyrix, Ratchet) est réservée aux herboristes ; sa prise devient facultative (OK pour passer si Mebok ne te la propose pas).",
       en = "Barrens: Root Samples (Mebok Mizzyrix, Ratchet) is for herbalists only; picking it up is now optional (click OK to skip if Mebok doesn't offer it)." },
     { v = "1.52", fr = "Moins de farm : en arrivant en Arathi par Tarren Mill, cinq quêtes des montagnes d'Alterac (Prison Break In, Stone Tokens, Helcular's Revenge, Infiltration et Gol'dir) et The Hammer May Fall ; en fin de parcours, la suite de Nathanos Blightcaller en Eastern Plaguelands (niveau 56, de Duskwing à Demetria ; les élites sont retirées si tu joues seul). Mount Hyjal presque au complet : la chaîne des dieux sauvages (avec un aller-retour à Moonglade) jusqu'au Staff of the Mountain et Ve'han au sommet, l'atelier de Kaylaena, Barkskin Burrow et Deadwood Den, et toutes les quêtes du sommet. Le registre des Sawyer se rend à Undercity en passant.",

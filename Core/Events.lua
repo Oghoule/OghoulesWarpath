@@ -15,6 +15,7 @@ local Flow = ns.Mod.Flow -- v1.50 : module
 local Near = ns.Mod.Near -- v1.50 : module
 local Est = ns.Mod.Est -- v1.50 : module
 local Route = ns.Mod.Route -- v1.50 : module
+local Group = ns.Mod.Group -- v1.53 : mode equipe
 
 ------------------------------------------------------------------
 -- Evenements
@@ -137,6 +138,7 @@ function Events.OnEvent(self, event, ...)
             C_Timer.After(30, function() if IsInGuild and IsInGuild() then ns.ShareDrops("GUILD"); ns.SendVersion("GUILD", Core.VERSION) end end)
         end
         ns.Drops.Refresh(Core.logById, Est.EST)
+        pcall(Group.Init)
         if C_Timer and C_Timer.After then C_Timer.After(4, Flow.CheckDungeons); C_Timer.After(9, Flow.CheckClassQuests) else Flow.CheckDungeons() end
     elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
         Est.OnXPGain(...)
@@ -152,6 +154,8 @@ function Events.OnEvent(self, event, ...)
         if prefix == ns.COMM then
             if type(msg) == "string" and msg:sub(1, 2) == "V|" then ns.OnVersion(msg:sub(3), sender, Core.VERSION)
             else ns.OnDropMessage(msg, sender) end
+        elseif prefix == Group.PREFIX then
+            pcall(Group.OnMessage, msg, sender)
         end
     elseif event == "QUEST_DETAIL" or event == "QUEST_PROGRESS" or event == "QUEST_COMPLETE" or event == "GOSSIP_SHOW" or event == "QUEST_GREETING" then
         ns.Comfort.OnQuestFrame(event)
@@ -177,15 +181,18 @@ function Events.OnEvent(self, event, ...)
             ns.ShareDrops(ch); ns.SendVersion(ch, Core.VERSION)
         end
         self.lastGroupN = n
+        pcall(Group.OnRoster)
         Flow.ScheduleAdvance()
     elseif event == "PLAYER_LEVEL_UP" then
         local nl = ...
         if type(nl) == "number" and nl % 2 == 0 then State.DB.trainDue = nl; if Profs.TrainReminder then pcall(Profs.TrainReminder) end end
+        pcall(Group.OnLocalChange)
         Flow.ScheduleAdvance()
         if C_Timer and C_Timer.After then C_Timer.After(1.5, Flow.CheckDungeons); C_Timer.After(4, Flow.CheckClassQuests); C_Timer.After(2.5, function() pcall(Flow.CheckZoneLevel) end) else Flow.CheckDungeons(); pcall(Flow.CheckZoneLevel) end
     elseif event == "QUEST_TURNED_IN" then
         local id = ...
         if id then State.DB.done[id] = true end
+        pcall(Group.OnTurnIn, id)
         State.peek = nil
         Flow.ScheduleAdvance()
     elseif event == "UI_INFO_MESSAGE" then
@@ -214,6 +221,8 @@ function Events.OnEvent(self, event, ...)
         Skin.Refresh(true)
     else
         if event == "QUEST_ACCEPTED" then State.peek = nil end
+        -- (QUEST_ACCEPTED, QUEST_REMOVED, QUEST_LOG_UPDATE) : les coequipiers recoivent les differences
+        pcall(Group.OnLocalChange)
         Flow.ScheduleAdvance()
     end
 end
